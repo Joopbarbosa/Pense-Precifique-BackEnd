@@ -192,7 +192,7 @@ test(producao): cenários BDD 56 e 57 — produção por tipo
 
 *(Atualizado pela Skill 7 a cada épico concluído)*
 
-- [x] Épico 0 — Setup do Projeto e Schema (P-001 concluído; P-002 pendente)
+- [x] Épico 0 — Setup do Projeto e Schema
 - [ ] Épico 1 — Autenticação
 - [ ] Épico 2 — Configurações
 - [ ] Épico 3 — Insumos

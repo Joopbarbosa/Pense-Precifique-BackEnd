@@ -10,7 +10,7 @@
 | ID | Tarefa | Camada | Status |
 |----|--------|--------|--------|
 | P-001 | Scaffold do projeto Spring Boot (Maven, Java 21) + CLAUDE.md inicial | banco/back | ✅ concluído |
-| P-002 | Migration: V1__initial_schema (importar schema_v6.sql completo via Flyway) | banco | ⬜ pendente |
+| P-002 | Migration: V1__initial_schema (importar schema_v6.sql completo via Flyway) | banco | ✅ concluído |
 
 ---
 
@@ -154,7 +154,7 @@
 
 ## Resumo
 
-- 🔴 Épico 0 — Setup do Projeto e Schema: 1/2 concluídos
+- ✅ Épico 0 — Setup do Projeto e Schema: 2/2 concluídos
 - 🔴 Épico 1 — Autenticação: 0/7 concluídos
 - 🔴 Épico 2 — Configuração do Perfil: 0/5 concluídos
 - 🔴 Épico 3 — Insumos: 0/10 concluídos
