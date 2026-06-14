@@ -23,7 +23,7 @@
 | P-005 | Security: JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl | back | ✅ concluído |
 | P-006 | Service: AuthService (registro, login) | back | ✅ concluído |
 | P-007 | Controller: AuthController (POST /auth/login, /auth/register) | back | ✅ concluído |
-| P-008 | Service + Controller: UsuarioService/UsuarioController (GET /usuarios/me, PUT /usuarios/me/senha) | back | ⬜ pendente |
+| P-008 | Service + Controller: UsuarioService/UsuarioController (GET /usuarios/me, PUT /usuarios/me/senha) | back | ✅ concluído |
 | P-009 | Front: conectar LoginPage e CadastroPage aos endpoints reais | front | ⬜ pendente |
 
 ---
