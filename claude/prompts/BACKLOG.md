@@ -24,7 +24,7 @@
 | P-006 | Service: AuthService (registro, login) | back | ✅ concluído |
 | P-007 | Controller: AuthController (POST /auth/login, /auth/register) | back | ✅ concluído |
 | P-008 | Service + Controller: UsuarioService/UsuarioController (GET /usuarios/me, PUT /usuarios/me/senha) | back | ✅ concluído |
-| P-009 | Front: conectar LoginPage e CadastroPage aos endpoints reais | front | ⬜ pendente |
+| P-009 | Front: conectar LoginPage e CadastroPage aos endpoints reais | front | ✅ concluído |
 
 ---
 
@@ -155,7 +155,7 @@
 ## Resumo
 
 - ✅ Épico 0 — Setup do Projeto e Schema: 2/2 concluídos
-- 🔴 Épico 1 — Autenticação: 0/7 concluídos
+- ✅ Épico 1 — Autenticação: 7/7 concluídos
 - 🔴 Épico 2 — Configuração do Perfil: 0/5 concluídos
 - 🔴 Épico 3 — Insumos: 0/10 concluídos
 - 🔴 Épico 3.1 — Compras em Lote (RN-036): 0/5 concluídos
