@@ -19,7 +19,7 @@
 | ID | Tarefa | Camada | Status |
 |----|--------|--------|--------|
 | P-003 | Entity + Repository: Usuario | back | ✅ concluído |
-| P-004 | DTOs: Login/Cadastro/AlterarSenha Request, AuthResponse | back | ⬜ pendente |
+| P-004 | DTOs: Login/Cadastro/AlterarSenha Request, AuthResponse | back | ✅ concluído |
 | P-005 | Security: JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl | back | ⬜ pendente |
 | P-006 | Service: AuthService (registro, login) | back | ⬜ pendente |
 | P-007 | Controller: AuthController (POST /auth/login, /auth/register) | back | ⬜ pendente |
