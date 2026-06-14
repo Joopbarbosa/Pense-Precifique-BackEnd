@@ -1,0 +1,12 @@
+package com.penseprecifique.api;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PensePrecifiqueApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PensePrecifiqueApplication.class, args);
+    }
+}
