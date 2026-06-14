@@ -20,7 +20,7 @@
 |----|--------|--------|--------|
 | P-003 | Entity + Repository: Usuario | back | ✅ concluído |
 | P-004 | DTOs: Login/Cadastro/AlterarSenha Request, AuthResponse | back | ✅ concluído |
-| P-005 | Security: JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl | back | ⬜ pendente |
+| P-005 | Security: JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl | back | ✅ concluído |
 | P-006 | Service: AuthService (registro, login) | back | ⬜ pendente |
 | P-007 | Controller: AuthController (POST /auth/login, /auth/register) | back | ⬜ pendente |
 | P-008 | Service + Controller: UsuarioService/UsuarioController (GET /usuarios/me, PUT /usuarios/me/senha) | back | ⬜ pendente |
