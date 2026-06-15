@@ -1,0 +1,27 @@
+package com.penseprecifique.api.controller;
+
+import com.penseprecifique.api.dto.request.EmpresaRequestDTO;
+import com.penseprecifique.api.dto.response.EmpresaResponseDTO;
+import com.penseprecifique.api.service.EmpresaService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/empresa")
+@RequiredArgsConstructor
+public class EmpresaController {
+
+    private final EmpresaService empresaService;
+
+    @GetMapping
+    public ResponseEntity<EmpresaResponseDTO> getEmpresa() {
+        return ResponseEntity.ok(empresaService.getEmpresa());
+    }
+
+    @PutMapping
+    public ResponseEntity<EmpresaResponseDTO> upsertEmpresa(@Valid @RequestBody EmpresaRequestDTO request) {
+        return ResponseEntity.ok(empresaService.upsertEmpresa(request));
+    }
+}
