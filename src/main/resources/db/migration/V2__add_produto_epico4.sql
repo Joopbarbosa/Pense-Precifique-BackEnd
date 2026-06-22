@@ -1,25 +1,13 @@
--- Épico 4: colunas novas na tabela ficha_tecnica_itens
+-- Épicos 3 e 4: colunas que existem nas entidades JPA mas faltam no schema V1
+
+-- insumos: entidade mapeia custo_unitario; V1 tem preco_custo (nome diferente)
+ALTER TABLE insumos
+  ADD COLUMN IF NOT EXISTS custo_unitario DECIMAL(15,4) NOT NULL DEFAULT 0;
+
+-- produtos: entidade mapeia foto; V1 tem foto_url (nome diferente)
+ALTER TABLE produtos
+  ADD COLUMN IF NOT EXISTS foto TEXT;
+
+-- ficha_tecnica_itens: entidade mapeia produto_base_id; V1 tem produto_componente_id (nome diferente)
 ALTER TABLE ficha_tecnica_itens
-  ADD COLUMN IF NOT EXISTS produto_base_id UUID REFERENCES produtos(id),
-  ADD COLUMN IF NOT EXISTS insumo_id UUID REFERENCES insumos(id);
-
--- Épico 4: tabelas novas
-CREATE TABLE IF NOT EXISTS movimentacoes_produto (
-  id UUID PRIMARY KEY,
-  produto_id UUID NOT NULL REFERENCES produtos(id),
-  tipo VARCHAR(20) NOT NULL,
-  motivo VARCHAR(30) NOT NULL,
-  quantidade NUMERIC(12,4) NOT NULL,
-  observacao TEXT,
-  referencia_id UUID,
-  referencia_tipo VARCHAR(20),
-  estornada BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS lotes_compra (
-  id UUID PRIMARY KEY,
-  usuario_id UUID NOT NULL REFERENCES usuarios(id),
-  data_compra TIMESTAMP NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
+  ADD COLUMN IF NOT EXISTS produto_base_id UUID REFERENCES produtos(id);
