@@ -1,16 +1,21 @@
 package com.penseprecifique.api.service;
 
 import com.penseprecifique.api.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.domain.entity.Produto;
 import com.penseprecifique.api.domain.entity.Usuario;
+import com.penseprecifique.api.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.domain.enums.TipoProduto;
+import com.penseprecifique.api.dto.request.BaixaManualProdutoRequest;
 import com.penseprecifique.api.dto.request.ProdutoRequest;
+import com.penseprecifique.api.dto.response.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.dto.response.ProdutoDetalheResponse;
 import com.penseprecifique.api.dto.response.ProdutoResponse;
 import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
 import com.penseprecifique.api.mapper.ProdutoMapper;
 import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
+import com.penseprecifique.api.repository.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +37,7 @@ public class ProdutoService {
 
     private final ProdutoRepository produtoRepository;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
+    private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
     private final FichaTecnicaService fichaTecnicaService;
     private final ProdutoMapper produtoMapper;
     private final UsuarioRepository usuarioRepository;
@@ -94,6 +100,31 @@ public class ProdutoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
         produto.setDeletedAt(LocalDateTime.now());
         produtoRepository.save(produto);
+    }
+
+    public MovimentacaoProdutoResponse baixaManual(UUID produtoId, BaixaManualProdutoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+
+        if (produto.getEstoqueAtual().compareTo(request.getQuantidade()) < 0) {
+            throw new BusinessException("Estoque insuficiente para realizar a baixa.");
+        }
+
+        produto.setEstoqueAtual(produto.getEstoqueAtual().subtract(request.getQuantidade()));
+        produtoRepository.save(produto);
+
+        MovimentacaoProduto movimentacao = MovimentacaoProduto.builder()
+                .produto(produto)
+                .tipo(TipoMovimentacaoProduto.SAIDA)
+                .motivo(request.getMotivo())
+                .quantidade(request.getQuantidade())
+                .observacao(request.getObservacao())
+                .estornada(false)
+                .build();
+
+        return produtoMapper.toMovimentacaoResponse(movimentacaoProdutoRepository.save(movimentacao));
     }
 
     private void validarPrecoVenda(ProdutoRequest request) {

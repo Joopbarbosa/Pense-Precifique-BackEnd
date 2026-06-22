@@ -1,7 +1,9 @@
 package com.penseprecifique.api.controller;
 
 import com.penseprecifique.api.domain.enums.TipoProduto;
+import com.penseprecifique.api.dto.request.BaixaManualProdutoRequest;
 import com.penseprecifique.api.dto.request.ProdutoRequest;
+import com.penseprecifique.api.dto.response.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.dto.response.ProdutoDetalheResponse;
 import com.penseprecifique.api.dto.response.ProdutoResponse;
 import com.penseprecifique.api.service.ProdutoService;
@@ -50,5 +52,12 @@ public class ProdutoController {
     public ResponseEntity<Void> inativar(@PathVariable UUID id) {
         produtoService.inativar(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/baixa-manual")
+    public ResponseEntity<MovimentacaoProdutoResponse> baixaManual(
+            @PathVariable UUID id,
+            @Valid @RequestBody BaixaManualProdutoRequest request) {
+        return ResponseEntity.status(201).body(produtoService.baixaManual(id, request));
     }
 }
