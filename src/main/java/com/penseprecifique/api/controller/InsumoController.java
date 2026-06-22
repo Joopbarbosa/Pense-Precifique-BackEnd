@@ -1,0 +1,51 @@
+package com.penseprecifique.api.controller;
+
+import com.penseprecifique.api.dto.request.InsumoRequestDTO;
+import com.penseprecifique.api.dto.response.InsumoResponseDTO;
+import com.penseprecifique.api.service.InsumoService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/insumos")
+@RequiredArgsConstructor
+public class InsumoController {
+
+    private final InsumoService insumoService;
+
+    @GetMapping
+    public ResponseEntity<Page<InsumoResponseDTO>> listar(
+            @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
+        return ResponseEntity.ok(insumoService.listar(pageable));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<InsumoResponseDTO> buscar(@PathVariable UUID id) {
+        return ResponseEntity.ok(insumoService.buscarPorId(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<InsumoResponseDTO> cadastrar(@Valid @RequestBody InsumoRequestDTO request) {
+        return ResponseEntity.status(201).body(insumoService.cadastrar(request));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<InsumoResponseDTO> editar(
+            @PathVariable UUID id,
+            @Valid @RequestBody InsumoRequestDTO request) {
+        return ResponseEntity.ok(insumoService.editar(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> inativar(@PathVariable UUID id) {
+        insumoService.inativar(id);
+        return ResponseEntity.noContent().build();
+    }
+}
