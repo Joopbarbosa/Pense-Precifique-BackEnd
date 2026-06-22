@@ -194,7 +194,7 @@ test(producao): cenários BDD 56 e 57 — produção por tipo
 
 - [x] Épico 0 — Setup do Projeto e Schema
 - [x] Épico 1 — Autenticação
-- [ ] Épico 2 — Configurações
+- [x] Épico 2 — Configurações
 - [ ] Épico 3 — Insumos
 - [ ] Épico 3.1 — Compras de Insumos em Lote (RN-036)
 - [ ] Épico 4 — Produtos

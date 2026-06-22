@@ -1,6 +1,6 @@
 # Backlog de Implementação — Pense & Precifique
 
-> Gerado em: 2026-06-14 | Atualizado em: 2026-06-14 (renumeração após inserir scaffold inicial) | Total: 77 prompts | Concluídos: 0/77
+> Gerado em: 2026-06-14 | Atualizado em: 2026-06-14 (renumeração após inserir scaffold inicial) | Total: 77 prompts | Concluídos: 2/77
 > Baseado em: PRD v6, BUSINESS_RULES v6, SCENARIOS v6, schema_v6.sql
 
 ---
@@ -9,8 +9,8 @@
 
 | ID | Tarefa | Camada | Status |
 |----|--------|--------|--------|
-| P-001 | Scaffold do projeto Spring Boot (Maven, Java 21) + CLAUDE.md inicial | banco/back | ✅ concluído |
-| P-002 | Migration: V1__initial_schema (importar schema_v6.sql completo via Flyway) | banco | ✅ concluído |
+| P-001 | Scaffold do projeto Spring Boot (Maven, Java 21) + CLAUDE.md inicial | banco/back | ✅ concluído em 2026-06-14 |
+| P-002 | Migration: V1__initial_schema (importar schema_v6.sql completo via Flyway) | banco | ✅ concluído em 2026-06-14 |
 
 ---
 
@@ -18,13 +18,13 @@
 
 | ID | Tarefa | Camada | Status |
 |----|--------|--------|--------|
-| P-003 | Entity + Repository: Usuario | back | ✅ concluído |
-| P-004 | DTOs: Login/Cadastro/AlterarSenha Request, AuthResponse | back | ✅ concluído |
-| P-005 | Security: JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl | back | ✅ concluído |
-| P-006 | Service: AuthService (registro, login) | back | ✅ concluído |
-| P-007 | Controller: AuthController (POST /auth/login, /auth/register) | back | ✅ concluído |
-| P-008 | Service + Controller: UsuarioService/UsuarioController (GET /usuarios/me, PUT /usuarios/me/senha) | back | ✅ concluído |
-| P-009 | Front: conectar LoginPage e CadastroPage aos endpoints reais | front | ✅ concluído |
+| P-003 | Entity + Repository: Usuario | back | ⬜ pendente |
+| P-004 | DTOs: Login/Cadastro/AlterarSenha Request, AuthResponse | back | ⬜ pendente |
+| P-005 | Security: JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl | back | ⬜ pendente |
+| P-006 | Service: AuthService (registro, login) | back | ⬜ pendente |
+| P-007 | Controller: AuthController (POST /auth/login, /auth/register) | back | ⬜ pendente |
+| P-008 | Service + Controller: UsuarioService/UsuarioController (GET /usuarios/me, PUT /usuarios/me/senha) | back | ⬜ pendente |
+| P-009 | Front: conectar LoginPage e CadastroPage aos endpoints reais | front | ⬜ pendente |
 
 ---
 
@@ -32,11 +32,11 @@
 
 | ID | Tarefa | Camada | Status |
 |----|--------|--------|--------|
-| P-010 | Entity + Repository: Empresa, ConfiguracaoPrecificacao | back | ⬜ pendente |
-| P-011 | DTOs: EmpresaRequest/Response, ConfiguracaoRequest/Response | back | ⬜ pendente |
-| P-012 | Service + Controller: EmpresaService/Controller (GET/PUT /empresa) | back | ⬜ pendente |
-| P-013 | Service + Controller: ConfiguracaoService/Controller (GET/PUT /configuracoes/precificacao) | back | ⬜ pendente |
-| P-014 | Front: conectar OnboardingPage e ConfiguracoesPage aos endpoints reais | front | ⬜ pendente |
+| P-010 | Entity + Repository: Empresa, ConfiguracaoPrecificacao | back | ✅ concluído |
+| P-011 | DTOs: EmpresaRequest/Response, ConfiguracaoRequest/Response | back | ✅ concluído |
+| P-012 | Service + Controller: EmpresaService/Controller (GET/PUT /empresa) | back | ✅ concluído |
+| P-013 | Service + Controller: ConfiguracaoService/Controller (GET/PUT /configuracoes/precificacao) | back | ✅ concluído |
+| P-014 | Front: conectar OnboardingPage e ConfiguracoesPage aos endpoints reais | front | ✅ concluído |
 
 ---
 
@@ -154,9 +154,9 @@
 
 ## Resumo
 
-- ✅ Épico 0 — Setup do Projeto e Schema: 2/2 concluídos
-- ✅ Épico 1 — Autenticação: 7/7 concluídos
-- 🔴 Épico 2 — Configuração do Perfil: 0/5 concluídos
+- 🔴 Épico 0 — Setup do Projeto e Schema: 2/2 concluídos
+- 🔴 Épico 1 — Autenticação: 7/7 concluídos ✅ (validado em 2026-06-14 — ver VALIDACAO_EPICO_1.md)
+- 🔴 Épico 2 — Configuração do Perfil: 5/5 concluídos ✅
 - 🔴 Épico 3 — Insumos: 0/10 concluídos
 - 🔴 Épico 3.1 — Compras em Lote (RN-036): 0/5 concluídos
 - 🔴 Épico 4 — Produtos: 0/11 concluídos
