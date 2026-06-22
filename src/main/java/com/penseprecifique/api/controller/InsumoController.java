@@ -1,7 +1,9 @@
 package com.penseprecifique.api.controller;
 
+import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
+import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.service.InsumoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -47,5 +49,12 @@ public class InsumoController {
     public ResponseEntity<Void> inativar(@PathVariable UUID id) {
         insumoService.inativar(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/baixa-manual")
+    public ResponseEntity<MovimentacaoInsumoResponseDTO> baixaManual(
+            @PathVariable UUID id,
+            @Valid @RequestBody BaixaManualInsumoRequestDTO request) {
+        return ResponseEntity.status(201).body(insumoService.baixaManual(id, request));
     }
 }

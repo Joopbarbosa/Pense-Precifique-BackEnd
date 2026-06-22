@@ -1,13 +1,19 @@
 package com.penseprecifique.api.service.impl;
 
 import com.penseprecifique.api.domain.entity.Insumo;
+import com.penseprecifique.api.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.domain.entity.Usuario;
+import com.penseprecifique.api.domain.enums.MotivoMovimentacaoInsumo;
+import com.penseprecifique.api.domain.enums.TipoMovimentacaoInsumo;
+import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
+import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
 import com.penseprecifique.api.mapper.InsumoMapper;
 import com.penseprecifique.api.repository.InsumoRepository;
+import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.InsumoService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +32,7 @@ import java.util.UUID;
 public class InsumoServiceImpl implements InsumoService {
 
     private final InsumoRepository insumoRepository;
+    private final MovimentacaoInsumoRepository movimentacaoInsumoRepository;
     private final UsuarioRepository usuarioRepository;
     private final InsumoMapper insumoMapper;
 
@@ -83,6 +90,32 @@ public class InsumoServiceImpl implements InsumoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
         insumo.setDeletedAt(LocalDateTime.now());
         insumoRepository.save(insumo);
+    }
+
+    @Override
+    public MovimentacaoInsumoResponseDTO baixaManual(UUID insumoId, BaixaManualInsumoRequestDTO request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
+
+        if (insumo.getEstoqueAtual().compareTo(request.quantidade()) < 0) {
+            throw new BusinessException("Estoque insuficiente para realizar a baixa.");
+        }
+
+        insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(request.quantidade()));
+        insumoRepository.save(insumo);
+
+        MovimentacaoInsumo movimentacao = MovimentacaoInsumo.builder()
+                .insumo(insumo)
+                .tipo(TipoMovimentacaoInsumo.SAIDA)
+                .motivo(MotivoMovimentacaoInsumo.BAIXA_MANUAL)
+                .quantidade(request.quantidade())
+                .observacao(request.observacao())
+                .estornada(false)
+                .build();
+
+        return insumoMapper.toMovimentacaoResponse(movimentacaoInsumoRepository.save(movimentacao));
     }
 
     private UUID getUsuarioIdAutenticado() {
