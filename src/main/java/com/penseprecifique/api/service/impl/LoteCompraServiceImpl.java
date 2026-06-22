@@ -11,6 +11,7 @@ import com.penseprecifique.api.dto.request.ItemLoteCompraRequestDTO;
 import com.penseprecifique.api.dto.request.RegistrarLoteCompraRequestDTO;
 import com.penseprecifique.api.dto.response.ImpactoAgregadoResponseDTO;
 import com.penseprecifique.api.dto.response.InsumoImpactoResponseDTO;
+import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
 import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.LoteCompraRepository;
@@ -18,6 +19,7 @@ import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.LoteCompraService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,9 +41,9 @@ public class LoteCompraServiceImpl implements LoteCompraService {
     private final UsuarioRepository usuarioRepository;
 
     @Override
-    public ImpactoAgregadoResponseDTO registrarLote(RegistrarLoteCompraRequestDTO request, UUID usuarioId) {
-        Usuario usuario = usuarioRepository.findById(usuarioId)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado"));
+    public ImpactoAgregadoResponseDTO registrarLote(RegistrarLoteCompraRequestDTO request) {
+        Usuario usuario = getUsuarioAutenticado();
+        UUID usuarioId = usuario.getId();
 
         LocalDateTime dataCompra = request.dataCompra() != null ? request.dataCompra() : LocalDateTime.now();
 
@@ -97,5 +99,11 @@ public class LoteCompraServiceImpl implements LoteCompraService {
                 insumosAtualizados,
                 new ArrayList<>()
         );
+    }
+
+    private Usuario getUsuarioAutenticado() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return usuarioRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
     }
 }
