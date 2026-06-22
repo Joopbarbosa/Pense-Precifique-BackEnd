@@ -1,0 +1,30 @@
+package com.penseprecifique.api.dto.response;
+
+import com.penseprecifique.api.domain.enums.TipoProduto;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Getter
+@Setter
+public class ProdutoDetalheResponse {
+
+    private UUID id;
+    private String nome;
+    private TipoProduto tipo;
+    private String descricao;
+    private Integer tempoProducao;
+    private String foto;
+    private BigDecimal precoVenda;
+    private BigDecimal precoCusto;
+    private BigDecimal estoqueAtual;
+    private BigDecimal estoqueMinimo;
+    private boolean ativo;
+    private List<FichaTecnicaItemResponse> fichaTecnica;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+}
