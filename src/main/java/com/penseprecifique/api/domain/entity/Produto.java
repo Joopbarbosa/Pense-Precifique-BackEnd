@@ -1,0 +1,82 @@
+package com.penseprecifique.api.domain.entity;
+
+import com.penseprecifique.api.domain.enums.TipoProduto;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "produtos")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Produto {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "usuario_id", nullable = false)
+    private Usuario usuario;
+
+    @Column(nullable = false)
+    private String nome;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TipoProduto tipo;
+
+    @Column(columnDefinition = "TEXT")
+    private String descricao;
+
+    @Column(name = "tempo_producao", nullable = false)
+    private Integer tempoProducao;
+
+    @Column
+    private String foto;
+
+    @Column(name = "preco_venda", precision = 15, scale = 2)
+    private BigDecimal precoVenda;
+
+    @Column(name = "preco_custo", nullable = false, precision = 15, scale = 4)
+    @Builder.Default
+    private BigDecimal precoCusto = BigDecimal.ZERO;
+
+    @Column(name = "estoque_atual", nullable = false, precision = 15, scale = 4)
+    @Builder.Default
+    private BigDecimal estoqueAtual = BigDecimal.ZERO;
+
+    @Column(name = "estoque_minimo", precision = 15, scale = 4)
+    private BigDecimal estoqueMinimo;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean ativo = true;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    void prePersist() {
+        LocalDateTime now = LocalDateTime.now();
+        if (createdAt == null) createdAt = now;
+        if (updatedAt == null) updatedAt = now;
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}
