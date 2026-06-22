@@ -54,6 +54,13 @@ public class ProdutoController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/movimentacoes")
+    public ResponseEntity<Page<MovimentacaoProdutoResponse>> listarMovimentacoes(
+            @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(produtoService.listarMovimentacoes(id, pageable));
+    }
+
     @PostMapping("/{id}/baixa-manual")
     public ResponseEntity<MovimentacaoProdutoResponse> baixaManual(
             @PathVariable UUID id,

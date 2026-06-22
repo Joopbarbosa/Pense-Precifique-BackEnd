@@ -102,6 +102,15 @@ public class ProdutoService {
         produtoRepository.save(produto);
     }
 
+    @Transactional(readOnly = true)
+    public Page<MovimentacaoProdutoResponse> listarMovimentacoes(UUID produtoId, Pageable pageable) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        return movimentacaoProdutoRepository.findByProdutoIdOrderByCreatedAtDesc(produtoId, pageable)
+                .map(produtoMapper::toMovimentacaoResponse);
+    }
+
     public MovimentacaoProdutoResponse baixaManual(UUID produtoId, BaixaManualProdutoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
