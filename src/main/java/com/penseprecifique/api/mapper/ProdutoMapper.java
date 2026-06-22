@@ -61,7 +61,7 @@ public class ProdutoMapper {
                 .foto(request.getFoto())
                 .precoVenda(request.getPrecoVenda())
                 .precoCusto(BigDecimal.ZERO)
-                .estoqueAtual(BigDecimal.ZERO)
+                .estoqueAtual(request.getEstoqueAtual() != null ? request.getEstoqueAtual() : BigDecimal.ZERO)
                 .estoqueMinimo(request.getEstoqueMinimo())
                 .ativo(true)
                 .build();

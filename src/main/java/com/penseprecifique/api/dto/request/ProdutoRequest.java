@@ -32,6 +32,8 @@ public class ProdutoRequest {
 
     private BigDecimal precoVenda;
 
+    private BigDecimal estoqueAtual;
+
     private BigDecimal estoqueMinimo;
 
     @NotNull
