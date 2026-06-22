@@ -51,6 +51,13 @@ public class InsumoController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/movimentacoes")
+    public ResponseEntity<Page<MovimentacaoInsumoResponseDTO>> listarMovimentacoes(
+            @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(insumoService.listarMovimentacoes(id, pageable));
+    }
+
     @PostMapping("/{id}/baixa-manual")
     public ResponseEntity<MovimentacaoInsumoResponseDTO> baixaManual(
             @PathVariable UUID id,

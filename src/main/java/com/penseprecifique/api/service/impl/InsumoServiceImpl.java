@@ -93,6 +93,16 @@ public class InsumoServiceImpl implements InsumoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<MovimentacaoInsumoResponseDTO> listarMovimentacoes(UUID insumoId, Pageable pageable) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
+        return movimentacaoInsumoRepository.findByInsumoIdOrderByCreatedAtDesc(insumoId, pageable)
+                .map(insumoMapper::toMovimentacaoResponse);
+    }
+
+    @Override
     public MovimentacaoInsumoResponseDTO baixaManual(UUID insumoId, BaixaManualInsumoRequestDTO request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 

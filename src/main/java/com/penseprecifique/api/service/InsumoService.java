@@ -22,4 +22,6 @@ public interface InsumoService {
     void inativar(UUID id);
 
     MovimentacaoInsumoResponseDTO baixaManual(UUID insumoId, BaixaManualInsumoRequestDTO request);
+
+    Page<MovimentacaoInsumoResponseDTO> listarMovimentacoes(UUID insumoId, Pageable pageable);
 }
