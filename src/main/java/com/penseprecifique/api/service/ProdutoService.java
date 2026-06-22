@@ -16,6 +16,7 @@ import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +37,8 @@ public class ProdutoService {
     private final UsuarioRepository usuarioRepository;
 
     @Transactional(readOnly = true)
-    public Page<ProdutoResponse> listar(UUID usuarioId, TipoProduto tipo, Pageable pageable) {
+    public Page<ProdutoResponse> listar(TipoProduto tipo, Pageable pageable) {
+        UUID usuarioId = getUsuarioIdAutenticado();
         if (tipo != null) {
             return produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo, pageable)
                     .map(produtoMapper::toResponse);
@@ -46,17 +48,19 @@ public class ProdutoService {
     }
 
     @Transactional(readOnly = true)
-    public ProdutoDetalheResponse buscarPorId(UUID id, UUID usuarioId) {
+    public ProdutoDetalheResponse buscarPorId(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
         List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
         return produtoMapper.toDetalheResponse(produto, itens);
     }
 
-    public ProdutoDetalheResponse cadastrar(ProdutoRequest request, UUID usuarioId) {
+    public ProdutoDetalheResponse cadastrar(ProdutoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
         validarPrecoVenda(request);
 
-        Usuario usuario = getUsuario(usuarioId);
+        Usuario usuario = getUsuarioAutenticado();
         Produto produto = produtoMapper.toEntity(request, usuario);
         produto = produtoRepository.save(produto);
 
@@ -68,12 +72,12 @@ public class ProdutoService {
         return produtoMapper.toDetalheResponse(produto, itens);
     }
 
-    public ProdutoDetalheResponse editar(UUID id, ProdutoRequest request, UUID usuarioId) {
+    public ProdutoDetalheResponse editar(UUID id, ProdutoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
 
         validarPrecoVenda(request);
-
         produtoMapper.updateEntity(request, produto);
 
         BigDecimal precoCusto = fichaTecnicaService.salvarFichaTecnica(produto, request.getFichaTecnica(), usuarioId);
@@ -84,7 +88,8 @@ public class ProdutoService {
         return produtoMapper.toDetalheResponse(produto, itens);
     }
 
-    public void inativar(UUID id, UUID usuarioId) {
+    public void inativar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
         produto.setDeletedAt(LocalDateTime.now());
@@ -103,8 +108,13 @@ public class ProdutoService {
         }
     }
 
-    private Usuario getUsuario(UUID usuarioId) {
-        return usuarioRepository.findById(usuarioId)
-                .orElseThrow(() -> new BusinessException("Usuário não encontrado"));
+    private UUID getUsuarioIdAutenticado() {
+        return getUsuarioAutenticado().getId();
+    }
+
+    private Usuario getUsuarioAutenticado() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return usuarioRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
     }
 }
