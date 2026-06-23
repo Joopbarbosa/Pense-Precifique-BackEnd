@@ -14,6 +14,7 @@ import com.penseprecifique.api.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.domain.enums.StatusProducao;
 import com.penseprecifique.api.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.domain.enums.TipoMovimentacaoProduto;
+import com.penseprecifique.api.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.dto.request.LancarProducaoRequest;
 import com.penseprecifique.api.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.dto.response.ProducaoDetalheResponse;
@@ -190,6 +191,107 @@ public class ProducaoService {
                 .build());
 
         List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
+        return producaoMapper.toDetalheResponse(producao, consumidos);
+    }
+
+    public ProducaoDetalheResponse cancelar(UUID id, CancelarProducaoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getStatus() == StatusProducao.CANCELADA) {
+            throw new BusinessException("Esta produção já foi cancelada.");
+        }
+
+        List<ProducaoInsumoConsumido> consumidos =
+                producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
+
+        // Reverter estoque do produto produzido (a entrada da produção)
+        Produto produto = producao.getProduto();
+        produto.setEstoqueAtual(produto.getEstoqueAtual().subtract(producao.getQuantidade()));
+        produtoRepository.save(produto);
+
+        movimentacaoProdutoRepository
+                .findByProdutoIdAndMotivoAndReferenciaIdAndTipo(
+                        produto.getId(), MotivoMovimentacaoProduto.PRODUCAO,
+                        producao.getId(), TipoMovimentacaoProduto.ENTRADA)
+                .ifPresent(original -> {
+                    original.setEstornada(true);
+                    movimentacaoProdutoRepository.save(original);
+                });
+
+        movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                .produto(produto)
+                .tipo(TipoMovimentacaoProduto.SAIDA)
+                .motivo(MotivoMovimentacaoProduto.ESTORNO_PRODUCAO)
+                .quantidade(producao.getQuantidade())
+                .observacao(request.getObservacao())
+                .referenciaId(producao.getId())
+                .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
+                .estornada(false)
+                .build());
+
+        // Reverter estoque de cada componente consumido
+        for (ProducaoInsumoConsumido consumido : consumidos) {
+            if (consumido.getInsumo() != null) {
+                // BRANCH A — componente é insumo
+                Insumo insumo = consumido.getInsumo();
+                insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(consumido.getQuantidade()));
+                insumoRepository.save(insumo);
+
+                movimentacaoInsumoRepository
+                        .findByInsumoIdAndMotivoAndReferenciaId(
+                                insumo.getId(), MotivoMovimentacaoInsumo.PRODUCAO, producao.getId())
+                        .ifPresent(original -> {
+                            original.setEstornada(true);
+                            movimentacaoInsumoRepository.save(original);
+                        });
+
+                movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                        .insumo(insumo)
+                        .tipo(TipoMovimentacaoInsumo.ENTRADA)
+                        .motivo(MotivoMovimentacaoInsumo.ESTORNO_PRODUCAO)
+                        .quantidade(consumido.getQuantidade())
+                        .observacao(request.getObservacao())
+                        .referenciaId(producao.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO)
+                        .estornada(false)
+                        .build());
+
+            } else if (consumido.getProdutoBase() != null) {
+                // BRANCH B — componente é produto-base
+                Produto produtoBase = consumido.getProdutoBase();
+                produtoBase.setEstoqueAtual(produtoBase.getEstoqueAtual().add(consumido.getQuantidade()));
+                produtoRepository.save(produtoBase);
+
+                movimentacaoProdutoRepository
+                        .findByProdutoIdAndMotivoAndReferenciaIdAndTipo(
+                                produtoBase.getId(), MotivoMovimentacaoProduto.PRODUCAO,
+                                producao.getId(), TipoMovimentacaoProduto.SAIDA)
+                        .ifPresent(original -> {
+                            original.setEstornada(true);
+                            movimentacaoProdutoRepository.save(original);
+                        });
+
+                movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                        .produto(produtoBase)
+                        .tipo(TipoMovimentacaoProduto.ENTRADA)
+                        .motivo(MotivoMovimentacaoProduto.ESTORNO_PRODUCAO)
+                        .quantidade(consumido.getQuantidade())
+                        .observacao(request.getObservacao())
+                        .referenciaId(producao.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
+                        .estornada(false)
+                        .build());
+            }
+        }
+
+        producao.setStatus(StatusProducao.CANCELADA);
+        producao.setObservacaoCancelamento(request.getObservacao());
+        producao.setDataCancelamento(LocalDateTime.now());
+        producao = producaoRepository.save(producao);
+
         return producaoMapper.toDetalheResponse(producao, consumidos);
     }
 
