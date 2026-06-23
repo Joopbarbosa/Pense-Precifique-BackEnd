@@ -1,0 +1,24 @@
+package com.penseprecifique.api.dto.request;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Getter
+@Setter
+public class LancarProducaoRequest {
+
+    @NotNull(message = "O produto é obrigatório")
+    private UUID produtoId;
+
+    @NotNull(message = "A quantidade é obrigatória")
+    @DecimalMin(value = "0.001", message = "A quantidade deve ser maior que zero")
+    private BigDecimal quantidade;
+
+    private LocalDateTime dataProducao;
+}
