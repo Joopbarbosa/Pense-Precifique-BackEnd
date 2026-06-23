@@ -23,9 +23,13 @@ public class ProducaoInsumoConsumido {
     @JoinColumn(name = "producao_id", nullable = false)
     private Producao producao;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "insumo_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "insumo_id")
     private Insumo insumo;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "produto_base_id")
+    private Produto produtoBase;
 
     @Column(name = "quantidade", nullable = false, precision = 10, scale = 4)
     private BigDecimal quantidade;

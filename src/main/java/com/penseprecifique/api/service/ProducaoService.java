@@ -153,8 +153,6 @@ public class ProducaoService {
 
             } else if (item.getProdutoBase() != null) {
                 // Produto base é consumido do próprio estoque de produto.
-                // A tabela producao_insumos_consumidos exige insumo_id NOT NULL,
-                // portanto registramos apenas a movimentação de produto (SAIDA/PRODUCAO).
                 Produto base = item.getProdutoBase();
                 base.setEstoqueAtual(base.getEstoqueAtual().subtract(consumida));
                 produtoRepository.save(base);
@@ -167,6 +165,12 @@ public class ProducaoService {
                         .referenciaId(producao.getId())
                         .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
                         .estornada(false)
+                        .build());
+
+                producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
+                        .producao(producao)
+                        .produtoBase(base)
+                        .quantidade(consumida)
                         .build());
             }
         }

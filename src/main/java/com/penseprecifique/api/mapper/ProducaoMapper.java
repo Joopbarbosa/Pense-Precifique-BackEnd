@@ -43,10 +43,15 @@ public class ProducaoMapper {
 
     public InsumoConsumidoResponse toInsumoConsumidoResponse(ProducaoInsumoConsumido consumido) {
         InsumoConsumidoResponse response = new InsumoConsumidoResponse();
-        response.setInsumoId(consumido.getInsumo().getId());
-        response.setNomeInsumo(consumido.getInsumo().getNome());
-        response.setMarca(consumido.getInsumo().getMarca());
-        response.setUnidadeMedida(consumido.getInsumo().getUnidadeMedida());
+        if (consumido.getInsumo() != null) {
+            response.setInsumoId(consumido.getInsumo().getId());
+            response.setNomeInsumo(consumido.getInsumo().getNome());
+            response.setMarca(consumido.getInsumo().getMarca());
+            response.setUnidadeMedida(consumido.getInsumo().getUnidadeMedida());
+        } else if (consumido.getProdutoBase() != null) {
+            response.setInsumoId(consumido.getProdutoBase().getId());
+            response.setNomeInsumo(consumido.getProdutoBase().getNome());
+        }
         response.setQuantidade(consumido.getQuantidade());
         response.setEstoqueAntes(null);
         response.setEstoqueInsuficiente(false);
