@@ -29,7 +29,7 @@ public class Producao {
     @JoinColumn(name = "produto_id", nullable = false)
     private Produto produto;
 
-    @Column(name = "numero", insertable = false, updatable = false)
+    @Column(name = "numero", updatable = false)
     private Integer numero;
 
     @Column(name = "quantidade", nullable = false, precision = 10, scale = 4)
