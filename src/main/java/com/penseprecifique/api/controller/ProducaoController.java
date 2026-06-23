@@ -1,5 +1,6 @@
 package com.penseprecifique.api.controller;
 
+import com.penseprecifique.api.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.dto.request.LancarProducaoRequest;
 import com.penseprecifique.api.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.dto.response.ProducaoDetalheResponse;
@@ -45,5 +46,12 @@ public class ProducaoController {
             @RequestParam UUID produtoId,
             @RequestParam BigDecimal quantidade) {
         return ResponseEntity.ok(producaoService.previewInsumosConsumidos(produtoId, quantidade));
+    }
+
+    @PostMapping("/{id}/cancelar")
+    public ResponseEntity<ProducaoDetalheResponse> cancelar(
+            @PathVariable UUID id,
+            @Valid @RequestBody CancelarProducaoRequest request) {
+        return ResponseEntity.ok(producaoService.cancelar(id, request));
     }
 }
