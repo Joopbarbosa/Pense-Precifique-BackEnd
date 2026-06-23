@@ -1,0 +1,49 @@
+package com.penseprecifique.api.controller;
+
+import com.penseprecifique.api.dto.request.LancarProducaoRequest;
+import com.penseprecifique.api.dto.response.InsumoConsumidoResponse;
+import com.penseprecifique.api.dto.response.ProducaoDetalheResponse;
+import com.penseprecifique.api.dto.response.ProducaoResponse;
+import com.penseprecifique.api.service.ProducaoService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/producoes")
+@RequiredArgsConstructor
+public class ProducaoController {
+
+    private final ProducaoService producaoService;
+
+    @GetMapping
+    public ResponseEntity<Page<ProducaoResponse>> listar(
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(producaoService.listar(pageable));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ProducaoDetalheResponse> buscar(@PathVariable UUID id) {
+        return ResponseEntity.ok(producaoService.buscarPorId(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<ProducaoDetalheResponse> lancar(@Valid @RequestBody LancarProducaoRequest request) {
+        return ResponseEntity.status(201).body(producaoService.lancar(request));
+    }
+
+    @GetMapping("/preview")
+    public ResponseEntity<List<InsumoConsumidoResponse>> preview(
+            @RequestParam UUID produtoId,
+            @RequestParam BigDecimal quantidade) {
+        return ResponseEntity.ok(producaoService.previewInsumosConsumidos(produtoId, quantidade));
+    }
+}
