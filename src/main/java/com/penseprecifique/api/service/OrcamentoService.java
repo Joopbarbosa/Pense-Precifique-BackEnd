@@ -192,6 +192,27 @@ public class OrcamentoService {
                 }
                 break;
 
+            case AGUARDANDO_SINAL:
+                if (request.getMetodoSinalRecebido() == null) {
+                    throw new BusinessException("O método de recebimento do sinal é obrigatório");
+                }
+                if (request.getMetodoSinalRecebido() == MetodoPagamento.OUTRO) {
+                    String obs = request.getMetodoSinalRecebidoObs();
+                    if (obs == null || obs.trim().length() < MIN_OBS_OUTRO) {
+                        throw new BusinessException(
+                                "Para o método OUTRO, a observação é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
+                    }
+                }
+                orcamento.setStatus(StatusOrcamento.SINAL_PAGO);
+                orcamento.setDataSinalPago(LocalDateTime.now());
+                orcamento.setMetodoSinalRecebido(request.getMetodoSinalRecebido());
+                orcamento.setMetodoSinalRecebidoObs(request.getMetodoSinalRecebidoObs());
+                break;
+
+            case SINAL_PAGO:
+                orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
+                break;
+
             default:
                 throw new BusinessException("Transição de status inválida.");
         }
