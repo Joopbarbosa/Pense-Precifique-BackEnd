@@ -48,4 +48,12 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.avancarStatus(id,
                 request != null ? request : new AvancaStatusRequest()));
     }
+
+    @PostMapping("/{id}/cancelar")
+    public ResponseEntity<OrcamentoDetalheResponse> cancelar(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) AvancaStatusRequest request) {
+        return ResponseEntity.ok(orcamentoService.cancelar(id,
+                request != null ? request : new AvancaStatusRequest()));
+    }
 }
