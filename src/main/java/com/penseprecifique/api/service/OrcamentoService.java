@@ -6,12 +6,14 @@ import com.penseprecifique.api.domain.entity.Orcamento;
 import com.penseprecifique.api.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.domain.entity.Produto;
+import com.penseprecifique.api.domain.entity.ReciboEstorno;
 import com.penseprecifique.api.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.domain.enums.TipoDesconto;
 import com.penseprecifique.api.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.domain.enums.TipoProduto;
@@ -31,6 +33,7 @@ import com.penseprecifique.api.repository.OrcamentoItemCustomizacaoRepository;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;
+import com.penseprecifique.api.repository.ReciboEstornoRepository;
 import com.penseprecifique.api.repository.ReciboPagamentoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +65,7 @@ public class OrcamentoService {
     private final ProdutoRepository produtoRepository;
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
+    private final ReciboEstornoRepository reciboEstornoRepository;
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
 
@@ -270,6 +274,91 @@ public class OrcamentoService {
 
         orcamento = orcamentoRepository.save(orcamento);
         return montarDetalhe(orcamento);
+    }
+
+    public OrcamentoDetalheResponse cancelar(UUID id, AvancaStatusRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        StatusOrcamento atual = orcamento.getStatus();
+        LocalDateTime now = LocalDateTime.now();
+
+        switch (atual) {
+            case RASCUNHO:
+            case ENVIADO:
+            case APROVADO:
+            case AGUARDANDO_SINAL:
+                orcamento.setCancelamentoTipo(TipoCancelamento.SIMPLES);
+                orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
+                break;
+
+            case SINAL_PAGO:
+                orcamento.setCancelamentoTipo(TipoCancelamento.ESTORNO);
+                orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
+                if (request.isEstornarSinal()) {
+                    reciboEstornoRepository.save(ReciboEstorno.builder()
+                            .orcamento(orcamento)
+                            .valorEstornado(orcamento.getValorSinal())
+                            .dataEstorno(now)
+                            .build());
+                    orcamento.setEstornoSinal(true);
+                    orcamento.setDataEstornoSinal(now);
+                }
+                break;
+
+            case EM_PRODUCAO:
+            case FINALIZADO:
+                orcamento.setCancelamentoTipo(TipoCancelamento.MULTA);
+                orcamento.setPercentualMulta(request.getPercentualMulta());
+                orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
+                if (atual == StatusOrcamento.FINALIZADO) {
+                    reverterEstoque(orcamento, request.getMotivoCancelamento());
+                }
+                break;
+
+            case ENTREGUE:
+            case PAGO:
+                String justificativa = request.getJustificativa();
+                if (justificativa == null || justificativa.trim().length() < MIN_OBS_OUTRO) {
+                    throw new BusinessException(
+                            "A justificativa é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
+                }
+                orcamento.setCancelamentoTipo(TipoCancelamento.JUSTIFICATIVA);
+                orcamento.setCancelamentoMotivo(justificativa);
+                break;
+
+            case CANCELADO:
+                throw new BusinessException("Este orçamento já foi cancelado.");
+
+            default:
+                throw new BusinessException("Cancelamento inválido para o status atual.");
+        }
+
+        orcamento.setStatus(StatusOrcamento.CANCELADO);
+        orcamento = orcamentoRepository.save(orcamento);
+        return montarDetalhe(orcamento);
+    }
+
+    private void reverterEstoque(Orcamento orcamento, String motivo) {
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        for (OrcamentoItem item : itens) {
+            Produto produto = item.getProduto();
+            produto.setEstoqueAtual(produto.getEstoqueAtual()
+                    .add(BigDecimal.valueOf(item.getQuantidade())));
+            produtoRepository.save(produto);
+
+            movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                    .produto(produto)
+                    .tipo(TipoMovimentacaoProduto.ENTRADA)
+                    .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
+                    .quantidade(BigDecimal.valueOf(item.getQuantidade()))
+                    .observacao(motivo)
+                    .referenciaId(orcamento.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
+                    .estornada(false)
+                    .build());
+        }
     }
 
     private void validarRegras(OrcamentoRequest request) {
