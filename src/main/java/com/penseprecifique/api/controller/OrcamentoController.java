@@ -76,4 +76,22 @@ public class OrcamentoController {
                 .header("Content-Disposition", "attachment; filename=recibo-sinal.pdf")
                 .body(pdf);
     }
+
+    @GetMapping("/{id}/pdf-multa")
+    public ResponseEntity<byte[]> downloadPdfMulta(@PathVariable UUID id) {
+        byte[] pdf = pdfService.gerarPdfMulta(id);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=multa.pdf")
+                .body(pdf);
+    }
+
+    @GetMapping("/{id}/recibo-estorno")
+    public ResponseEntity<byte[]> downloadReciboEstorno(@PathVariable UUID id) {
+        byte[] pdf = pdfService.gerarReciboEstornoSinal(id);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=recibo-estorno.pdf")
+                .body(pdf);
+    }
 }

@@ -22,6 +22,7 @@ import com.penseprecifique.api.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.domain.enums.TipoDesconto;
 import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
@@ -37,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
@@ -376,6 +378,126 @@ public class PdfService {
             case BOLETO -> "Boleto";
             case OUTRO -> "Outro";
         };
+    }
+
+    public byte[] gerarPdfMulta(UUID orcamentoId) {
+        Usuario usuario = getUsuarioAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        if (orcamento.getCancelamentoTipo() != TipoCancelamento.MULTA) {
+            throw new BusinessException("PDF de multa só disponível para cancelamentos com multa");
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdf = new PdfDocument(writer);
+            Document doc = new Document(pdf, PageSize.A4);
+            doc.setMargins(36, 36, 36, 36);
+
+            PdfFont bold = PdfFontFactory.createFont("Helvetica-Bold");
+            PdfFont regular = PdfFontFactory.createFont("Helvetica");
+
+            doc.add(new Paragraph("NOTIFICAÇÃO DE CANCELAMENTO COM MULTA")
+                    .setFont(bold).setFontSize(14)
+                    .setFontColor(COR_CABECALHO)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
+                    .setFont(regular).setFontSize(12)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("\n").setFontSize(4));
+
+            String dataCancelamento = LocalDateTime.now().format(FMT_DATA);
+            doc.add(new Paragraph("Data de cancelamento: " + dataCancelamento)
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("Valor total do orçamento: " + moeda(orcamento.getTotal()))
+                    .setFont(regular).setFontSize(11));
+
+            String pctMulta = orcamento.getPercentualMulta() != null
+                    ? orcamento.getPercentualMulta().stripTrailingZeros().toPlainString() : "0";
+            doc.add(new Paragraph("Percentual de multa: " + pctMulta + "%")
+                    .setFont(regular).setFontSize(11));
+
+            BigDecimal valorMulta = orcamento.getTotal()
+                    .multiply(orcamento.getPercentualMulta() != null ? orcamento.getPercentualMulta() : BigDecimal.ZERO)
+                    .divide(new BigDecimal(100), 2, java.math.RoundingMode.HALF_UP);
+            doc.add(new Paragraph("Valor da multa: " + moeda(valorMulta))
+                    .setFont(bold).setFontSize(12));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("DATAS").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
+
+            String dataAprovacao = orcamento.getDataAprovacao() != null
+                    ? orcamento.getDataAprovacao().format(FMT_DATA) : "-";
+            doc.add(new Paragraph("Data de aprovação: " + dataAprovacao)
+                    .setFont(regular).setFontSize(10));
+
+            String prazo = orcamento.getPrazoProducaoDias() != null
+                    ? orcamento.getPrazoProducaoDias() + " dias úteis" : "-";
+            doc.add(new Paragraph("Prazo de produção: " + prazo)
+                    .setFont(regular).setFontSize(10));
+
+            doc.close();
+            return baos.toByteArray();
+        } catch (BusinessException | ResourceNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("Erro ao gerar PDF de multa: " + e.getMessage());
+        }
+    }
+
+    public byte[] gerarReciboEstornoSinal(UUID orcamentoId) {
+        Usuario usuario = getUsuarioAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        if (!Boolean.TRUE.equals(orcamento.getEstornoSinal())) {
+            throw new BusinessException("Recibo de estorno só disponível para cancelamentos com estorno de sinal");
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdf = new PdfDocument(writer);
+            Document doc = new Document(pdf, PageSize.A4);
+            doc.setMargins(36, 36, 36, 36);
+
+            PdfFont bold = PdfFontFactory.createFont("Helvetica-Bold");
+            PdfFont regular = PdfFontFactory.createFont("Helvetica");
+
+            doc.add(new Paragraph("RECIBO DE ESTORNO DO SINAL")
+                    .setFont(bold).setFontSize(16)
+                    .setFontColor(COR_CABECALHO)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
+                    .setFont(regular).setFontSize(12)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("\n").setFontSize(4));
+
+            doc.add(new Paragraph("Valor estornado: " + moeda(orcamento.getValorSinal()))
+                    .setFont(bold).setFontSize(12));
+
+            String dataEstorno = orcamento.getDataEstornoSinal() != null
+                    ? orcamento.getDataEstornoSinal().format(FMT_DATA) : "-";
+            doc.add(new Paragraph("Data do estorno: " + dataEstorno)
+                    .setFont(regular).setFontSize(11));
+
+            doc.close();
+            return baos.toByteArray();
+        } catch (BusinessException | ResourceNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("Erro ao gerar recibo de estorno: " + e.getMessage());
+        }
     }
 
     private Usuario getUsuarioAutenticado() {
