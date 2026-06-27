@@ -1,0 +1,42 @@
+package com.penseprecifique.api.controller;
+
+import com.penseprecifique.api.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.dto.request.OrcamentoRequest;
+import com.penseprecifique.api.dto.response.OrcamentoDetalheResponse;
+import com.penseprecifique.api.dto.response.OrcamentoResponse;
+import com.penseprecifique.api.service.OrcamentoService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/orcamentos")
+@RequiredArgsConstructor
+public class OrcamentoController {
+
+    private final OrcamentoService orcamentoService;
+
+    @GetMapping
+    public ResponseEntity<Page<OrcamentoResponse>> listar(
+            @RequestParam(required = false) StatusOrcamento status,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(orcamentoService.listar(status, pageable));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<OrcamentoDetalheResponse> buscar(@PathVariable UUID id) {
+        return ResponseEntity.ok(orcamentoService.buscarPorId(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<OrcamentoDetalheResponse> criar(
+            @Valid @RequestBody OrcamentoRequest request) {
+        return ResponseEntity.status(201).body(orcamentoService.criar(request));
+    }
+}
