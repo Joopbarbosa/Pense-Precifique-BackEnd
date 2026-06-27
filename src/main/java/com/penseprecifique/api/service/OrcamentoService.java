@@ -10,6 +10,7 @@ import com.penseprecifique.api.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.domain.enums.TipoDesconto;
 import com.penseprecifique.api.domain.enums.TipoProduto;
+import com.penseprecifique.api.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.dto.request.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.dto.request.OrcamentoItemRequest;
 import com.penseprecifique.api.dto.request.OrcamentoRequest;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -162,6 +164,39 @@ public class OrcamentoService {
 
         orcamento = orcamentoRepository.save(orcamento);
 
+        return montarDetalhe(orcamento);
+    }
+
+    public OrcamentoDetalheResponse avancarStatus(UUID id, AvancaStatusRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        StatusOrcamento atual = orcamento.getStatus();
+
+        switch (atual) {
+            case RASCUNHO:
+                orcamento.setStatus(StatusOrcamento.ENVIADO);
+                break;
+
+            case ENVIADO:
+                orcamento.setStatus(StatusOrcamento.APROVADO);
+                orcamento.setDataAprovacao(LocalDateTime.now());
+                break;
+
+            case APROVADO:
+                if (Boolean.TRUE.equals(orcamento.getSinalAtivo())) {
+                    orcamento.setStatus(StatusOrcamento.AGUARDANDO_SINAL);
+                } else {
+                    orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
+                }
+                break;
+
+            default:
+                throw new BusinessException("Transição de status inválida.");
+        }
+
+        orcamento = orcamentoRepository.save(orcamento);
         return montarDetalhe(orcamento);
     }
 
