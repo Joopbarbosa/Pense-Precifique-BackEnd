@@ -1,14 +1,19 @@
 package com.penseprecifique.api.service;
 
 import com.penseprecifique.api.domain.entity.Cliente;
+import com.penseprecifique.api.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.domain.entity.Orcamento;
 import com.penseprecifique.api.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.domain.entity.Produto;
+import com.penseprecifique.api.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.domain.enums.MotivoMovimentacaoProduto;
+import com.penseprecifique.api.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.domain.enums.TipoDesconto;
+import com.penseprecifique.api.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.domain.enums.TipoProduto;
 import com.penseprecifique.api.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.dto.request.OrcamentoItemCustomizacaoRequest;
@@ -21,10 +26,12 @@ import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
 import com.penseprecifique.api.mapper.OrcamentoMapper;
 import com.penseprecifique.api.repository.ClienteRepository;
+import com.penseprecifique.api.repository.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.repository.OrcamentoItemCustomizacaoRepository;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;
+import com.penseprecifique.api.repository.ReciboPagamentoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -53,6 +60,8 @@ public class OrcamentoService {
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final ClienteRepository clienteRepository;
     private final ProdutoRepository produtoRepository;
+    private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
+    private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
 
@@ -211,6 +220,48 @@ public class OrcamentoService {
 
             case SINAL_PAGO:
                 orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
+                break;
+
+            case EM_PRODUCAO:
+                List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+                for (OrcamentoItem item : itensParaBaixa) {
+                    Produto produto = item.getProduto();
+                    produto.setEstoqueAtual(produto.getEstoqueAtual()
+                            .subtract(BigDecimal.valueOf(item.getQuantidade())));
+                    produtoRepository.save(produto);
+
+                    movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                            .produto(produto)
+                            .tipo(TipoMovimentacaoProduto.SAIDA)
+                            .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
+                            .quantidade(BigDecimal.valueOf(item.getQuantidade()))
+                            .referenciaId(orcamento.getId())
+                            .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
+                            .estornada(false)
+                            .build());
+                }
+                orcamento.setStatus(StatusOrcamento.FINALIZADO);
+                break;
+
+            case FINALIZADO:
+                orcamento.setStatus(StatusOrcamento.ENTREGUE);
+                break;
+
+            case ENTREGUE:
+                BigDecimal valorSinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
+                        ? orcamento.getValorSinal()
+                        : BigDecimal.ZERO;
+                BigDecimal valorRestantePago = orcamento.getTotal().subtract(valorSinalPago);
+
+                reciboPagamentoRepository.save(ReciboPagamento.builder()
+                        .orcamento(orcamento)
+                        .valorTotal(orcamento.getTotal())
+                        .valorSinalPago(valorSinalPago)
+                        .valorRestantePago(valorRestantePago)
+                        .totalQuitado(orcamento.getTotal())
+                        .build());
+
+                orcamento.setStatus(StatusOrcamento.PAGO);
                 break;
 
             default:
