@@ -1,6 +1,7 @@
 package com.penseprecifique.api.controller;
 
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.dto.request.OrcamentoRequest;
 import com.penseprecifique.api.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.dto.response.OrcamentoResponse;
@@ -38,5 +39,13 @@ public class OrcamentoController {
     public ResponseEntity<OrcamentoDetalheResponse> criar(
             @Valid @RequestBody OrcamentoRequest request) {
         return ResponseEntity.status(201).body(orcamentoService.criar(request));
+    }
+
+    @PostMapping("/{id}/avancar-status")
+    public ResponseEntity<OrcamentoDetalheResponse> avancarStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) AvancaStatusRequest request) {
+        return ResponseEntity.ok(orcamentoService.avancarStatus(id,
+                request != null ? request : new AvancaStatusRequest()));
     }
 }
