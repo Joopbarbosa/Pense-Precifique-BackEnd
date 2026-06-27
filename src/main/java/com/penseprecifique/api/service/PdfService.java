@@ -21,6 +21,7 @@ import com.penseprecifique.api.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.domain.enums.TipoDesconto;
 import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
@@ -54,6 +55,73 @@ public class PdfService {
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
+
+    public byte[] gerarReciboSinal(UUID orcamentoId) {
+        Usuario usuario = getUsuarioAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        if (orcamento.getStatus().ordinal() < StatusOrcamento.SINAL_PAGO.ordinal()) {
+            throw new BusinessException("Recibo do sinal só disponível a partir do status SINAL_PAGO");
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdf = new PdfDocument(writer);
+            Document doc = new Document(pdf, PageSize.A4);
+            doc.setMargins(36, 36, 36, 36);
+
+            PdfFont bold = PdfFontFactory.createFont("Helvetica-Bold");
+            PdfFont regular = PdfFontFactory.createFont("Helvetica");
+
+            doc.add(new Paragraph("RECIBO DE SINAL")
+                    .setFont(bold).setFontSize(16)
+                    .setFontColor(COR_CABECALHO)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
+                    .setFont(regular).setFontSize(12)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
+                    .setFont(regular).setFontSize(11));
+
+            String metodoSinal = orcamento.getMetodoSinalRecebido() != null
+                    ? formatarMetodoPagamento(orcamento.getMetodoSinalRecebido()) : "-";
+            doc.add(new Paragraph("Método recebido: " + metodoSinal)
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("\n").setFontSize(4));
+
+            doc.add(new Paragraph("Valor do sinal recebido: " + moeda(orcamento.getValorSinal()))
+                    .setFont(bold).setFontSize(12));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("DATAS").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
+
+            String dataAprovacao = orcamento.getDataAprovacao() != null
+                    ? orcamento.getDataAprovacao().format(FMT_DATA) : "-";
+            doc.add(new Paragraph("Data de aprovação: " + dataAprovacao)
+                    .setFont(regular).setFontSize(10));
+
+            String prazo = orcamento.getPrazoProducaoDias() != null
+                    ? orcamento.getPrazoProducaoDias() + " dias úteis" : "-";
+            doc.add(new Paragraph("Prazo de produção: " + prazo)
+                    .setFont(regular).setFontSize(10));
+
+            String inicio = Boolean.TRUE.equals(orcamento.getInicioAssimQueAprovado())
+                    ? "Assim que aprovado"
+                    : (orcamento.getDataInicioEstimada() != null
+                            ? orcamento.getDataInicioEstimada().format(FMT_DATA)
+                            : "-");
+            doc.add(new Paragraph("Início estimado: " + inicio)
+                    .setFont(regular).setFontSize(10));
+
+            doc.close();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new BusinessException("Erro ao gerar recibo do sinal: " + e.getMessage());
+        }
+    }
 
     public byte[] gerarPdfOrcamento(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();

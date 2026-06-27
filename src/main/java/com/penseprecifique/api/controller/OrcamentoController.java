@@ -67,4 +67,13 @@ public class OrcamentoController {
                 .header("Content-Disposition", "attachment; filename=orcamento.pdf")
                 .body(pdf);
     }
+
+    @GetMapping("/{id}/recibo-sinal")
+    public ResponseEntity<byte[]> downloadReciboSinal(@PathVariable UUID id) {
+        byte[] pdf = pdfService.gerarReciboSinal(id);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=recibo-sinal.pdf")
+                .body(pdf);
+    }
 }
