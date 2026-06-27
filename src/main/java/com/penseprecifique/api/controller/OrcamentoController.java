@@ -6,6 +6,7 @@ import com.penseprecifique.api.dto.request.OrcamentoRequest;
 import com.penseprecifique.api.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.dto.response.OrcamentoResponse;
 import com.penseprecifique.api.service.OrcamentoService;
+import com.penseprecifique.api.service.PdfService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class OrcamentoController {
 
     private final OrcamentoService orcamentoService;
+    private final PdfService pdfService;
 
     @GetMapping
     public ResponseEntity<Page<OrcamentoResponse>> listar(
@@ -55,5 +57,14 @@ public class OrcamentoController {
             @Valid @RequestBody(required = false) AvancaStatusRequest request) {
         return ResponseEntity.ok(orcamentoService.cancelar(id,
                 request != null ? request : new AvancaStatusRequest()));
+    }
+
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
+        byte[] pdf = pdfService.gerarPdfOrcamento(id);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=orcamento.pdf")
+                .body(pdf);
     }
 }
