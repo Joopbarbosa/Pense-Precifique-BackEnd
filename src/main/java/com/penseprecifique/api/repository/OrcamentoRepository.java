@@ -16,4 +16,6 @@ public interface OrcamentoRepository extends JpaRepository<Orcamento, UUID> {
     Page<Orcamento> findByUsuarioIdAndStatusAndDeletedAtIsNull(UUID usuarioId, StatusOrcamento status, Pageable pageable);
 
     Optional<Orcamento> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
+
+    Optional<Orcamento> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 }
