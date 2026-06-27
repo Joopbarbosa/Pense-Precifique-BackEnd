@@ -19,6 +19,7 @@ import com.penseprecifique.api.domain.entity.Empresa;
 import com.penseprecifique.api.domain.entity.Orcamento;
 import com.penseprecifique.api.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.domain.entity.OrcamentoItemCustomizacao;
+import com.penseprecifique.api.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
@@ -30,6 +31,7 @@ import com.penseprecifique.api.repository.EmpresaRepository;
 import com.penseprecifique.api.repository.OrcamentoItemCustomizacaoRepository;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
+import com.penseprecifique.api.repository.ReciboPagamentoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -57,6 +59,7 @@ public class PdfService {
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
+    private final ReciboPagamentoRepository reciboPagamentoRepository;
 
     public byte[] gerarReciboSinal(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();
@@ -497,6 +500,91 @@ public class PdfService {
             throw e;
         } catch (Exception e) {
             throw new BusinessException("Erro ao gerar recibo de estorno: " + e.getMessage());
+        }
+    }
+
+    public byte[] gerarReciboPagamento(UUID orcamentoId) {
+        Usuario usuario = getUsuarioAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        if (orcamento.getStatus() != StatusOrcamento.PAGO) {
+            throw new BusinessException("Recibo de pagamento só disponível para orçamentos com status PAGO");
+        }
+
+        ReciboPagamento recibo = reciboPagamentoRepository.findByOrcamentoId(orcamentoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Recibo de pagamento não encontrado"));
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdf = new PdfDocument(writer);
+            Document doc = new Document(pdf, PageSize.A4);
+            doc.setMargins(36, 36, 36, 36);
+
+            PdfFont bold = PdfFontFactory.createFont("Helvetica-Bold");
+            PdfFont regular = PdfFontFactory.createFont("Helvetica");
+
+            doc.add(new Paragraph("RECIBO DE PAGAMENTO")
+                    .setFont(bold).setFontSize(16)
+                    .setFontColor(COR_CABECALHO)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
+                    .setFont(regular).setFontSize(12)
+                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("\n").setFontSize(4));
+
+            String metodo = formatarMetodoPagamento(orcamento.getMetodoPagamento());
+            doc.add(new Paragraph("Método de pagamento: " + metodo)
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("Valor total: " + moeda(recibo.getValorTotal()))
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("Sinal pago: " + moeda(recibo.getValorSinalPago()))
+                    .setFont(regular).setFontSize(11));
+            doc.add(new Paragraph("Restante pago: " + moeda(recibo.getValorRestantePago()))
+                    .setFont(regular).setFontSize(11));
+
+            doc.add(new Paragraph("TOTAL QUITADO: " + moeda(recibo.getTotalQuitado()))
+                    .setFont(bold).setFontSize(12)
+                    .setFontColor(COR_CABECALHO));
+            doc.add(new Paragraph("\n").setFontSize(6));
+
+            doc.add(new Paragraph("DATAS").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
+
+            String dataAprovacao = orcamento.getDataAprovacao() != null
+                    ? orcamento.getDataAprovacao().format(FMT_DATA) : "-";
+            doc.add(new Paragraph("Data de aprovação: " + dataAprovacao)
+                    .setFont(regular).setFontSize(10));
+
+            String prazo = orcamento.getPrazoProducaoDias() != null
+                    ? orcamento.getPrazoProducaoDias() + " dias úteis" : "-";
+            doc.add(new Paragraph("Prazo de produção: " + prazo)
+                    .setFont(regular).setFontSize(10));
+
+            String inicio = Boolean.TRUE.equals(orcamento.getInicioAssimQueAprovado())
+                    ? "Assim que aprovado"
+                    : (orcamento.getDataInicioEstimada() != null
+                            ? orcamento.getDataInicioEstimada().format(FMT_DATA)
+                            : "-");
+            doc.add(new Paragraph("Início estimado: " + inicio)
+                    .setFont(regular).setFontSize(10));
+
+            String dataPagamento = recibo.getDataPagamento() != null
+                    ? recibo.getDataPagamento().format(FMT_DATA) : "-";
+            doc.add(new Paragraph("Data de pagamento: " + dataPagamento)
+                    .setFont(regular).setFontSize(10));
+
+            doc.close();
+            return baos.toByteArray();
+        } catch (BusinessException | ResourceNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("Erro ao gerar recibo de pagamento: " + e.getMessage());
         }
     }
 
