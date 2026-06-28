@@ -14,7 +14,9 @@ import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.repository.ReciboPagamentoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +24,11 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
 import java.io.ByteArrayOutputStream;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class PdfService {
@@ -42,22 +44,16 @@ public class PdfService {
     private byte[] renderizarPdf(String template, Context ctx) {
         String html = templateEngine.process("pdf/" + template, ctx);
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            // Usando reflexão para evitar importar classes que podem não existir
-            Class<?> rendererBuilderClass = Class.forName("com.openhtmltopdf.pdfboxbase.PdfRendererBuilder");
-            Object builder = rendererBuilderClass.getConstructor().newInstance();
-
-            Method withHtmlContent = rendererBuilderClass.getMethod("withHtmlContent", String.class, String.class);
-            withHtmlContent.invoke(builder, html, null);
-
-            Method toStream = rendererBuilderClass.getMethod("toStream", ByteArrayOutputStream.class);
-            toStream.invoke(builder, baos);
-
-            Method run = rendererBuilderClass.getMethod("run");
-            run.invoke(builder);
-
+            PdfRendererBuilder builder = new PdfRendererBuilder();
+            builder.withHtmlContent(html, null);
+            builder.toStream(baos);
+            builder.run();
             return baos.toByteArray();
         } catch (Exception e) {
-            throw new BusinessException("Erro ao gerar PDF: " + e.getMessage());
+            log.error("Erro ao renderizar PDF do template '{}': {} - {}",
+                    template, e.getClass().getName(), e.getMessage(), e);
+            throw new BusinessException("Erro ao gerar PDF: "
+                    + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
 
