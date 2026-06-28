@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Recibo de Estorno</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #3A372F; }
+        .page { width: 100%; padding: 36px; }
+        .title { font-size: 18px; font-weight: bold; color: #2A9D8F; margin-bottom: 8px; }
+        .subtitle { font-size: 14px; font-weight: bold; color: #F97316; margin-bottom: 16px; }
+        .section { margin: 12px 0; }
+        .label { font-weight: bold; color: #3A372F; }
+        .value { color: #5C594F; }
+        .highlight { font-size: 13px; font-weight: bold; color: #F97316; margin-top: 8px; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="title">RECIBO DE ESTORNO</div>
+    <div class="subtitle" th:text="'Orçamento Nº ' + ${orc.numero}">Orçamento Nº 001</div>
+
+    <div class="section">
+        <span class="label">Cliente:</span>
+        <span class="value" th:text="${orc.nomeCliente}">Cliente Name</span>
+    </div>
+
+    <div class="highlight" th:text="'Valor estornado: ' + ${@pdfHelper.moeda(orc.valorSinal)}">Valor estornado: R$ 200,00</div>
+
+    <div class="section">
+        <span class="label">Data do estorno:</span>
+        <span class="value" th:text="${orc.dataEstornoSinal != null ? #dates.format(orc.dataEstornoSinal, 'dd/MM/yyyy') : '—'}">01/06/2026</span>
+    </div>
+</div>
+</body>
+</html>

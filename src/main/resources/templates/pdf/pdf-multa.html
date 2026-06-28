@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Notificação de Cancelamento</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #3A372F; }
+        .page { width: 100%; padding: 36px; }
+        .title { font-size: 18px; font-weight: bold; color: #2A9D8F; margin-bottom: 8px; }
+        .subtitle { font-size: 14px; font-weight: bold; color: #F97316; margin-bottom: 16px; }
+        .section { margin: 12px 0; }
+        .label { font-weight: bold; color: #3A372F; }
+        .value { color: #5C594F; }
+        .highlight { font-size: 13px; font-weight: bold; color: #F97316; margin-top: 8px; }
+        .datas-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid #F0EEE9; }
+        .datas-label { font-size: 9px; font-weight: 600; color: #B0ACA4; text-transform: uppercase; }
+        .datas-value { font-size: 10px; color: #3A372F; margin-top: 4px; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="title">NOTIFICAÇÃO DE CANCELAMENTO</div>
+    <div class="subtitle" th:text="'Orçamento Nº ' + ${orc.numero}">Orçamento Nº 001</div>
+
+    <div class="section">
+        <span class="label">Cliente:</span>
+        <span class="value" th:text="${orc.nomeCliente}">Cliente Name</span>
+    </div>
+
+    <div class="section">
+        <span class="label">Data de cancelamento:</span>
+        <span class="value" th:text="${@pdfHelper.hoje()}">01/06/2026</span>
+    </div>
+
+    <div class="section">
+        <div><span class="label">Valor total do orçamento:</span> <span class="value" th:text="${@pdfHelper.moeda(orc.total)}">R$ 1.000,00</span></div>
+        <div><span class="label">Percentual de multa:</span> <span class="value" th:text="${orc.percentualMulta != null ? orc.percentualMulta + '%' : '0%'}">10%</span></div>
+    </div>
+
+    <div class="highlight" th:text="'Valor da multa: ' + ${@pdfHelper.moeda(@pdfHelper.calcularMulta(orc.total, orc.percentualMulta))}">Valor da multa: R$ 100,00</div>
+
+    <div class="datas-section">
+        <div class="datas-label">Data de aprovação</div>
+        <div class="datas-value" th:text="${orc.dataAprovacao != null ? #dates.format(orc.dataAprovacao, 'dd/MM/yyyy') : '—'}">01/01/2026</div>
+
+        <div class="datas-label">Prazo de produção</div>
+        <div class="datas-value" th:text="${orc.prazoProducaoDias != null ? orc.prazoProducaoDias + ' dias úteis' : '—'}">10 dias úteis</div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Recibo de Pagamento</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #3A372F; }
+        .page { width: 100%; padding: 36px; }
+        .title { font-size: 18px; font-weight: bold; color: #2A9D8F; margin-bottom: 8px; }
+        .subtitle { font-size: 14px; font-weight: bold; color: #F97316; margin-bottom: 16px; }
+        .section { margin: 16px 0; }
+        .label { font-weight: bold; color: #3A372F; }
+        .value { color: #5C594F; }
+        .datas-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid #F0EEE9; }
+        .datas-grid { display: table; width: 100%; }
+        .datas-cell { display: table-cell; width: 33%; padding: 8px 0; }
+        .datas-label { font-size: 9px; font-weight: 600; color: #B0ACA4; text-transform: uppercase; }
+        .datas-value { font-size: 10px; color: #3A372F; margin-top: 4px; }
+        .total-highlight { background-color: #FFE5D5; padding: 8px 12px; border-radius: 8px; margin-top: 12px; text-align: center; }
+        .total-label { font-size: 11px; font-weight: 600; color: #3A372F; }
+        .total-value { font-size: 15px; font-weight: bold; color: #F97316; margin-top: 4px; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="title">RECIBO DE PAGAMENTO</div>
+    <div class="subtitle" th:text="'Orçamento Nº ' + ${orc.numero}">Orçamento Nº 001</div>
+
+    <div class="section">
+        <span class="label">Cliente:</span>
+        <span class="value" th:text="${orc.nomeCliente}">Cliente Name</span>
+    </div>
+
+    <div class="section">
+        <span class="label">Método de pagamento:</span>
+        <span class="value" th:text="${orc.metodoPagamento}">Pix</span>
+    </div>
+
+    <div class="section">
+        <div><span class="label">Valor total:</span> <span class="value" th:text="${@pdfHelper.moeda(recibo.valorTotal)}">R$ 1.000,00</span></div>
+        <div><span class="label">Sinal pago:</span> <span class="value" th:text="${@pdfHelper.moeda(recibo.valorSinalPago)}">R$ 200,00</span></div>
+        <div><span class="label">Restante pago:</span> <span class="value" th:text="${@pdfHelper.moeda(recibo.valorRestantePago)}">R$ 800,00</span></div>
+    </div>
+
+    <div class="total-highlight">
+        <div class="total-label">TOTAL QUITADO</div>
+        <div class="total-value" th:text="${@pdfHelper.moeda(recibo.totalQuitado)}">R$ 1.000,00</div>
+    </div>
+
+    <div class="datas-section">
+        <div class="datas-grid">
+            <div class="datas-cell">
+                <div class="datas-label">Data de aprovação</div>
+                <div class="datas-value" th:text="${orc.dataAprovacao != null ? #dates.format(orc.dataAprovacao, 'dd/MM/yyyy') : '—'}">01/01/2026</div>
+            </div>
+            <div class="datas-cell">
+                <div class="datas-label">Prazo (dias úteis)</div>
+                <div class="datas-value" th:text="${orc.prazoProducaoDias} + ' dias'">10 dias</div>
+            </div>
+            <div class="datas-cell">
+                <div class="datas-label">Início estimado</div>
+                <div class="datas-value" th:text="${orc.inicioAssimQueAprovado ? 'Assim que aprovado' : (orc.dataInicioEstimada != null ? #dates.format(orc.dataInicioEstimada, 'dd/MM/yyyy') : '—')}">01/02/2026</div>
+            </div>
+        </div>
+        <div class="datas-grid" style="margin-top: 12px;">
+            <div class="datas-cell">
+                <div class="datas-label">Data de pagamento</div>
+                <div class="datas-value" th:text="${recibo.dataPagamento != null ? #dates.format(recibo.dataPagamento, 'dd/MM/yyyy') : '—'}">01/03/2026</div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
