@@ -21,31 +21,30 @@
 <body>
 <div class="page">
     <div class="title">NOTIFICAÇÃO DE CANCELAMENTO</div>
-    <div class="subtitle" th:text="'Orçamento Nº ' + ${orc.numero}">Orçamento Nº 001</div>
+    <div class="subtitle" th:text="'Orçamento Nº ' + ${dados.numeroFormatado}">Orçamento Nº 0001</div>
 
     <div class="section">
         <span class="label">Cliente:</span>
-        <span class="value" th:text="${orc.nomeCliente}">Cliente Name</span>
+        <span class="value" th:text="${dados.nomeCliente}">Cliente Name</span>
     </div>
 
     <div class="section">
-        <span class="label">Data de cancelamento:</span>
-        <span class="value" th:text="${@pdfHelper.hoje()}">01/06/2026</span>
+        <span class="label">Motivo:</span>
+        <span class="value" th:text="${dados.motivo}">Motivo do cancelamento</span>
     </div>
 
     <div class="section">
-        <div><span class="label">Valor total do orçamento:</span> <span class="value" th:text="${@pdfHelper.moeda(orc.total)}">R$ 1.000,00</span></div>
-        <div><span class="label">Percentual de multa:</span> <span class="value" th:text="${orc.percentualMulta != null ? orc.percentualMulta + '%' : '0%'}">10%</span></div>
+        <div><span class="label">Percentual de multa:</span> <span class="value" th:text="${dados.percentualMulta}">10%</span></div>
     </div>
 
-    <div class="highlight" th:text="'Valor da multa: ' + ${@pdfHelper.moeda(@pdfHelper.calcularMulta(orc.total, orc.percentualMulta))}">Valor da multa: R$ 100,00</div>
+    <div class="highlight" th:text="'Valor da multa: ' + ${dados.valorMulta}">Valor da multa: R$ 100,00</div>
 
     <div class="datas-section">
         <div class="datas-label">Data de aprovação</div>
-        <div class="datas-value" th:text="${orc.dataAprovacao != null ? #dates.format(orc.dataAprovacao, 'dd/MM/yyyy') : '—'}">01/01/2026</div>
+        <div class="datas-value" th:text="${dados.dataAprovacao}">01/01/2026</div>
 
         <div class="datas-label">Prazo de produção</div>
-        <div class="datas-value" th:text="${orc.prazoProducaoDias != null ? orc.prazoProducaoDias + ' dias úteis' : '—'}">10 dias úteis</div>
+        <div class="datas-value" th:text="${dados.prazoProducao}">10 dias úteis</div>
     </div>
 </div>
 </body>

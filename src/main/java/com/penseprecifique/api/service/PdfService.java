@@ -3,7 +3,6 @@ package com.penseprecifique.api.service;
 import com.penseprecifique.api.domain.entity.Empresa;
 import com.penseprecifique.api.domain.entity.Orcamento;
 import com.penseprecifique.api.domain.entity.OrcamentoItem;
-import com.penseprecifique.api.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
@@ -11,7 +10,6 @@ import com.penseprecifique.api.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
 import com.penseprecifique.api.repository.EmpresaRepository;
-import com.penseprecifique.api.repository.OrcamentoItemCustomizacaoRepository;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.repository.ReciboPagamentoRepository;
@@ -36,10 +34,10 @@ public class PdfService {
     private final SpringTemplateEngine templateEngine;
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
-    private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
+    private final PdfMapper pdfMapper;
 
     private byte[] renderizarPdf(String template, Context ctx) {
         String html = templateEngine.process("pdf/" + template, ctx);
@@ -71,12 +69,8 @@ public class PdfService {
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
 
-        // Preparar contexto com dados
         Context ctx = new Context();
-        ctx.setVariable("orc", orcamento);
-        ctx.setVariable("itens", itens);
-        ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
-        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
+        ctx.setVariable("dados", pdfMapper.toOrcamentoPdfData(orcamento, empresa, itens));
 
         return renderizarPdf("orcamento", ctx);
     }
@@ -93,9 +87,7 @@ public class PdfService {
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
 
         Context ctx = new Context();
-        ctx.setVariable("orc", orcamento);
-        ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
-        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
+        ctx.setVariable("dados", pdfMapper.toReciboPdfData(orcamento, empresa));
 
         return renderizarPdf("recibo-sinal", ctx);
     }
@@ -115,10 +107,7 @@ public class PdfService {
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
 
         Context ctx = new Context();
-        ctx.setVariable("orc", orcamento);
-        ctx.setVariable("recibo", recibo);
-        ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
-        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
+        ctx.setVariable("dados", pdfMapper.toReciboPagamentoPdfData(orcamento, recibo, empresa));
 
         return renderizarPdf("recibo-pagamento", ctx);
     }
@@ -135,9 +124,7 @@ public class PdfService {
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
 
         Context ctx = new Context();
-        ctx.setVariable("orc", orcamento);
-        ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
-        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
+        ctx.setVariable("dados", pdfMapper.toReciboPdfDataMulta(orcamento, empresa));
 
         return renderizarPdf("pdf-multa", ctx);
     }
@@ -154,9 +141,7 @@ public class PdfService {
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
 
         Context ctx = new Context();
-        ctx.setVariable("orc", orcamento);
-        ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
-        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
+        ctx.setVariable("dados", pdfMapper.toReciboPdfDataEstorno(orcamento, empresa));
 
         return renderizarPdf("recibo-estorno", ctx);
     }
@@ -165,12 +150,5 @@ public class PdfService {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return usuarioRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
-    }
-
-    private Empresa criarPerfilVazio(Usuario usuario) {
-        Empresa empresa = new Empresa();
-        empresa.setNome("Studio");
-        empresa.setEmail(usuario.getEmail());
-        return empresa;
     }
 }

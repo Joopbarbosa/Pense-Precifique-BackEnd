@@ -25,48 +25,48 @@
 <body>
 <div class="page">
     <div class="title">RECIBO DE PAGAMENTO</div>
-    <div class="subtitle" th:text="'Orçamento Nº ' + ${orc.numero}">Orçamento Nº 001</div>
+    <div class="subtitle" th:text="'Orçamento Nº ' + ${dados.numeroFormatado}">Orçamento Nº 0001</div>
 
     <div class="section">
         <span class="label">Cliente:</span>
-        <span class="value" th:text="${orc.nomeCliente}">Cliente Name</span>
+        <span class="value" th:text="${dados.nomeCliente}">Cliente Name</span>
     </div>
 
     <div class="section">
         <span class="label">Método de pagamento:</span>
-        <span class="value" th:text="${orc.metodoPagamento}">Pix</span>
+        <span class="value" th:text="${dados.metodoPagamento}">Pix</span>
     </div>
 
     <div class="section">
-        <div><span class="label">Valor total:</span> <span class="value" th:text="${@pdfHelper.moeda(recibo.valorTotal)}">R$ 1.000,00</span></div>
-        <div><span class="label">Sinal pago:</span> <span class="value" th:text="${@pdfHelper.moeda(recibo.valorSinalPago)}">R$ 200,00</span></div>
-        <div><span class="label">Restante pago:</span> <span class="value" th:text="${@pdfHelper.moeda(recibo.valorRestantePago)}">R$ 800,00</span></div>
+        <div><span class="label">Valor total:</span> <span class="value" th:text="${dados.valorTotal}">R$ 1.000,00</span></div>
+        <div><span class="label">Sinal pago:</span> <span class="value" th:text="${dados.valorSinalPago}">R$ 200,00</span></div>
+        <div><span class="label">Restante pago:</span> <span class="value" th:text="${dados.valorRestantePago}">R$ 800,00</span></div>
     </div>
 
     <div class="total-highlight">
         <div class="total-label">TOTAL QUITADO</div>
-        <div class="total-value" th:text="${@pdfHelper.moeda(recibo.totalQuitado)}">R$ 1.000,00</div>
+        <div class="total-value" th:text="${dados.totalQuitado}">R$ 1.000,00</div>
     </div>
 
     <div class="datas-section">
         <div class="datas-grid">
             <div class="datas-cell">
                 <div class="datas-label">Data de aprovação</div>
-                <div class="datas-value" th:text="${orc.dataAprovacao != null ? #dates.format(orc.dataAprovacao, 'dd/MM/yyyy') : '—'}">01/01/2026</div>
+                <div class="datas-value" th:text="${dados.dataAprovacao}">01/01/2026</div>
             </div>
             <div class="datas-cell">
                 <div class="datas-label">Prazo (dias úteis)</div>
-                <div class="datas-value" th:text="${orc.prazoProducaoDias} + ' dias'">10 dias</div>
+                <div class="datas-value" th:text="${dados.prazoProducao}">10 dias</div>
             </div>
             <div class="datas-cell">
                 <div class="datas-label">Início estimado</div>
-                <div class="datas-value" th:text="${orc.inicioAssimQueAprovado ? 'Assim que aprovado' : (orc.dataInicioEstimada != null ? #dates.format(orc.dataInicioEstimada, 'dd/MM/yyyy') : '—')}">01/02/2026</div>
+                <div class="datas-value" th:text="${dados.inicioProducao}">01/02/2026</div>
             </div>
         </div>
         <div class="datas-grid" style="margin-top: 12px;">
             <div class="datas-cell">
                 <div class="datas-label">Data de pagamento</div>
-                <div class="datas-value" th:text="${recibo.dataPagamento != null ? #dates.format(recibo.dataPagamento, 'dd/MM/yyyy') : '—'}">01/03/2026</div>
+                <div class="datas-value" th:text="${dados.dataPagamento}">01/03/2026</div>
             </div>
         </div>
     </div>

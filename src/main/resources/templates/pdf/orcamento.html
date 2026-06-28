@@ -90,14 +90,14 @@
         <div class="header-left">
             <div class="header-logo">💡</div>
             <div class="header-info">
-                <h3 th:text="${perfil?.nome}">Studio</h3>
-                <p th:if="${perfil?.email}" th:text="'📧 ' + ${perfil.email}">email@example.com</p>
-                <p th:if="${perfil?.whatsapp}" th:text="'📱 ' + ${perfil.whatsapp}">WhatsApp</p>
+                <h3 th:text="${dados.nomeEmpresa}">Studio</h3>
+                <p th:if="${dados.emailEmpresa}" th:text="'📧 ' + ${dados.emailEmpresa}">email@example.com</p>
+                <p th:if="${dados.telefoneEmpresa}" th:text="'📱 ' + ${dados.telefoneEmpresa}">WhatsApp</p>
             </div>
         </div>
         <div class="header-right">
             <div class="label">Orçamento</div>
-            <div class="numero" th:text="'#' + ${numeroFormatado}">0025</div>
+            <div class="numero" th:text="'#' + ${dados.numeroFormatado}">0025</div>
         </div>
     </div>
 
@@ -106,20 +106,19 @@
         <tr>
             <td class="meta-cell">
                 <div class="meta-label">Datas</div>
-                <div class="meta-value">Emissão: <strong th:text="${#dates.format(orc.createdAt, 'dd/MM/yyyy')}">01/01/2026</strong></div>
-                <div class="meta-value">Validade: <strong th:text="${orc.dataValidade != null ? #dates.format(orc.dataValidade, 'dd/MM/yyyy') : 'Não definida'}">01/02/2026</strong></div>
+                <div class="meta-value">Emissão: <strong th:text="${dados.dataEmissao}">01/01/2026</strong></div>
+                <div class="meta-value">Validade: <strong th:text="${dados.dataValidade}">01/02/2026</strong></div>
             </td>
             <td class="meta-cell">
                 <div class="meta-label">Prazo de produção</div>
-                <div class="meta-highlight" th:text="${orc.prazoProducaoDias} + ' dias úteis'">10 dias úteis</div>
+                <div class="meta-highlight" th:text="${dados.prazoProducao}">10 dias úteis</div>
                 <div class="meta-subvalue">
-                    <span th:if="${orc.inicioAssimQueAprovado}">Início: Assim que aprovado</span>
-                    <span th:unless="${orc.inicioAssimQueAprovado}" th:text="${orc.dataInicioEstimada != null ? 'Início: ' + #dates.format(orc.dataInicioEstimada, 'dd/MM/yyyy') : 'Início: —'}">Início: 01/02/2026</span>
+                    <span th:text="'Início: ' + ${dados.inicioProducao}">Início: 01/02/2026</span>
                 </div>
             </td>
             <td class="meta-cell">
                 <div class="meta-label">Cliente</div>
-                <div class="meta-value" th:text="${orc.nomeCliente}">Cliente Name</div>
+                <div class="meta-value" th:text="${dados.nomeCliente}">Cliente Name</div>
             </td>
         </tr>
     </table>
@@ -127,7 +126,7 @@
     <!-- Método de Pagamento -->
     <div class="metodo-section">
         <div class="metodo-label">Método de pagamento</div>
-        <div class="metodo-value">💳 <span th:text="${orc.metodoPagamento}">Pix</span></div>
+        <div class="metodo-value">💳 <span th:text="${dados.metodoPagamento}">Pix</span></div>
     </div>
 
     <!-- Tabela de Itens -->
@@ -142,29 +141,28 @@
             </tr>
         </thead>
         <tbody>
-            <tr th:each="item : ${itens}">
+            <tr th:each="item : ${dados.itens}">
                 <td class="produto-nome" th:text="${item.nomeProduto}">Produto</td>
-                <td class="customizacoes" th:text="'—'">—</td>
+                <td class="customizacoes" th:text="${item.customizacoes}">—</td>
                 <td class="numeric" th:text="${item.quantidade}">1</td>
-                <td class="numeric" th:text="${@pdfHelper.moeda(item.precoUnitario)}">R$ 100,00</td>
-                <td class="numeric subtotal" th:text="${@pdfHelper.moeda(item.subtotal)}">R$ 100,00</td>
+                <td class="numeric" th:text="${item.precoUnitario}">R$ 100,00</td>
+                <td class="numeric subtotal" th:text="${item.subtotal}">R$ 100,00</td>
             </tr>
         </tbody>
     </table>
 
     <!-- Sinal se ativo -->
-    <div class="sinal-section" th:if="${orc.sinalAtivo}">
+    <div class="sinal-section" th:if="${dados.sinalAtivo}">
         <div class="sinal-title">Entrada solicitada</div>
-        <div class="sinal-desc" th:text="'Para iniciar a produção, solicitamos o pagamento de ' +
-            (${orc.percentualSinal} != null ? ${orc.percentualSinal} + '%' : @pdfHelper.moeda(${orc.valorSinal})) + ' do valor total.'">Descrição</div>
+        <div class="sinal-desc" th:text="'Para iniciar a produção, solicitamos o pagamento de ' + ${dados.valorSinal} + ' do valor total.'">Descrição</div>
         <div class="sinal-values">
             <div class="sinal-value-cell">
                 <div class="sinal-value-label">Valor do sinal</div>
-                <div class="sinal-value-amount" th:text="${@pdfHelper.moeda(orc.valorSinal)}">R$ 100,00</div>
+                <div class="sinal-value-amount" th:text="${dados.valorSinal}">R$ 100,00</div>
             </div>
             <div class="sinal-value-cell">
                 <div class="sinal-value-label">Restante na entrega</div>
-                <div class="sinal-value-amount" th:text="${@pdfHelper.moeda(orc.total - (orc.valorSinal != null ? orc.valorSinal : 0))}">R$ 900,00</div>
+                <div class="sinal-value-amount" th:text="${dados.restanteAposSinal}">R$ 900,00</div>
             </div>
         </div>
     </div>
@@ -175,29 +173,29 @@
         <table class="totais-table">
             <tr class="totais-row">
                 <td class="label">Subtotal</td>
-                <td class="value" th:text="${@pdfHelper.moeda(orc.subtotal)}">R$ 1.000,00</td>
+                <td class="value" th:text="${dados.subtotal}">R$ 1.000,00</td>
             </tr>
-            <tr class="totais-row desconto" th:if="${orc.descontoValor != null and orc.descontoValor > 0}">
-                <td class="label" th:text="${orc.tipoDesconto == 'PERCENTUAL' ? 'Desconto (' + orc.descontoValor + '%)' : 'Desconto'}">Desconto</td>
-                <td class="value" th:text="'− ' + ${@pdfHelper.moeda(orc.subtotal - orc.total)}">− R$ 100,00</td>
+            <tr class="totais-row desconto" th:if="${dados.desconto != null}">
+                <td class="label">Desconto</td>
+                <td class="value" th:text="'− ' + ${dados.desconto}">− R$ 100,00</td>
             </tr>
             <tr class="totais-row total">
                 <td class="label">Total</td>
-                <td class="value" th:text="${@pdfHelper.moeda(orc.total)}">R$ 900,00</td>
+                <td class="value" th:text="${dados.total}">R$ 900,00</td>
             </tr>
         </table>
     </div>
 
     <!-- Observações -->
-    <div class="obs-section" th:if="${orc.observacoes != null and orc.observacoes != ''}">
+    <div class="obs-section" th:if="${dados.observacoes != null and dados.observacoes != ''}">
         <div class="obs-label">Observações</div>
-        <div class="obs-content" th:text="${orc.observacoes}">Observações do orçamento</div>
+        <div class="obs-content" th:text="${dados.observacoes}">Observações do orçamento</div>
     </div>
 
     <!-- Rodapé -->
     <div class="footer">
         <div class="footer-item">
-            <span>📄 Este orçamento é válido até <strong th:text="${orc.dataValidade != null ? #dates.format(orc.dataValidade, 'dd/MM/yyyy') : 'Não definida'}">01/02/2026</strong>.</span>
+            <span>📄 Este orçamento é válido até <strong th:text="${dados.dataValidade}">01/02/2026</strong>.</span>
             <span style="margin-left: auto;">Gerado por <strong>Pense &amp; Precifique</strong></span>
         </div>
         <p class="footer-small">Em caso de cancelamento após aprovação, poderá ser cobrado uma taxa referente aos materiais e tempo já investidos na produção.</p>

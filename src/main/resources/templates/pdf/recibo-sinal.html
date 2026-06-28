@@ -21,29 +21,29 @@
 <body>
 <div class="page">
     <div class="title">RECIBO DE SINAL</div>
-    <div class="subtitle" th:text="'Orçamento Nº ' + ${orc.numero}">Orçamento Nº 001</div>
+    <div class="subtitle" th:text="'Orçamento Nº ' + ${dados.numeroFormatado}">Orçamento Nº 0001</div>
 
     <div class="section">
         <span class="label">Cliente:</span>
-        <span class="value" th:text="${orc.nomeCliente}">Cliente Name</span>
+        <span class="value" th:text="${dados.nomeCliente}">Cliente Name</span>
     </div>
 
     <div class="section">
         <span class="label">Método recebido:</span>
-        <span class="value" th:text="${orc.metodoSinalRecebido != null ? orc.metodoSinalRecebido : '—'}">Pix</span>
+        <span class="value" th:text="${dados.metodoRecebido}">Pix</span>
     </div>
 
-    <div class="highlight" th:text="'Valor do sinal recebido: ' + ${@pdfHelper.moeda(orc.valorSinal)}">Valor do sinal recebido: R$ 200,00</div>
+    <div class="highlight" th:text="'Valor do sinal recebido: ' + ${dados.valorRecebido}">Valor do sinal recebido: R$ 200,00</div>
 
     <div class="datas-section">
         <div class="datas-label">Data de aprovação</div>
-        <div class="datas-value" th:text="${orc.dataAprovacao != null ? #dates.format(orc.dataAprovacao, 'dd/MM/yyyy') : '—'}">01/01/2026</div>
+        <div class="datas-value" th:text="${dados.dataAprovacao}">01/01/2026</div>
 
         <div class="datas-label">Prazo de produção</div>
-        <div class="datas-value" th:text="${orc.prazoProducaoDias != null ? orc.prazoProducaoDias + ' dias úteis' : '—'}">10 dias úteis</div>
+        <div class="datas-value" th:text="${dados.prazoProducao}">10 dias úteis</div>
 
         <div class="datas-label">Início estimado</div>
-        <div class="datas-value" th:text="${orc.inicioAssimQueAprovado ? 'Assim que aprovado' : (orc.dataInicioEstimada != null ? #dates.format(orc.dataInicioEstimada, 'dd/MM/yyyy') : '—')}">01/02/2026</div>
+        <div class="datas-value" th:text="${dados.inicioProducao}">01/02/2026</div>
     </div>
 </div>
 </body>

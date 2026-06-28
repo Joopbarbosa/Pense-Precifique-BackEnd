@@ -18,18 +18,18 @@
 <body>
 <div class="page">
     <div class="title">RECIBO DE ESTORNO</div>
-    <div class="subtitle" th:text="'Orçamento Nº ' + ${orc.numero}">Orçamento Nº 001</div>
+    <div class="subtitle" th:text="'Orçamento Nº ' + ${dados.numeroFormatado}">Orçamento Nº 0001</div>
 
     <div class="section">
         <span class="label">Cliente:</span>
-        <span class="value" th:text="${orc.nomeCliente}">Cliente Name</span>
+        <span class="value" th:text="${dados.nomeCliente}">Cliente Name</span>
     </div>
 
-    <div class="highlight" th:text="'Valor estornado: ' + ${@pdfHelper.moeda(orc.valorSinal)}">Valor estornado: R$ 200,00</div>
+    <div class="highlight" th:text="'Valor estornado: ' + ${dados.valorRecebido}">Valor estornado: R$ 200,00</div>
 
     <div class="section">
         <span class="label">Data do estorno:</span>
-        <span class="value" th:text="${orc.dataEstornoSinal != null ? #dates.format(orc.dataEstornoSinal, 'dd/MM/yyyy') : '—'}">01/06/2026</span>
+        <span class="value" th:text="${dados.dataEstorno}">01/06/2026</span>
     </div>
 </div>
 </body>
