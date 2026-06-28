@@ -51,8 +51,10 @@ import java.util.UUID;
 public class PdfService {
 
     private static final DateTimeFormatter FMT_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    private static final DeviceRgb COR_CABECALHO = new DeviceRgb(52, 73, 94);
-    private static final DeviceRgb COR_LINHA_ALT = new DeviceRgb(240, 240, 240);
+    private static final DeviceRgb COR_TEAL = new DeviceRgb(13, 148, 136);
+    private static final DeviceRgb COR_LARANJA = new DeviceRgb(249, 115, 22);
+    private static final DeviceRgb COR_CINZA_CLARO = new DeviceRgb(240, 240, 240);
+    private static final DeviceRgb COR_CINZA_BORDA = new DeviceRgb(229, 231, 235);
 
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
@@ -80,12 +82,11 @@ public class PdfService {
             PdfFont regular = PdfFontFactory.createFont("Helvetica");
 
             doc.add(new Paragraph("RECIBO DE SINAL")
-                    .setFont(bold).setFontSize(16)
-                    .setFontColor(COR_CABECALHO)
-                    .setTextAlignment(TextAlignment.CENTER));
+                    .setFont(bold).setFontSize(18)
+                    .setFontColor(COR_TEAL));
             doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
-                    .setFont(regular).setFontSize(12)
-                    .setTextAlignment(TextAlignment.CENTER));
+                    .setFont(bold).setFontSize(14)
+                    .setFontColor(COR_LARANJA));
             doc.add(new Paragraph("\n").setFontSize(6));
 
             doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
@@ -98,28 +99,11 @@ public class PdfService {
             doc.add(new Paragraph("\n").setFontSize(4));
 
             doc.add(new Paragraph("Valor do sinal recebido: " + moeda(orcamento.getValorSinal()))
-                    .setFont(bold).setFontSize(12));
+                    .setFont(bold).setFontSize(13)
+                    .setFontColor(COR_LARANJA));
             doc.add(new Paragraph("\n").setFontSize(6));
 
-            doc.add(new Paragraph("DATAS").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
-
-            String dataAprovacao = orcamento.getDataAprovacao() != null
-                    ? orcamento.getDataAprovacao().format(FMT_DATA) : "-";
-            doc.add(new Paragraph("Data de aprovação: " + dataAprovacao)
-                    .setFont(regular).setFontSize(10));
-
-            String prazo = orcamento.getPrazoProducaoDias() != null
-                    ? orcamento.getPrazoProducaoDias() + " dias úteis" : "-";
-            doc.add(new Paragraph("Prazo de produção: " + prazo)
-                    .setFont(regular).setFontSize(10));
-
-            String inicio = Boolean.TRUE.equals(orcamento.getInicioAssimQueAprovado())
-                    ? "Assim que aprovado"
-                    : (orcamento.getDataInicioEstimada() != null
-                            ? orcamento.getDataInicioEstimada().format(FMT_DATA)
-                            : "-");
-            doc.add(new Paragraph("Início estimado: " + inicio)
-                    .setFont(regular).setFontSize(10));
+            adicionarSecaoDatas(doc, orcamento, bold, regular);
 
             doc.close();
             return baos.toByteArray();
@@ -203,31 +187,41 @@ public class PdfService {
     }
 
     private void adicionarTituloOrcamento(Document doc, Orcamento orcamento, PdfFont bold, PdfFont regular) {
-        doc.add(new Paragraph("ORÇAMENTO Nº " + orcamento.getNumero())
-                .setFont(bold).setFontSize(14)
-                .setFontColor(COR_CABECALHO)
-                .setTextAlignment(TextAlignment.CENTER));
+        Table header = new Table(UnitValue.createPercentArray(new float[]{70, 30}))
+                .setWidth(UnitValue.createPercentValue(100)).setBorder(null);
 
-        Table info = new Table(UnitValue.createPercentArray(new float[]{50, 50}))
+        Cell titleCell = new Cell().setBorder(null);
+        titleCell.add(new Paragraph("ORÇAMENTO").setFont(bold).setFontSize(18).setFontColor(COR_TEAL));
+        header.addCell(titleCell);
+
+        Cell numCell = new Cell().setBorder(null).setTextAlignment(TextAlignment.RIGHT);
+        numCell.add(new Paragraph("#" + orcamento.getNumero())
+                .setFont(bold).setFontSize(20).setFontColor(COR_LARANJA));
+        header.addCell(numCell);
+
+        doc.add(header);
+        doc.add(new Paragraph("\n").setFontSize(4));
+
+        Table info = new Table(UnitValue.createPercentArray(new float[]{33, 33, 34}))
                 .setWidth(UnitValue.createPercentValue(100));
 
-        info.addCell(celulaInfo("Cliente:", orcamento.getCliente().getNome(), bold, regular));
         String emissao = orcamento.getCreatedAt() != null
                 ? orcamento.getCreatedAt().format(FMT_DATA) : "-";
-        info.addCell(celulaInfo("Data de emissão:", emissao, bold, regular));
+        info.addCell(celulaInfoCompacta("Emissão", emissao, bold, regular));
 
         String validade = orcamento.getDataValidade() != null
                 ? orcamento.getDataValidade().format(FMT_DATA) : "Não informada";
-        info.addCell(celulaInfo("Validade:", validade, bold, regular));
-        info.addCell(new Cell().setBorder(null));
+        info.addCell(celulaInfoCompacta("Validade", validade, bold, regular));
+
+        info.addCell(celulaInfoCompacta("Cliente", orcamento.getCliente().getNome(), bold, regular));
 
         doc.add(info);
-        doc.add(new Paragraph("\n").setFontSize(4));
+        doc.add(new Paragraph("\n").setFontSize(6));
     }
 
     private void adicionarItens(Document doc, List<OrcamentoItem> itens, PdfFont bold, PdfFont regular) {
         doc.add(new Paragraph("ITENS DO ORÇAMENTO").setFont(bold).setFontSize(11)
-                .setFontColor(COR_CABECALHO));
+                .setFontColor(COR_TEAL));
 
         Table tabela = new Table(UnitValue.createPercentArray(new float[]{50, 10, 20, 20}))
                 .setWidth(UnitValue.createPercentValue(100));
@@ -236,13 +230,13 @@ public class PdfService {
         for (String col : new String[]{"Produto", "Qtd", "Preço Unit.", "Subtotal"}) {
             tabela.addHeaderCell(new Cell()
                     .add(new Paragraph(col).setFont(bold).setFontSize(9).setFontColor(ColorConstants.WHITE))
-                    .setBackgroundColor(COR_CABECALHO)
+                    .setBackgroundColor(COR_TEAL)
                     .setTextAlignment(TextAlignment.CENTER));
         }
 
         boolean alternar = false;
         for (OrcamentoItem item : itens) {
-            DeviceRgb fundo = alternar ? COR_LINHA_ALT : null;
+            DeviceRgb fundo = alternar ? COR_CINZA_CLARO : null;
             alternar = !alternar;
 
             tabela.addCell(celulaTabela(item.getProduto().getNome(), regular, fundo, TextAlignment.LEFT));
@@ -282,12 +276,17 @@ public class PdfService {
         totais.addCell(celulaTotal(descLabel, TextAlignment.RIGHT, regular));
         totais.addCell(celulaTotal("- " + moeda(desconto.max(BigDecimal.ZERO)), TextAlignment.RIGHT, regular));
 
-        totais.addCell(new Cell()
-                .add(new Paragraph("TOTAL:").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO))
-                .setTextAlignment(TextAlignment.RIGHT).setBorder(null));
-        totais.addCell(new Cell()
-                .add(new Paragraph(moeda(orcamento.getTotal())).setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO))
-                .setTextAlignment(TextAlignment.RIGHT).setBorder(null));
+        Cell totalLabelCell = new Cell()
+                .add(new Paragraph("TOTAL:").setFont(bold).setFontSize(12).setFontColor(ColorConstants.WHITE))
+                .setTextAlignment(TextAlignment.RIGHT).setBorder(null).setBackgroundColor(COR_LARANJA)
+                .setPadding(8);
+        totais.addCell(totalLabelCell);
+
+        Cell totalValueCell = new Cell()
+                .add(new Paragraph(moeda(orcamento.getTotal())).setFont(bold).setFontSize(14).setFontColor(ColorConstants.WHITE))
+                .setTextAlignment(TextAlignment.RIGHT).setBorder(null).setBackgroundColor(COR_LARANJA)
+                .setPadding(8);
+        totais.addCell(totalValueCell);
 
         doc.add(totais);
         doc.add(new Paragraph("\n").setFontSize(4));
@@ -295,7 +294,7 @@ public class PdfService {
 
     private void adicionarCondicoesPagamento(Document doc, Orcamento orcamento, PdfFont bold, PdfFont regular) {
         doc.add(new Paragraph("CONDIÇÕES DE PAGAMENTO").setFont(bold).setFontSize(11)
-                .setFontColor(COR_CABECALHO));
+                .setFontColor(COR_TEAL));
         String metodo = formatarMetodoPagamento(orcamento.getMetodoPagamento());
         doc.add(new Paragraph("Método: " + metodo).setFont(regular).setFontSize(10));
         if (orcamento.getMetodoPagamento() == MetodoPagamento.OUTRO
@@ -306,7 +305,7 @@ public class PdfService {
     }
 
     private void adicionarSinal(Document doc, Orcamento orcamento, PdfFont bold, PdfFont regular) {
-        doc.add(new Paragraph("SINAL").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
+        doc.add(new Paragraph("SINAL").setFont(bold).setFontSize(11).setFontColor(COR_TEAL));
         String pct = orcamento.getPercentualSinal() != null
                 ? " (" + orcamento.getPercentualSinal().stripTrailingZeros().toPlainString() + "%)" : "";
         doc.add(new Paragraph("Valor do sinal: " + moeda(orcamento.getValorSinal()) + pct)
@@ -319,7 +318,7 @@ public class PdfService {
     }
 
     private void adicionarPrazos(Document doc, Orcamento orcamento, PdfFont bold, PdfFont regular) {
-        doc.add(new Paragraph("PRAZO DE PRODUÇÃO").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
+        doc.add(new Paragraph("PRAZO DE PRODUÇÃO").setFont(bold).setFontSize(11).setFontColor(COR_TEAL));
         doc.add(new Paragraph("Prazo: " + orcamento.getPrazoProducaoDias() + " dias úteis")
                 .setFont(regular).setFontSize(10));
         String inicio = Boolean.TRUE.equals(orcamento.getInicioAssimQueAprovado())
@@ -335,8 +334,32 @@ public class PdfService {
         doc.add(new Paragraph("\n").setFontSize(4));
     }
 
+    private void adicionarSecaoDatas(Document doc, Orcamento orcamento, PdfFont bold, PdfFont regular) {
+        doc.add(new Paragraph("DATAS").setFont(bold).setFontSize(11).setFontColor(COR_TEAL));
+
+        String dataAprovacao = orcamento.getDataAprovacao() != null
+                ? orcamento.getDataAprovacao().format(FMT_DATA) : "-";
+        String prazo = orcamento.getPrazoProducaoDias() != null
+                ? orcamento.getPrazoProducaoDias() + " dias úteis" : "-";
+        String inicio = Boolean.TRUE.equals(orcamento.getInicioAssimQueAprovado())
+                ? "Assim que aprovado"
+                : (orcamento.getDataInicioEstimada() != null
+                        ? orcamento.getDataInicioEstimada().format(FMT_DATA)
+                        : "-");
+
+        Table datas = new Table(UnitValue.createPercentArray(new float[]{33, 33, 34}))
+                .setWidth(UnitValue.createPercentValue(100));
+
+        datas.addCell(celulaInfoCompacta("Aprovação", dataAprovacao, bold, regular));
+        datas.addCell(celulaInfoCompacta("Prazo (dias úteis)", prazo, bold, regular));
+        datas.addCell(celulaInfoCompacta("Início estimado", inicio, bold, regular));
+
+        doc.add(datas);
+        doc.add(new Paragraph("\n").setFontSize(6));
+    }
+
     private void adicionarObservacoes(Document doc, Orcamento orcamento, PdfFont bold, PdfFont regular) {
-        doc.add(new Paragraph("OBSERVAÇÕES").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
+        doc.add(new Paragraph("OBSERVAÇÕES").setFont(bold).setFontSize(11).setFontColor(COR_TEAL));
         doc.add(new Paragraph(orcamento.getObservacoes()).setFont(regular).setFontSize(10));
     }
 
@@ -348,6 +371,14 @@ public class PdfService {
                 .add(new com.itextpdf.layout.element.Text(" " + valor).setFont(regular))
                 .setFontSize(10);
         return new Cell().setBorder(null).add(p);
+    }
+
+    private Cell celulaInfoCompacta(String label, String valor, PdfFont bold, PdfFont regular) {
+        Cell c = new Cell().setBorder(null).setPadding(4);
+        c.add(new Paragraph(label).setFont(bold).setFontSize(8).setFontColor(COR_TEAL));
+        c.add(new Paragraph(valor).setFont(regular).setFontSize(9));
+        c.setBackgroundColor(COR_CINZA_CLARO);
+        return c;
     }
 
     private Cell celulaTabela(String texto, PdfFont font, DeviceRgb fundo, TextAlignment align) {
@@ -401,13 +432,12 @@ public class PdfService {
             PdfFont bold = PdfFontFactory.createFont("Helvetica-Bold");
             PdfFont regular = PdfFontFactory.createFont("Helvetica");
 
-            doc.add(new Paragraph("NOTIFICAÇÃO DE CANCELAMENTO COM MULTA")
-                    .setFont(bold).setFontSize(14)
-                    .setFontColor(COR_CABECALHO)
-                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("NOTIFICAÇÃO DE CANCELAMENTO")
+                    .setFont(bold).setFontSize(18)
+                    .setFontColor(COR_TEAL));
             doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
-                    .setFont(regular).setFontSize(12)
-                    .setTextAlignment(TextAlignment.CENTER));
+                    .setFont(bold).setFontSize(14)
+                    .setFontColor(COR_LARANJA));
             doc.add(new Paragraph("\n").setFontSize(6));
 
             doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
@@ -431,20 +461,11 @@ public class PdfService {
                     .multiply(orcamento.getPercentualMulta() != null ? orcamento.getPercentualMulta() : BigDecimal.ZERO)
                     .divide(new BigDecimal(100), 2, java.math.RoundingMode.HALF_UP);
             doc.add(new Paragraph("Valor da multa: " + moeda(valorMulta))
-                    .setFont(bold).setFontSize(12));
+                    .setFont(bold).setFontSize(13)
+                    .setFontColor(COR_LARANJA));
             doc.add(new Paragraph("\n").setFontSize(6));
 
-            doc.add(new Paragraph("DATAS").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
-
-            String dataAprovacao = orcamento.getDataAprovacao() != null
-                    ? orcamento.getDataAprovacao().format(FMT_DATA) : "-";
-            doc.add(new Paragraph("Data de aprovação: " + dataAprovacao)
-                    .setFont(regular).setFontSize(10));
-
-            String prazo = orcamento.getPrazoProducaoDias() != null
-                    ? orcamento.getPrazoProducaoDias() + " dias úteis" : "-";
-            doc.add(new Paragraph("Prazo de produção: " + prazo)
-                    .setFont(regular).setFontSize(10));
+            adicionarSecaoDatas(doc, orcamento, bold, regular);
 
             doc.close();
             return baos.toByteArray();
@@ -473,13 +494,12 @@ public class PdfService {
             PdfFont bold = PdfFontFactory.createFont("Helvetica-Bold");
             PdfFont regular = PdfFontFactory.createFont("Helvetica");
 
-            doc.add(new Paragraph("RECIBO DE ESTORNO DO SINAL")
-                    .setFont(bold).setFontSize(16)
-                    .setFontColor(COR_CABECALHO)
-                    .setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph("RECIBO DE ESTORNO")
+                    .setFont(bold).setFontSize(18)
+                    .setFontColor(COR_TEAL));
             doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
-                    .setFont(regular).setFontSize(12)
-                    .setTextAlignment(TextAlignment.CENTER));
+                    .setFont(bold).setFontSize(14)
+                    .setFontColor(COR_LARANJA));
             doc.add(new Paragraph("\n").setFontSize(6));
 
             doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
@@ -487,7 +507,8 @@ public class PdfService {
             doc.add(new Paragraph("\n").setFontSize(4));
 
             doc.add(new Paragraph("Valor estornado: " + moeda(orcamento.getValorSinal()))
-                    .setFont(bold).setFontSize(12));
+                    .setFont(bold).setFontSize(13)
+                    .setFontColor(COR_LARANJA));
 
             String dataEstorno = orcamento.getDataEstornoSinal() != null
                     ? orcamento.getDataEstornoSinal().format(FMT_DATA) : "-";
@@ -525,12 +546,11 @@ public class PdfService {
             PdfFont regular = PdfFontFactory.createFont("Helvetica");
 
             doc.add(new Paragraph("RECIBO DE PAGAMENTO")
-                    .setFont(bold).setFontSize(16)
-                    .setFontColor(COR_CABECALHO)
-                    .setTextAlignment(TextAlignment.CENTER));
+                    .setFont(bold).setFontSize(18)
+                    .setFontColor(COR_TEAL));
             doc.add(new Paragraph("Orçamento Nº " + orcamento.getNumero())
-                    .setFont(regular).setFontSize(12)
-                    .setTextAlignment(TextAlignment.CENTER));
+                    .setFont(bold).setFontSize(14)
+                    .setFontColor(COR_LARANJA));
             doc.add(new Paragraph("\n").setFontSize(6));
 
             doc.add(new Paragraph("Cliente: " + orcamento.getCliente().getNome())
@@ -549,30 +569,18 @@ public class PdfService {
             doc.add(new Paragraph("Restante pago: " + moeda(recibo.getValorRestantePago()))
                     .setFont(regular).setFontSize(11));
 
-            doc.add(new Paragraph("TOTAL QUITADO: " + moeda(recibo.getTotalQuitado()))
-                    .setFont(bold).setFontSize(12)
-                    .setFontColor(COR_CABECALHO));
+            Table totalTable = new Table(UnitValue.createPercentArray(new float[]{100}))
+                    .setWidth(UnitValue.createPercentValue(100));
+            Cell totalCell = new Cell()
+                    .add(new Paragraph("TOTAL QUITADO: " + moeda(recibo.getTotalQuitado()))
+                            .setFont(bold).setFontSize(14).setFontColor(ColorConstants.WHITE))
+                    .setBackgroundColor(COR_LARANJA).setTextAlignment(TextAlignment.CENTER)
+                    .setPadding(8);
+            totalTable.addCell(totalCell);
+            doc.add(totalTable);
             doc.add(new Paragraph("\n").setFontSize(6));
 
-            doc.add(new Paragraph("DATAS").setFont(bold).setFontSize(11).setFontColor(COR_CABECALHO));
-
-            String dataAprovacao = orcamento.getDataAprovacao() != null
-                    ? orcamento.getDataAprovacao().format(FMT_DATA) : "-";
-            doc.add(new Paragraph("Data de aprovação: " + dataAprovacao)
-                    .setFont(regular).setFontSize(10));
-
-            String prazo = orcamento.getPrazoProducaoDias() != null
-                    ? orcamento.getPrazoProducaoDias() + " dias úteis" : "-";
-            doc.add(new Paragraph("Prazo de produção: " + prazo)
-                    .setFont(regular).setFontSize(10));
-
-            String inicio = Boolean.TRUE.equals(orcamento.getInicioAssimQueAprovado())
-                    ? "Assim que aprovado"
-                    : (orcamento.getDataInicioEstimada() != null
-                            ? orcamento.getDataInicioEstimada().format(FMT_DATA)
-                            : "-");
-            doc.add(new Paragraph("Início estimado: " + inicio)
-                    .setFont(regular).setFontSize(10));
+            adicionarSecaoDatas(doc, orcamento, bold, regular);
 
             String dataPagamento = recibo.getDataPagamento() != null
                     ? recibo.getDataPagamento().format(FMT_DATA) : "-";
