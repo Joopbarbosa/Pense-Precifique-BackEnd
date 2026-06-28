@@ -76,6 +76,7 @@ public class PdfService {
         ctx.setVariable("orc", orcamento);
         ctx.setVariable("itens", itens);
         ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
+        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
 
         return renderizarPdf("orcamento", ctx);
     }
@@ -94,6 +95,7 @@ public class PdfService {
         Context ctx = new Context();
         ctx.setVariable("orc", orcamento);
         ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
+        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
 
         return renderizarPdf("recibo-sinal", ctx);
     }
@@ -116,6 +118,7 @@ public class PdfService {
         ctx.setVariable("orc", orcamento);
         ctx.setVariable("recibo", recibo);
         ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
+        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
 
         return renderizarPdf("recibo-pagamento", ctx);
     }
@@ -134,6 +137,7 @@ public class PdfService {
         Context ctx = new Context();
         ctx.setVariable("orc", orcamento);
         ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
+        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
 
         return renderizarPdf("pdf-multa", ctx);
     }
@@ -152,6 +156,7 @@ public class PdfService {
         Context ctx = new Context();
         ctx.setVariable("orc", orcamento);
         ctx.setVariable("perfil", empresa != null ? empresa : criarPerfilVazio(usuario));
+        ctx.setVariable("numeroFormatado", String.format("%04d", orcamento.getNumero()));
 
         return renderizarPdf("recibo-estorno", ctx);
     }
