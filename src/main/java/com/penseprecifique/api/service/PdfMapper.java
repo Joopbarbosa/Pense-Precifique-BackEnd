@@ -6,15 +6,20 @@ import com.penseprecifique.api.dto.pdf.*;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Component
 public class PdfMapper {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DecimalFormat MOEDA_FORMATTER =
+        new DecimalFormat("#,##0.00", new DecimalFormatSymbols(Locale.of("pt", "BR")));
 
     public OrcamentoPdfData toOrcamentoPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens) {
         return OrcamentoPdfData.builder()
@@ -123,7 +128,7 @@ public class PdfMapper {
         if (valor == null) {
             return "—";
         }
-        return String.format("R$ %.2f", valor).replace(".", ",").replace(",", ".");
+        return "R$ " + MOEDA_FORMATTER.format(valor);
     }
 
     private String formatarMetodoPagamento(MetodoPagamento metodo) {
