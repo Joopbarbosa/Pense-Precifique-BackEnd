@@ -15,6 +15,7 @@ public class FichaTecnicaItemResponse {
     private String nomeInsumo;
     private String marcaInsumo;
     private String unidadeMedida;
+    private Boolean fracionavelInsumo;
     private UUID produtoBaseId;
     private String nomeProdutoBase;
     private BigDecimal quantidade;

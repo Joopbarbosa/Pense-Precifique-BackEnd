@@ -46,6 +46,7 @@ public class FichaTecnicaService {
             if (temInsumo) {
                 Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getInsumoId(), usuarioId)
                         .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + req.getInsumoId()));
+                validarQuantidadeInsumo(insumo, req.getQuantidade());
                 builder.insumo(insumo).produtoBase(null);
             } else {
                 Produto produtoBase = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getProdutoBaseId(), usuarioId)
@@ -66,6 +67,19 @@ public class FichaTecnicaService {
     public BigDecimal recalcularPrecoCusto(UUID produtoId) {
         List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produtoId);
         return calcularPrecoCusto(itens);
+    }
+
+    private void validarQuantidadeInsumo(Insumo insumo, BigDecimal quantidade) {
+        if (!insumo.getFracionavel()) {
+            if (quantidade.remainder(BigDecimal.ONE).compareTo(BigDecimal.ZERO) != 0) {
+                throw new BusinessException(
+                        "O insumo '" + insumo.getNome() + "' não pode ser usado em fração — informe uma quantidade inteira.");
+            }
+        } else {
+            if (quantidade.stripTrailingZeros().scale() > 2) {
+                throw new BusinessException("Quantidade aceita no máximo 2 casas decimais.");
+            }
+        }
     }
 
     private BigDecimal calcularPrecoCusto(List<FichaTecnicaItem> itens) {

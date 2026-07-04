@@ -15,6 +15,8 @@ public record InsumoRequestDTO(
         @NotBlank(message = "A unidade de medida é obrigatória")
         String unidadeMedida,
 
+        Boolean fracionavel,
+
         @DecimalMin(value = "0", message = "O estoque atual não pode ser negativo")
         BigDecimal estoqueAtual,
 

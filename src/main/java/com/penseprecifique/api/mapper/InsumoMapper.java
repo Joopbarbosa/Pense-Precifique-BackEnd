@@ -22,6 +22,7 @@ public class InsumoMapper {
                 insumo.getNome(),
                 insumo.getMarca(),
                 insumo.getUnidadeMedida(),
+                insumo.getFracionavel(),
                 insumo.getCustoUnitario(),
                 insumo.getEstoqueAtual(),
                 insumo.getEstoqueMinimo(),
@@ -37,6 +38,7 @@ public class InsumoMapper {
                 .nome(request.nome())
                 .marca(request.marca())
                 .unidadeMedida(request.unidadeMedida())
+                .fracionavel(request.fracionavel() != null ? request.fracionavel() : true)
                 .custoUnitario(BigDecimal.ZERO)
                 .estoqueAtual(request.estoqueAtual() != null ? request.estoqueAtual() : BigDecimal.ZERO)
                 .estoqueMinimo(request.estoqueMinimo())
@@ -48,6 +50,9 @@ public class InsumoMapper {
         insumo.setNome(request.nome());
         insumo.setMarca(request.marca());
         insumo.setUnidadeMedida(request.unidadeMedida());
+        if (request.fracionavel() != null) {
+            insumo.setFracionavel(request.fracionavel());
+        }
         insumo.setEstoqueMinimo(request.estoqueMinimo());
         // custoUnitario e estoqueAtual só mudam via movimentação
     }

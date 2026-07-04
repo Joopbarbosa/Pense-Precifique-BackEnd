@@ -49,6 +49,10 @@ public class Insumo {
 
     @Column(nullable = false)
     @Builder.Default
+    private Boolean fracionavel = true;
+
+    @Column(nullable = false)
+    @Builder.Default
     private Boolean ativo = true;
 
     @Column(name = "deleted_at")
