@@ -4,6 +4,7 @@ import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
+import com.penseprecifique.api.dto.response.ProdutoRelacionadoResponse;
 import com.penseprecifique.api.service.InsumoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -63,5 +65,10 @@ public class InsumoController {
             @PathVariable UUID id,
             @Valid @RequestBody BaixaManualInsumoRequestDTO request) {
         return ResponseEntity.status(201).body(insumoService.baixaManual(id, request));
+    }
+
+    @GetMapping("/{id}/produtos-relacionados")
+    public ResponseEntity<List<ProdutoRelacionadoResponse>> listarProdutosRelacionados(@PathVariable UUID id) {
+        return ResponseEntity.ok(insumoService.listarProdutosRelacionados(id));
     }
 }

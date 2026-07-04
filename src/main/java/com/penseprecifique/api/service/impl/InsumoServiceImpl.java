@@ -9,9 +9,11 @@ import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
+import com.penseprecifique.api.dto.response.ProdutoRelacionadoResponse;
 import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
 import com.penseprecifique.api.mapper.InsumoMapper;
+import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
@@ -24,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -35,6 +38,7 @@ public class InsumoServiceImpl implements InsumoService {
     private final MovimentacaoInsumoRepository movimentacaoInsumoRepository;
     private final UsuarioRepository usuarioRepository;
     private final InsumoMapper insumoMapper;
+    private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -126,6 +130,18 @@ public class InsumoServiceImpl implements InsumoService {
                 .build();
 
         return insumoMapper.toMovimentacaoResponse(movimentacaoInsumoRepository.save(movimentacao));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProdutoRelacionadoResponse> listarProdutosRelacionados(UUID insumoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
+        return fichaTecnicaItemRepository.findProdutosByInsumoId(insumoId)
+                .stream()
+                .map(insumoMapper::toProdutoRelacionadoResponse)
+                .toList();
     }
 
     private UUID getUsuarioIdAutenticado() {
