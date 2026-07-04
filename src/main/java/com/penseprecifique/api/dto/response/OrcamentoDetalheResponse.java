@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import com.penseprecifique.api.domain.enums.TipoCancelamento;
 
 @Getter
 @Setter
@@ -38,6 +39,10 @@ public class OrcamentoDetalheResponse {
     private BigDecimal total;
     private String observacoes;
     private LocalDateTime dataValidade;
+    private TipoCancelamento cancelamentoTipo;
+    private BigDecimal percentualMulta;
+    private Boolean estornoSinal;
+    private LocalDateTime dataEstornoSinal;
     private List<OrcamentoItemResponse> itens;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

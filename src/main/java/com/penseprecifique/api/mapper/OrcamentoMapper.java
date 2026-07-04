@@ -54,6 +54,10 @@ public class OrcamentoMapper {
         response.setTotal(orcamento.getTotal());
         response.setObservacoes(orcamento.getObservacoes());
         response.setDataValidade(orcamento.getDataValidade());
+        response.setCancelamentoTipo(orcamento.getCancelamentoTipo());
+        response.setPercentualMulta(orcamento.getPercentualMulta());
+        response.setEstornoSinal(orcamento.getEstornoSinal());
+        response.setDataEstornoSinal(orcamento.getDataEstornoSinal());
         response.setItens(itens.stream().map(this::toItemResponse).toList());
         response.setCreatedAt(orcamento.getCreatedAt());
         response.setUpdatedAt(orcamento.getUpdatedAt());
