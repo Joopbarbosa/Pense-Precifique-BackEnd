@@ -35,14 +35,15 @@ public class Produto {
     @Column(columnDefinition = "TEXT")
     private String descricao;
 
+    /** Tempo de producao do lote inteiro, nao da unidade individual — RN-038 */
     @Column(name = "tempo_producao", nullable = false)
     private Integer tempoProducao;
 
-    @Column
-    private String foto;
-
     @Column(name = "preco_venda", precision = 15, scale = 2)
     private BigDecimal precoVenda;
+
+    @Column(name = "rendimento", precision = 10, scale = 4)
+    private BigDecimal rendimento;
 
     @Column(name = "preco_custo", nullable = false, precision = 15, scale = 4)
     @Builder.Default

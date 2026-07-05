@@ -28,8 +28,6 @@ public class ProdutoRequest {
     @Min(value = 1, message = "O tempo de produção deve ser pelo menos 1 minuto")
     private Integer tempoProducao;
 
-    private String foto;
-
     private BigDecimal precoVenda;
 
     private BigDecimal estoqueAtual;

@@ -39,7 +39,6 @@ public class ProdutoMapper {
         response.setTipo(produto.getTipo());
         response.setDescricao(produto.getDescricao());
         response.setTempoProducao(produto.getTempoProducao());
-        response.setFoto(produto.getFoto());
         response.setPrecoVenda(produto.getPrecoVenda());
         response.setPrecoCusto(produto.getPrecoCusto());
         response.setEstoqueAtual(produto.getEstoqueAtual());
@@ -58,7 +57,6 @@ public class ProdutoMapper {
                 .tipo(request.getTipo())
                 .descricao(request.getDescricao())
                 .tempoProducao(request.getTempoProducao())
-                .foto(request.getFoto())
                 .precoVenda(request.getPrecoVenda())
                 .precoCusto(BigDecimal.ZERO)
                 .estoqueAtual(request.getEstoqueAtual() != null ? request.getEstoqueAtual() : BigDecimal.ZERO)
@@ -72,7 +70,6 @@ public class ProdutoMapper {
         produto.setTipo(request.getTipo());
         produto.setDescricao(request.getDescricao());
         produto.setTempoProducao(request.getTempoProducao());
-        produto.setFoto(request.getFoto());
         produto.setPrecoVenda(request.getPrecoVenda());
         produto.setEstoqueMinimo(request.getEstoqueMinimo());
         // precoCusto e estoqueAtual só mudam via movimentação/recálculo de ficha

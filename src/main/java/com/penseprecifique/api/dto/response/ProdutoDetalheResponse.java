@@ -18,7 +18,6 @@ public class ProdutoDetalheResponse {
     private TipoProduto tipo;
     private String descricao;
     private Integer tempoProducao;
-    private String foto;
     private BigDecimal precoVenda;
     private BigDecimal precoCusto;
     private BigDecimal estoqueAtual;
