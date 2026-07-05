@@ -24,6 +24,11 @@ public class ProdutoDetalheResponse {
     private boolean override;
     /** Calculado no Service — RN-038a, nunca persistido. Pendente de P-005 (RN-039/custoUnitario). */
     private BigDecimal precoSugerido;
+    private BigDecimal rendimento;
+    /** Custo Total do lote — calculado no Service (RN-039), nunca persistido. Pendente de P-005. */
+    private BigDecimal custoTotalLote;
+    /** Custo Unitário (Custo Total ÷ Rendimento) — hoje espelha precoCusto ate P-005 implementar a divisao real (RN-039). */
+    private BigDecimal custoUnitario;
     private BigDecimal estoqueAtual;
     private BigDecimal estoqueMinimo;
     private boolean ativo;

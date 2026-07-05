@@ -26,6 +26,8 @@ public class ProdutoMapper {
         response.setPrecoCusto(produto.getPrecoCusto());
         response.setMargemLucro(produto.getMargemLucro());
         response.setOverride(produto.getOverride());
+        response.setRendimento(produto.getRendimento());
+        response.setCustoUnitario(produto.getPrecoCusto());
         response.setEstoqueAtual(produto.getEstoqueAtual());
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
         response.setAtivo(produto.getAtivo());
@@ -45,6 +47,8 @@ public class ProdutoMapper {
         response.setPrecoCusto(produto.getPrecoCusto());
         response.setMargemLucro(produto.getMargemLucro());
         response.setOverride(produto.getOverride());
+        response.setRendimento(produto.getRendimento());
+        response.setCustoUnitario(produto.getPrecoCusto());
         response.setEstoqueAtual(produto.getEstoqueAtual());
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
         response.setAtivo(produto.getAtivo());
@@ -63,6 +67,7 @@ public class ProdutoMapper {
                 .tempoProducao(request.getTempoProducao())
                 .precoVenda(request.getPrecoVenda())
                 .margemLucro(request.getMargemLucro())
+                .rendimento(request.getRendimento())
                 .precoCusto(BigDecimal.ZERO)
                 .estoqueAtual(request.getEstoqueAtual() != null ? request.getEstoqueAtual() : BigDecimal.ZERO)
                 .estoqueMinimo(request.getEstoqueMinimo())
@@ -77,6 +82,7 @@ public class ProdutoMapper {
         produto.setTempoProducao(request.getTempoProducao());
         produto.setPrecoVenda(request.getPrecoVenda());
         produto.setMargemLucro(request.getMargemLucro());
+        produto.setRendimento(request.getRendimento());
         produto.setEstoqueMinimo(request.getEstoqueMinimo());
         // precoCusto e estoqueAtual só mudam via movimentação/recálculo de ficha
         // override e precoSugerido: logica de RN-038a pendente de P-005 (custoUnitario/RN-039) — nao implementada aqui
