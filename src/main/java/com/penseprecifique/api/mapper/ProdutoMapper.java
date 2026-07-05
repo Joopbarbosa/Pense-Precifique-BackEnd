@@ -85,7 +85,7 @@ public class ProdutoMapper {
         produto.setRendimento(request.getRendimento());
         produto.setEstoqueMinimo(request.getEstoqueMinimo());
         // precoCusto e estoqueAtual só mudam via movimentação/recálculo de ficha
-        // override e precoSugerido: logica de RN-038a pendente de P-005 (custoUnitario/RN-039) — nao implementada aqui
+        // precoVenda/margemLucro/override (RN-038a) são recalculados/ajustados pelo ProdutoService logo em seguida
     }
 
     public FichaTecnicaItemResponse toFichaTecnicaItemResponse(FichaTecnicaItem item) {
