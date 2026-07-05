@@ -24,6 +24,8 @@ public class ProdutoMapper {
         response.setTipo(produto.getTipo());
         response.setPrecoVenda(produto.getPrecoVenda());
         response.setPrecoCusto(produto.getPrecoCusto());
+        response.setMargemLucro(produto.getMargemLucro());
+        response.setOverride(produto.getOverride());
         response.setEstoqueAtual(produto.getEstoqueAtual());
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
         response.setAtivo(produto.getAtivo());
@@ -41,6 +43,8 @@ public class ProdutoMapper {
         response.setTempoProducao(produto.getTempoProducao());
         response.setPrecoVenda(produto.getPrecoVenda());
         response.setPrecoCusto(produto.getPrecoCusto());
+        response.setMargemLucro(produto.getMargemLucro());
+        response.setOverride(produto.getOverride());
         response.setEstoqueAtual(produto.getEstoqueAtual());
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
         response.setAtivo(produto.getAtivo());
@@ -58,6 +62,7 @@ public class ProdutoMapper {
                 .descricao(request.getDescricao())
                 .tempoProducao(request.getTempoProducao())
                 .precoVenda(request.getPrecoVenda())
+                .margemLucro(request.getMargemLucro())
                 .precoCusto(BigDecimal.ZERO)
                 .estoqueAtual(request.getEstoqueAtual() != null ? request.getEstoqueAtual() : BigDecimal.ZERO)
                 .estoqueMinimo(request.getEstoqueMinimo())
@@ -71,8 +76,10 @@ public class ProdutoMapper {
         produto.setDescricao(request.getDescricao());
         produto.setTempoProducao(request.getTempoProducao());
         produto.setPrecoVenda(request.getPrecoVenda());
+        produto.setMargemLucro(request.getMargemLucro());
         produto.setEstoqueMinimo(request.getEstoqueMinimo());
         // precoCusto e estoqueAtual só mudam via movimentação/recálculo de ficha
+        // override e precoSugerido: logica de RN-038a pendente de P-005 (custoUnitario/RN-039) — nao implementada aqui
     }
 
     public FichaTecnicaItemResponse toFichaTecnicaItemResponse(FichaTecnicaItem item) {

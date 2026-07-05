@@ -30,6 +30,8 @@ public class ProdutoRequest {
 
     private BigDecimal precoVenda;
 
+    private BigDecimal margemLucro;
+
     private BigDecimal estoqueAtual;
 
     private BigDecimal estoqueMinimo;

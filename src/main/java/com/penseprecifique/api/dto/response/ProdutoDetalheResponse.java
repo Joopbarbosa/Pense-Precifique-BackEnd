@@ -20,6 +20,10 @@ public class ProdutoDetalheResponse {
     private Integer tempoProducao;
     private BigDecimal precoVenda;
     private BigDecimal precoCusto;
+    private BigDecimal margemLucro;
+    private boolean override;
+    /** Calculado no Service — RN-038a, nunca persistido. Pendente de P-005 (RN-039/custoUnitario). */
+    private BigDecimal precoSugerido;
     private BigDecimal estoqueAtual;
     private BigDecimal estoqueMinimo;
     private boolean ativo;

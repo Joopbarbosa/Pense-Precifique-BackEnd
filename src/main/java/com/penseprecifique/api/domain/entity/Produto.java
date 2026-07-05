@@ -45,6 +45,15 @@ public class Produto {
     @Column(name = "rendimento", precision = 10, scale = 4)
     private BigDecimal rendimento;
 
+    /** Relevante apenas para tipo CUSTOMIZACAO — RN-038a */
+    @Column(name = "margem_lucro", precision = 5, scale = 2)
+    private BigDecimal margemLucro;
+
+    /** true quando precoVenda foi editado manualmente — fica fixo, nao acompanha mudancas de margemLucro (RN-038a) */
+    @Column(name = "override", nullable = false)
+    @Builder.Default
+    private Boolean override = false;
+
     @Column(name = "preco_custo", nullable = false, precision = 15, scale = 4)
     @Builder.Default
     private BigDecimal precoCusto = BigDecimal.ZERO;
