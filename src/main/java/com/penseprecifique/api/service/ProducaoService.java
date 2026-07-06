@@ -32,7 +32,6 @@ import com.penseprecifique.api.repository.ProdutoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -321,13 +320,9 @@ public class ProducaoService {
     }
 
     private Integer proximoNumero(UUID usuarioId) {
-        Integer maxNumero = producaoRepository
-                .findByUsuarioIdOrderByDataProducaoDesc(usuarioId, PageRequest.of(0, 1))
-                .stream()
-                .mapToInt(p -> p.getNumero() != null ? p.getNumero() : 0)
-                .max()
-                .orElse(0);
-        return maxNumero + 1;
+        return producaoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId)
+                .map(p -> p.getNumero() != null ? p.getNumero() + 1 : 1)
+                .orElse(1);
     }
 
     private UUID getUsuarioIdAutenticado() {

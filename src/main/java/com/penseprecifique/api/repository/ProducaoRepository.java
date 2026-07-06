@@ -15,4 +15,6 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
     Optional<Producao> findByIdAndUsuarioId(UUID id, UUID usuarioId);
 
     Optional<Producao> findByNumeroAndUsuarioId(Integer numero, UUID usuarioId);
+
+    Optional<Producao> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 }
