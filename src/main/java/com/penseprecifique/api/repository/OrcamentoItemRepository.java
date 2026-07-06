@@ -16,11 +16,11 @@ public interface OrcamentoItemRepository extends JpaRepository<OrcamentoItem, UU
     void deleteByOrcamentoId(UUID orcamentoId);
 
     @Query("""
-        SELECT oi.produto.nome, SUM(oi.quantidade)
+        SELECT oi.itemCatalogo.produto.nome, SUM(oi.quantidade)
         FROM OrcamentoItem oi
         WHERE oi.orcamento.usuario.id = :uid
         AND oi.orcamento.deletedAt IS NULL
-        GROUP BY oi.produto.nome
+        GROUP BY oi.itemCatalogo.produto.nome
         ORDER BY SUM(oi.quantidade) DESC
     """)
     List<Object[]> findTopProdutosMaisVendidos(@Param("uid") UUID uid, Pageable pageable);

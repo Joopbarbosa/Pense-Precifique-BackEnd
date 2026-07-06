@@ -25,8 +25,8 @@ public class OrcamentoItem {
     private Orcamento orcamento;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "produto_id", nullable = false)
-    private Produto produto;
+    @JoinColumn(name = "item_catalogo_id", nullable = false)
+    private ItemCatalogo itemCatalogo;
 
     @Column(name = "quantidade", nullable = false)
     @Builder.Default
