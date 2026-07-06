@@ -24,6 +24,9 @@ public class Cliente {
     private Usuario usuario;
 
     @Column(nullable = false)
+    private Integer numero;
+
+    @Column(nullable = false)
     private String nome;
 
     @Column

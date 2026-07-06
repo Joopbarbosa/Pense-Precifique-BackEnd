@@ -20,6 +20,7 @@ import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -87,6 +88,8 @@ public class ProdutoService {
 
         Usuario usuario = getUsuarioAutenticado();
         Produto produto = produtoMapper.toEntity(request, usuario);
+        produto.setNumero(NumeroSequencialUtil.proximoNumero(
+                produtoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Produto::getNumero)));
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO && produto.getPrecoVenda() == null) {
             // placeholder só para satisfazer chk_preco_venda_tipo no INSERT inicial (precisa do id do
             // produto para persistir a ficha técnica antes de calcular o precoSugerido real) — sobrescrito abaixo

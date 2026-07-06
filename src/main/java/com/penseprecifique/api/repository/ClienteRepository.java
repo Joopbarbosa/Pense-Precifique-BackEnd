@@ -16,4 +16,6 @@ public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
 
     Page<Cliente> findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
             UUID usuarioId, String nome, Pageable pageable);
+
+    Optional<Cliente> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 }

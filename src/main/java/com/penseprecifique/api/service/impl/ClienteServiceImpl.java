@@ -10,6 +10,7 @@ import com.penseprecifique.api.mapper.ClienteMapper;
 import com.penseprecifique.api.repository.ClienteRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.ClienteService;
+import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -56,6 +57,8 @@ public class ClienteServiceImpl implements ClienteService {
     public ClienteResponse cadastrar(ClienteRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         Cliente cliente = clienteMapper.toEntity(request, usuario);
+        cliente.setNumero(NumeroSequencialUtil.proximoNumero(
+                clienteRepository.findTopByUsuarioIdOrderByNumeroDesc(usuario.getId()).map(Cliente::getNumero)));
         return clienteMapper.toResponse(clienteRepository.save(cliente));
     }
 

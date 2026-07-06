@@ -19,6 +19,7 @@ public class InsumoMapper {
     public InsumoResponseDTO toResponse(Insumo insumo) {
         return new InsumoResponseDTO(
                 insumo.getId(),
+                insumo.getNumero(),
                 insumo.getNome(),
                 insumo.getMarca(),
                 insumo.getUnidadeMedida(),

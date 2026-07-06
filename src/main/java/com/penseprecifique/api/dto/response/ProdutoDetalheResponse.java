@@ -14,6 +14,7 @@ import java.util.UUID;
 public class ProdutoDetalheResponse {
 
     private UUID id;
+    private Integer numero;
     private String nome;
     private TipoProduto tipo;
     private String descricao;

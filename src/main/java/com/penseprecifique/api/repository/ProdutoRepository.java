@@ -19,4 +19,6 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
     Optional<Produto> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
     List<Produto> findByUsuarioIdAndTipoAndDeletedAtIsNull(UUID usuarioId, TipoProduto tipo);
+
+    Optional<Produto> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 }

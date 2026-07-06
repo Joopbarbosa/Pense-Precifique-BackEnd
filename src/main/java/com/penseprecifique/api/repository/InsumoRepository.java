@@ -19,4 +19,6 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
 
     boolean existsByNomeAndMarcaAndUsuarioIdAndIdNotAndDeletedAtIsNull(
             String nome, String marca, UUID usuarioId, UUID id);
+
+    Optional<Insumo> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 }

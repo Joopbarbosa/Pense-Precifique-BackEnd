@@ -20,6 +20,7 @@ public class ProdutoMapper {
     public ProdutoResponse toResponse(Produto produto) {
         ProdutoResponse response = new ProdutoResponse();
         response.setId(produto.getId());
+        response.setNumero(produto.getNumero());
         response.setNome(produto.getNome());
         response.setTipo(produto.getTipo());
         response.setPrecoVenda(produto.getPrecoVenda());
@@ -39,6 +40,7 @@ public class ProdutoMapper {
     public ProdutoDetalheResponse toDetalheResponse(Produto produto, List<FichaTecnicaItem> itens) {
         ProdutoDetalheResponse response = new ProdutoDetalheResponse();
         response.setId(produto.getId());
+        response.setNumero(produto.getNumero());
         response.setNome(produto.getNome());
         response.setTipo(produto.getTipo());
         response.setDescricao(produto.getDescricao());

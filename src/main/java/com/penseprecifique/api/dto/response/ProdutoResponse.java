@@ -13,6 +13,7 @@ import java.util.UUID;
 public class ProdutoResponse {
 
     private UUID id;
+    private Integer numero;
     private String nome;
     private TipoProduto tipo;
     private BigDecimal precoVenda;

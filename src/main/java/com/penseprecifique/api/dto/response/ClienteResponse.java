@@ -11,6 +11,7 @@ import java.util.UUID;
 public class ClienteResponse {
 
     private UUID id;
+    private Integer numero;
     private String nome;
     private String email;
     private String whatsapp;

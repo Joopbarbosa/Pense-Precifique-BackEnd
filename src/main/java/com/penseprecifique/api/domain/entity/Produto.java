@@ -26,6 +26,9 @@ public class Produto {
     private Usuario usuario;
 
     @Column(nullable = false)
+    private Integer numero;
+
+    @Column(nullable = false)
     private String nome;
 
     @Enumerated(EnumType.STRING)

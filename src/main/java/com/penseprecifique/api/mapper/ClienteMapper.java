@@ -14,6 +14,7 @@ public class ClienteMapper {
     public ClienteResponse toResponse(Cliente cliente) {
         ClienteResponse response = new ClienteResponse();
         response.setId(cliente.getId());
+        response.setNumero(cliente.getNumero());
         response.setNome(cliente.getNome());
         response.setEmail(cliente.getEmail());
         response.setWhatsapp(cliente.getWhatsapp());

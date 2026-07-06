@@ -18,6 +18,7 @@ import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.InsumoService;
+import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -68,6 +69,8 @@ public class InsumoServiceImpl implements InsumoService {
 
         Usuario usuario = getUsuarioAutenticado();
         Insumo insumo = insumoMapper.toEntity(request, usuario);
+        insumo.setNumero(NumeroSequencialUtil.proximoNumero(
+                insumoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Insumo::getNumero)));
         return insumoMapper.toResponse(insumoRepository.save(insumo));
     }
 

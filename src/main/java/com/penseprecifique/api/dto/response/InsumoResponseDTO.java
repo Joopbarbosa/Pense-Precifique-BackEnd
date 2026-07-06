@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record InsumoResponseDTO(
         UUID id,
+        Integer numero,
         String nome,
         String marca,
         String unidadeMedida,
