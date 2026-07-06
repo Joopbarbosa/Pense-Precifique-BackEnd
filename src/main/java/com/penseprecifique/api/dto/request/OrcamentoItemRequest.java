@@ -15,7 +15,7 @@ import java.util.UUID;
 public class OrcamentoItemRequest {
 
     @NotNull
-    private UUID produtoId;
+    private UUID itemCatalogoId;
 
     @NotNull
     @Min(1)
