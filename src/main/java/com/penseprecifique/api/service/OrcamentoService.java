@@ -1,6 +1,8 @@
 package com.penseprecifique.api.service;
 
 import com.penseprecifique.api.domain.entity.Cliente;
+import com.penseprecifique.api.domain.entity.ItemCatalogo;
+import com.penseprecifique.api.domain.entity.ItemCatalogoCustomizacao;
 import com.penseprecifique.api.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.domain.entity.Orcamento;
 import com.penseprecifique.api.domain.entity.OrcamentoItem;
@@ -28,6 +30,8 @@ import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
 import com.penseprecifique.api.mapper.OrcamentoMapper;
 import com.penseprecifique.api.repository.ClienteRepository;
+import com.penseprecifique.api.repository.ItemCatalogoCustomizacaoRepository;
+import com.penseprecifique.api.repository.ItemCatalogoRepository;
 import com.penseprecifique.api.repository.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.repository.OrcamentoItemCustomizacaoRepository;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
@@ -61,6 +65,8 @@ public class OrcamentoService {
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
+    private final ItemCatalogoRepository itemCatalogoRepository;
+    private final ItemCatalogoCustomizacaoRepository itemCatalogoCustomizacaoRepository;
     private final ClienteRepository clienteRepository;
     private final ProdutoRepository produtoRepository;
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
@@ -119,47 +125,41 @@ public class OrcamentoService {
         BigDecimal subtotalOrcamento = BigDecimal.ZERO;
 
         for (OrcamentoItemRequest itemReq : request.getItens()) {
-            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(itemReq.getProdutoId(), usuarioId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
-            if (produto.getTipo() != TipoProduto.PRODUTO) {
-                throw new BusinessException("O item '" + produto.getNome() + "' não é um produto válido para o orçamento");
-            }
+            // RN-045 + RN-046 — item só entra no orçamento se produto e catálogo estiverem ativos.
+            ItemCatalogo itemCatalogo = buscarItemCatalogoParaVenda(itemReq.getItemCatalogoId(), usuarioId);
 
-            BigDecimal precoUnitario = produto.getPrecoVenda();
+            // RN-048 — snapshot do preço de venda no momento exato da adição. Por ser uma cópia
+            // (não referência viva), nenhuma edição futura no catálogo/produto/margem altera este valor.
+            BigDecimal precoUnitario = itemCatalogo.getPrecoVenda();
             BigDecimal subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
 
             OrcamentoItem item = OrcamentoItem.builder()
                     .orcamento(orcamento)
-                    .produto(produto)
+                    .itemCatalogo(itemCatalogo)
                     .quantidade(itemReq.getQuantidade())
                     .precoUnitario(precoUnitario)
                     .subtotal(subtotalItem)
                     .build();
             item = orcamentoItemRepository.save(item);
 
+            // RN-048 — customizações fixas do pacote entram automaticamente (sem ação da artesã),
+            // cada uma com snapshot do preço de venda do produto CUSTOMIZACAO correspondente.
+            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(itemCatalogo.getId())) {
+                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
+                subtotalItem = subtotalItem.add(salvarCustomizacao(item, fixa.getProduto(), quantidade));
+            }
+
+            // RN-030 (inalterado) — customizações ad-hoc adicionadas manualmente coexistem com as fixas.
             for (OrcamentoItemCustomizacaoRequest custReq : itemReq.getCustomizacoes()) {
                 Produto custProduto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(custReq.getProdutoId(), usuarioId)
                         .orElseThrow(() -> new ResourceNotFoundException("Customização não encontrada"));
                 if (custProduto.getTipo() != TipoProduto.CUSTOMIZACAO) {
                     throw new BusinessException("O item '" + custProduto.getNome() + "' não é uma customização válida");
                 }
-
-                BigDecimal custPrecoUnitario = custProduto.getPrecoVenda();
-                BigDecimal custSubtotal = custPrecoUnitario.multiply(BigDecimal.valueOf(custReq.getQuantidade()));
-
-                OrcamentoItemCustomizacao customizacao = OrcamentoItemCustomizacao.builder()
-                        .orcamentoItem(item)
-                        .produto(custProduto)
-                        .quantidade(custReq.getQuantidade())
-                        .precoUnitario(custPrecoUnitario)
-                        .subtotal(custSubtotal)
-                        .build();
-                orcamentoItemCustomizacaoRepository.save(customizacao);
-
-                subtotalItem = subtotalItem.add(custSubtotal);
+                subtotalItem = subtotalItem.add(salvarCustomizacao(item, custProduto, custReq.getQuantidade()));
             }
 
-            // Atualiza o subtotal do item para incluir customizações
+            // Atualiza o subtotal do item para incluir customizações (fixas + ad-hoc)
             item.setSubtotal(subtotalItem);
             orcamentoItemRepository.save(item);
 
@@ -178,6 +178,50 @@ public class OrcamentoService {
         orcamento = orcamentoRepository.save(orcamento);
 
         return montarDetalhe(orcamento);
+    }
+
+    /**
+     * RN-045 + RN-046 — busca o item de catálogo do usuário e valida se está liberado para venda.
+     * O bloqueio pode vir do produto inativado/excluído (RN-045) ou do catálogo desativado (RN-046);
+     * a mensagem diferencia a causa para orientar a artesã no próximo passo.
+     */
+    private ItemCatalogo buscarItemCatalogoParaVenda(UUID itemCatalogoId, UUID usuarioId) {
+        ItemCatalogo item = itemCatalogoRepository.findByIdAndDeletedAtIsNull(itemCatalogoId)
+                .filter(i -> i.getCatalogo().getUsuario().getId().equals(usuarioId))
+                .orElseThrow(() -> new BusinessException("Item de catálogo não encontrado"));
+
+        // RN-046 — catálogo desativado bloqueia a venda de todos os seus itens.
+        if (!Boolean.TRUE.equals(item.getCatalogo().getAtivo())) {
+            throw new BusinessException("O catálogo '" + item.getCatalogo().getNome()
+                    + "' está desativado. Reative o catálogo antes de adicionar seus itens ao orçamento.");
+        }
+
+        // RN-045 — produto do item inativado/excluído bloqueia a venda do item.
+        Produto produto = item.getProduto();
+        if (!Boolean.TRUE.equals(produto.getAtivo()) || produto.getDeletedAt() != null) {
+            throw new BusinessException("O produto '" + produto.getNome()
+                    + "' deste item de catálogo foi inativado. Reative o produto ou troque o produto do item"
+                    + " antes de adicioná-lo ao orçamento.");
+        }
+        return item;
+    }
+
+    /**
+     * RN-048 — cria uma linha de customização do orçamento com snapshot do preço de venda do
+     * produto CUSTOMIZACAO. Usado tanto pelas customizações fixas do pacote quanto pelas ad-hoc
+     * (RN-030). Retorna o subtotal da customização para compor o subtotal do item.
+     */
+    private BigDecimal salvarCustomizacao(OrcamentoItem item, Produto custProduto, int quantidade) {
+        BigDecimal precoUnitario = custProduto.getPrecoVenda();
+        BigDecimal subtotal = precoUnitario.multiply(BigDecimal.valueOf(quantidade));
+        orcamentoItemCustomizacaoRepository.save(OrcamentoItemCustomizacao.builder()
+                .orcamentoItem(item)
+                .produto(custProduto)
+                .quantidade(quantidade)
+                .precoUnitario(precoUnitario)
+                .subtotal(subtotal)
+                .build());
+        return subtotal;
     }
 
     public OrcamentoDetalheResponse avancarStatus(UUID id, AvancaStatusRequest request) {
@@ -229,7 +273,7 @@ public class OrcamentoService {
             case EM_PRODUCAO:
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                 for (OrcamentoItem item : itensParaBaixa) {
-                    Produto produto = item.getProduto();
+                    Produto produto = item.getItemCatalogo().getProduto();
                     produto.setEstoqueAtual(produto.getEstoqueAtual()
                             .subtract(BigDecimal.valueOf(item.getQuantidade())));
                     produtoRepository.save(produto);
@@ -343,7 +387,7 @@ public class OrcamentoService {
     private void reverterEstoque(Orcamento orcamento, String motivo) {
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         for (OrcamentoItem item : itens) {
-            Produto produto = item.getProduto();
+            Produto produto = item.getItemCatalogo().getProduto();
             produto.setEstoqueAtual(produto.getEstoqueAtual()
                     .add(BigDecimal.valueOf(item.getQuantidade())));
             produtoRepository.save(produto);
