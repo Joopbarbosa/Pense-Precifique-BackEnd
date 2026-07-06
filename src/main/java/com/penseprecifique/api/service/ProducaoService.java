@@ -103,6 +103,11 @@ public class ProducaoService {
 
         // RN-051 — FichaTecnicaItem.quantidade agora significa "por lote"; a baixa é proporcional
         // à quantidade final produzida em relação ao rendimento do lote (ficha vazia → ratio nunca usado).
+        // Dado legado anterior à RN-039 (rendimento obrigatório) pode ter escapado da obrigatoriedade — só
+        // importa aqui quando há ficha técnica de fato, senão o ratio nunca é usado.
+        if (!ficha.isEmpty()) {
+            exigirRendimentoValido(produto);
+        }
         BigDecimal ratioLote = ficha.isEmpty() ? BigDecimal.ZERO
                 : quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
 
@@ -304,8 +309,10 @@ public class ProducaoService {
     }
 
     private InsumoConsumidoResponse montarPreview(FichaTecnicaItem item, BigDecimal quantidadeFinal) {
-        // RN-051 — mesma fórmula proporcional do lancar(): ficha não-vazia implica rendimento presente (RN-039).
-        BigDecimal ratioLote = quantidadeFinal.divide(item.getProduto().getRendimento(), 4, RoundingMode.HALF_UP);
+        // RN-051 — mesma fórmula proporcional do lancar(); dado legado anterior à RN-039 pode ter rendimento nulo.
+        Produto produto = item.getProduto();
+        exigirRendimentoValido(produto);
+        BigDecimal ratioLote = quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
         BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
         InsumoConsumidoResponse response = new InsumoConsumidoResponse();
         response.setQuantidade(necessaria);
@@ -330,9 +337,22 @@ public class ProducaoService {
         return response;
     }
 
+    /**
+     * RN-039/RN-051 — rendimento é obrigatório desde o EP-04 para produto com ficha técnica preenchida,
+     * mas produtos cadastrados antes dessa regra podem ter escapado da obrigatoriedade (dado legado).
+     * Guarda de validação, não correção de dado — bloqueia com mensagem clara em vez de divisão nula/por zero.
+     */
+    private void exigirRendimentoValido(Produto produto) {
+        if (produto.getRendimento() == null || produto.getRendimento().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(
+                    "Produto sem rendimento configurado — complete o cadastro do produto antes de lançar produção.");
+        }
+    }
+
     /** RN-051 — lotes (algum insumo não-fracionável) ou quantidade livre (todos fracionáveis). */
     private BigDecimal calcularQuantidadeFinal(LancarProducaoRequest request, Produto produto) {
         if (request.getLotes() != null) {
+            exigirRendimentoValido(produto);
             return produto.getRendimento().multiply(BigDecimal.valueOf(request.getLotes()));
         }
         if (request.getQuantidade() != null) {
