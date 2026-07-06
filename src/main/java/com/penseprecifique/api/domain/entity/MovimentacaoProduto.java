@@ -46,6 +46,13 @@ public class MovimentacaoProduto {
     @Column(name = "referencia_tipo")
     private String referenciaTipo;
 
+    // RN-050: snapshot do catálogo/preço no momento da venda (movimentação ORCAMENTO)
+    @Column(name = "catalogo_referencia")
+    private String catalogoReferencia;
+
+    @Column(name = "preco_vendido", precision = 10, scale = 2)
+    private BigDecimal precoVendido;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean estornada = false;

@@ -121,6 +121,8 @@ public class ProdutoMapper {
         response.setObservacao(mov.getObservacao());
         response.setReferenciaId(mov.getReferenciaId());
         response.setReferenciaTipo(mov.getReferenciaTipo());
+        response.setCatalogoReferencia(mov.getCatalogoReferencia());
+        response.setPrecoVendido(mov.getPrecoVendido());
         response.setEstornada(mov.getEstornada());
         response.setCreatedAt(mov.getCreatedAt());
         return response;

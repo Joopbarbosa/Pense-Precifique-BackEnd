@@ -20,6 +20,8 @@ public class MovimentacaoProdutoResponse {
     private String observacao;
     private UUID referenciaId;
     private String referenciaTipo;
+    private String catalogoReferencia;
+    private BigDecimal precoVendido;
     private boolean estornada;
     private LocalDateTime createdAt;
 }
