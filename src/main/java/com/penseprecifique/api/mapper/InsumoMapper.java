@@ -81,6 +81,7 @@ public class InsumoMapper {
     public ProdutoRelacionadoResponse toProdutoRelacionadoResponse(Produto produto) {
         ProdutoRelacionadoResponse response = new ProdutoRelacionadoResponse();
         response.setId(produto.getId());
+        response.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
         response.setNome(produto.getNome());
         response.setTipo(produto.getTipo());
         return response;
