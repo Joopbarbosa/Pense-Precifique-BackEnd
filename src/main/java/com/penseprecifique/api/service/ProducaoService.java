@@ -38,6 +38,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -97,10 +98,18 @@ public class ProducaoService {
 
         List<FichaTecnicaItem> ficha = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
 
+        // RN-051 — quantidade final: lotes × rendimento (insumo não-fracionável) ou quantidade livre (todos fracionáveis).
+        BigDecimal quantidadeFinal = calcularQuantidadeFinal(request, produto);
+
+        // RN-051 — FichaTecnicaItem.quantidade agora significa "por lote"; a baixa é proporcional
+        // à quantidade final produzida em relação ao rendimento do lote (ficha vazia → ratio nunca usado).
+        BigDecimal ratioLote = ficha.isEmpty() ? BigDecimal.ZERO
+                : quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
+
         // Verificação de suficiência: tudo ou nada, antes de qualquer alteração
         List<String> insuficientes = new ArrayList<>();
         for (FichaTecnicaItem item : ficha) {
-            BigDecimal necessaria = item.getQuantidade().multiply(request.getQuantidade());
+            BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
             if (item.getInsumo() != null) {
                 if (item.getInsumo().getEstoqueAtual().compareTo(necessaria) < 0) {
                     insuficientes.add(item.getInsumo().getNome());
@@ -119,7 +128,7 @@ public class ProducaoService {
         Producao producao = Producao.builder()
                 .usuario(usuario)
                 .produto(produto)
-                .quantidade(request.getQuantidade())
+                .quantidade(quantidadeFinal)
                 .dataProducao(request.getDataProducao() != null ? request.getDataProducao() : LocalDateTime.now())
                 .status(StatusProducao.ATIVA)
                 .numero(proximoNumero(usuarioId))
@@ -128,7 +137,7 @@ public class ProducaoService {
 
         // Baixa dos componentes da ficha técnica
         for (FichaTecnicaItem item : ficha) {
-            BigDecimal consumida = item.getQuantidade().multiply(request.getQuantidade());
+            BigDecimal consumida = item.getQuantidade().multiply(ratioLote);
 
             if (item.getInsumo() != null) {
                 Insumo insumo = item.getInsumo();
@@ -176,14 +185,14 @@ public class ProducaoService {
         }
 
         // Entrada do produto produzido
-        produto.setEstoqueAtual(produto.getEstoqueAtual().add(request.getQuantidade()));
+        produto.setEstoqueAtual(produto.getEstoqueAtual().add(quantidadeFinal));
         produtoRepository.save(produto);
 
         movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
                 .produto(produto)
                 .tipo(TipoMovimentacaoProduto.ENTRADA)
                 .motivo(MotivoMovimentacaoProduto.PRODUCAO)
-                .quantidade(request.getQuantidade())
+                .quantidade(quantidadeFinal)
                 .referenciaId(producao.getId())
                 .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
                 .estornada(false)
@@ -294,8 +303,10 @@ public class ProducaoService {
         return producaoMapper.toDetalheResponse(producao, consumidos);
     }
 
-    private InsumoConsumidoResponse montarPreview(FichaTecnicaItem item, BigDecimal quantidade) {
-        BigDecimal necessaria = item.getQuantidade().multiply(quantidade);
+    private InsumoConsumidoResponse montarPreview(FichaTecnicaItem item, BigDecimal quantidadeFinal) {
+        // RN-051 — mesma fórmula proporcional do lancar(): ficha não-vazia implica rendimento presente (RN-039).
+        BigDecimal ratioLote = quantidadeFinal.divide(item.getProduto().getRendimento(), 4, RoundingMode.HALF_UP);
+        BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
         InsumoConsumidoResponse response = new InsumoConsumidoResponse();
         response.setQuantidade(necessaria);
 
@@ -317,6 +328,17 @@ public class ProducaoService {
         response.setEstoqueAntes(estoqueAtual);
         response.setEstoqueInsuficiente(estoqueAtual.compareTo(necessaria) < 0);
         return response;
+    }
+
+    /** RN-051 — lotes (algum insumo não-fracionável) ou quantidade livre (todos fracionáveis). */
+    private BigDecimal calcularQuantidadeFinal(LancarProducaoRequest request, Produto produto) {
+        if (request.getLotes() != null) {
+            return produto.getRendimento().multiply(BigDecimal.valueOf(request.getLotes()));
+        }
+        if (request.getQuantidade() != null) {
+            return request.getQuantidade();
+        }
+        throw new BusinessException("Informe a quantidade produzida ou o número de lotes.");
     }
 
     private Integer proximoNumero(UUID usuarioId) {
