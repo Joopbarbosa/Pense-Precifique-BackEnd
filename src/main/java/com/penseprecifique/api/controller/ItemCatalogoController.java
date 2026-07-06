@@ -1,0 +1,48 @@
+package com.penseprecifique.api.controller;
+
+import com.penseprecifique.api.dto.request.ItemCatalogoRequest;
+import com.penseprecifique.api.dto.response.ItemCatalogoResponse;
+import com.penseprecifique.api.service.ItemCatalogoService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/catalogos/{catalogoId}/itens")
+@RequiredArgsConstructor
+public class ItemCatalogoController {
+
+    private final ItemCatalogoService itemCatalogoService;
+
+    @GetMapping
+    public ResponseEntity<List<ItemCatalogoResponse>> listar(@PathVariable UUID catalogoId) {
+        return ResponseEntity.ok(itemCatalogoService.listarPorCatalogo(catalogoId));
+    }
+
+    @PostMapping
+    public ResponseEntity<ItemCatalogoResponse> adicionar(
+            @PathVariable UUID catalogoId,
+            @Valid @RequestBody ItemCatalogoRequest request) {
+        return ResponseEntity.status(201).body(itemCatalogoService.adicionar(catalogoId, request));
+    }
+
+    @PutMapping("/{itemId}")
+    public ResponseEntity<ItemCatalogoResponse> editar(
+            @PathVariable UUID catalogoId,
+            @PathVariable UUID itemId,
+            @Valid @RequestBody ItemCatalogoRequest request) {
+        return ResponseEntity.ok(itemCatalogoService.editar(itemId, request));
+    }
+
+    @DeleteMapping("/{itemId}")
+    public ResponseEntity<Void> remover(
+            @PathVariable UUID catalogoId,
+            @PathVariable UUID itemId) {
+        itemCatalogoService.remover(itemId);
+        return ResponseEntity.noContent().build();
+    }
+}

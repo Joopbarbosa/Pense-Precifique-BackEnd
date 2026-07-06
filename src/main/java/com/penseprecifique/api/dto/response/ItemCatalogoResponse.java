@@ -20,5 +20,7 @@ public class ItemCatalogoResponse {
     /** Calculado no Service (RN-042) — nunca persistido. Pendente de P-012. */
     private BigDecimal precoSugerido;
     private boolean override;
+    /** RN-045 — true quando o Produto do item foi inativado/excluído; item permanece mas fica bloqueado para venda. */
+    private boolean bloqueadoParaVenda;
     private List<CustomizacaoAnexadaResponse> customizacoesAnexadas = new ArrayList<>();
 }

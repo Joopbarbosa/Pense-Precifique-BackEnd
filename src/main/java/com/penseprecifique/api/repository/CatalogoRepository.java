@@ -11,6 +11,8 @@ public interface CatalogoRepository extends JpaRepository<Catalogo, UUID> {
 
     Optional<Catalogo> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 
+    Optional<Catalogo> findByIdAndUsuarioId(UUID id, UUID usuarioId);
+
     List<Catalogo> findByUsuarioIdAndAtivoTrue(UUID usuarioId);
 
     List<Catalogo> findByUsuarioId(UUID usuarioId);
