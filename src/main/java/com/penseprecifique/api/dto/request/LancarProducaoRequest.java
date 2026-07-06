@@ -17,8 +17,9 @@ public class LancarProducaoRequest {
     @NotNull(message = "O produto é obrigatório")
     private UUID produtoId;
 
-    // RN-051 — informa quantidade (fluxo livre, todos insumos fracionáveis) OU lotes (algum insumo
-    // não-fracionável); "exatamente um dos dois" ainda não é validado aqui, refinado no P-026.
+    // RN-051 — informa quantidade (fluxo livre, todos insumos fracionáveis) XOR lotes (algum insumo
+    // não-fracionável); validação de "exatamente um dos dois" no ProducaoService.calcularQuantidadeFinal
+    // (mesmo padrão de FichaTecnicaService.salvarFichaTecnica para insumo XOR produtoBase).
     @DecimalMin(value = "0.001", message = "A quantidade deve ser maior que zero")
     private BigDecimal quantidade;
 

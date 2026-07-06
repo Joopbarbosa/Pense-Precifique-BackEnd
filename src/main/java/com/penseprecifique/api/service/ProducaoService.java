@@ -349,16 +349,24 @@ public class ProducaoService {
         }
     }
 
-    /** RN-051 — lotes (algum insumo não-fracionável) ou quantidade livre (todos fracionáveis). */
+    /** RN-051 — lotes (algum insumo não-fracionável) XOR quantidade livre (todos fracionáveis), nunca os dois. */
     private BigDecimal calcularQuantidadeFinal(LancarProducaoRequest request, Produto produto) {
-        if (request.getLotes() != null) {
+        boolean temQuantidade = request.getQuantidade() != null;
+        boolean temLotes = request.getLotes() != null;
+
+        if (!temQuantidade && !temLotes) {
+            throw new BusinessException("Informe a quantidade produzida ou o número de lotes.");
+        }
+        if (temQuantidade && temLotes) {
+            throw new BusinessException(
+                    "Informe apenas um dos dois: quantidade produzida OU número de lotes, não os dois ao mesmo tempo.");
+        }
+
+        if (temLotes) {
             exigirRendimentoValido(produto);
             return produto.getRendimento().multiply(BigDecimal.valueOf(request.getLotes()));
         }
-        if (request.getQuantidade() != null) {
-            return request.getQuantidade();
-        }
-        throw new BusinessException("Informe a quantidade produzida ou o número de lotes.");
+        return request.getQuantidade();
     }
 
     private Integer proximoNumero(UUID usuarioId) {
