@@ -3,8 +3,10 @@ package com.penseprecifique.api.controller;
 import com.penseprecifique.api.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.dto.request.OrcamentoRequest;
+import com.penseprecifique.api.dto.response.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.dto.response.OrcamentoResponse;
+import com.penseprecifique.api.service.ItemCatalogoService;
 import com.penseprecifique.api.service.OrcamentoService;
 import com.penseprecifique.api.service.PdfService;
 import jakarta.validation.Valid;
@@ -15,6 +17,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,12 +27,19 @@ public class OrcamentoController {
 
     private final OrcamentoService orcamentoService;
     private final PdfService pdfService;
+    private final ItemCatalogoService itemCatalogoService;
 
     @GetMapping
     public ResponseEntity<Page<OrcamentoResponse>> listar(
             @RequestParam(required = false) StatusOrcamento status,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(orcamentoService.listar(status, pageable));
+    }
+
+    @GetMapping("/itens-catalogo")
+    public ResponseEntity<List<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
+            @RequestParam(required = false) UUID catalogoId) {
+        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId));
     }
 
     @GetMapping("/{id}")

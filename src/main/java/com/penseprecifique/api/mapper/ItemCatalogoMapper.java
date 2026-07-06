@@ -7,6 +7,7 @@ import com.penseprecifique.api.domain.entity.Produto;
 import com.penseprecifique.api.dto.request.CustomizacaoAnexadaRequest;
 import com.penseprecifique.api.dto.request.ItemCatalogoRequest;
 import com.penseprecifique.api.dto.response.CustomizacaoAnexadaResponse;
+import com.penseprecifique.api.dto.response.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.dto.response.ItemCatalogoResponse;
 import org.springframework.stereotype.Component;
 
@@ -42,6 +43,16 @@ public class ItemCatalogoMapper {
         response.setProdutoId(entidade.getProduto().getId());
         response.setProdutoNome(entidade.getProduto().getNome());
         response.setQuantidade(entidade.getQuantidade());
+        return response;
+    }
+
+    public ItemCatalogoBuscaResponse toBuscaResponse(ItemCatalogo item) {
+        ItemCatalogoBuscaResponse response = new ItemCatalogoBuscaResponse();
+        response.setId(item.getId());
+        response.setNomeProduto(item.getProduto().getNome());
+        response.setPrecoVenda(item.getPrecoVenda());
+        response.setCatalogoNome(item.getCatalogo().getNome());
+        response.setCatalogoNumero(item.getCatalogo().getNumero());
         return response;
     }
 

@@ -8,6 +8,7 @@ import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.TipoProduto;
 import com.penseprecifique.api.dto.request.CustomizacaoAnexadaRequest;
 import com.penseprecifique.api.dto.request.ItemCatalogoRequest;
+import com.penseprecifique.api.dto.response.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.dto.response.ItemCatalogoResponse;
 import com.penseprecifique.api.exception.BusinessException;
 import com.penseprecifique.api.exception.ResourceNotFoundException;
@@ -61,6 +62,19 @@ public class ItemCatalogoService {
     public ItemCatalogoResponse buscarPorId(UUID itemId) {
         ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
         return montarResponse(item);
+    }
+
+    /**
+     * RN-044/045/046 — busca de itens de catálogo para a Seção Itens do orçamento.
+     * Diferente de {@code buscarItemCatalogoParaVenda} (validação ao adicionar um item específico),
+     * aqui o bloqueio é aplicado como filtro de listagem: o item simplesmente não aparece na busca.
+     */
+    @Transactional(readOnly = true)
+    public List<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        return itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId).stream()
+                .map(itemCatalogoMapper::toBuscaResponse)
+                .toList();
     }
 
     // ---------------------------------------------------------------
