@@ -40,6 +40,7 @@ import com.penseprecifique.api.repository.ProdutoRepository;
 import com.penseprecifique.api.repository.ReciboEstornoRepository;
 import com.penseprecifique.api.repository.ReciboPagamentoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -287,7 +288,7 @@ public class OrcamentoService {
                             .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
                             .quantidade(quantidadeBaixa)
                             // RN-050: snapshot do catálogo e do preço vendido no orçamento (nunca o valor atual)
-                            .catalogoReferencia("CTG-" + item.getItemCatalogo().getCatalogo().getNumero())
+                            .catalogoReferencia(IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero()))
                             .precoVendido(item.getPrecoUnitario())
                             .referenciaId(orcamento.getId())
                             .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())

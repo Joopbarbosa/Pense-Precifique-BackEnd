@@ -12,6 +12,7 @@ public class ClienteResponse {
 
     private UUID id;
     private Integer numero;
+    private String identificador;
     private String nome;
     private String email;
     private String whatsapp;

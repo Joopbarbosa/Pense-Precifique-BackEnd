@@ -5,6 +5,7 @@ import com.penseprecifique.api.domain.entity.ProducaoInsumoConsumido;
 import com.penseprecifique.api.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.dto.response.ProducaoResponse;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -16,6 +17,7 @@ public class ProducaoMapper {
         ProducaoResponse response = new ProducaoResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
+        response.setIdentificador(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
         response.setProdutoId(producao.getProduto().getId());
         response.setNomeProduto(producao.getProduto().getNome());
         response.setTipoProduto(producao.getProduto().getTipo());
@@ -29,6 +31,7 @@ public class ProducaoMapper {
         ProducaoDetalheResponse response = new ProducaoDetalheResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
+        response.setIdentificador(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
         response.setProdutoId(producao.getProduto().getId());
         response.setNomeProduto(producao.getProduto().getNome());
         response.setTipoProduto(producao.getProduto().getTipo());

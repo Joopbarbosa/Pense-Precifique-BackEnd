@@ -14,6 +14,7 @@ public class ProdutoResponse {
 
     private UUID id;
     private Integer numero;
+    private String identificador;
     private String nome;
     private TipoProduto tipo;
     private BigDecimal precoVenda;

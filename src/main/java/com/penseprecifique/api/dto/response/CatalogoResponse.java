@@ -12,6 +12,7 @@ public class CatalogoResponse {
 
     private UUID id;
     private Integer numero;
+    private String identificador;
     private String nome;
     private BigDecimal margem;
     private boolean ativo;

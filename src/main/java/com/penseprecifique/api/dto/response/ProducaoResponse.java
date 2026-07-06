@@ -15,6 +15,7 @@ public class ProducaoResponse {
 
     private UUID id;
     private Integer numero;
+    private String identificador;
     private UUID produtoId;
     private String nomeProduto;
     private TipoProduto tipoProduto;

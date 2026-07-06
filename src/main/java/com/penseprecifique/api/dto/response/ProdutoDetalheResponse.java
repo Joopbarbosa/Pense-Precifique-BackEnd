@@ -15,6 +15,7 @@ public class ProdutoDetalheResponse {
 
     private UUID id;
     private Integer numero;
+    private String identificador;
     private String nome;
     private TipoProduto tipo;
     private String descricao;

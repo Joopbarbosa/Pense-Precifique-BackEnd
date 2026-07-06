@@ -4,6 +4,7 @@ import com.penseprecifique.api.domain.entity.Cliente;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.dto.request.ClienteRequest;
 import com.penseprecifique.api.dto.response.ClienteResponse;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -15,6 +16,7 @@ public class ClienteMapper {
         ClienteResponse response = new ClienteResponse();
         response.setId(cliente.getId());
         response.setNumero(cliente.getNumero());
+        response.setIdentificador(IdentificadorFormatter.formatar("CLI", cliente.getNumero()));
         response.setNome(cliente.getNome());
         response.setEmail(cliente.getEmail());
         response.setWhatsapp(cliente.getWhatsapp());

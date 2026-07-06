@@ -4,6 +4,7 @@ import com.penseprecifique.api.domain.entity.Catalogo;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.dto.request.CatalogoRequest;
 import com.penseprecifique.api.dto.response.CatalogoResponse;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -13,6 +14,7 @@ public class CatalogoMapper {
         CatalogoResponse response = new CatalogoResponse();
         response.setId(catalogo.getId());
         response.setNumero(catalogo.getNumero());
+        response.setIdentificador(IdentificadorFormatter.formatar("CTG", catalogo.getNumero()));
         response.setNome(catalogo.getNome());
         response.setMargem(catalogo.getMargem());
         response.setAtivo(catalogo.getAtivo());

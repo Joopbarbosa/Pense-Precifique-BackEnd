@@ -8,6 +8,7 @@ import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.dto.response.ProdutoRelacionadoResponse;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -20,6 +21,7 @@ public class InsumoMapper {
         return new InsumoResponseDTO(
                 insumo.getId(),
                 insumo.getNumero(),
+                IdentificadorFormatter.formatar("INS", insumo.getNumero()),
                 insumo.getNome(),
                 insumo.getMarca(),
                 insumo.getUnidadeMedida(),

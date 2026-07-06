@@ -9,6 +9,7 @@ import com.penseprecifique.api.dto.response.FichaTecnicaItemResponse;
 import com.penseprecifique.api.dto.response.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.dto.response.ProdutoDetalheResponse;
 import com.penseprecifique.api.dto.response.ProdutoResponse;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ public class ProdutoMapper {
         ProdutoResponse response = new ProdutoResponse();
         response.setId(produto.getId());
         response.setNumero(produto.getNumero());
+        response.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
         response.setNome(produto.getNome());
         response.setTipo(produto.getTipo());
         response.setPrecoVenda(produto.getPrecoVenda());
@@ -41,6 +43,7 @@ public class ProdutoMapper {
         ProdutoDetalheResponse response = new ProdutoDetalheResponse();
         response.setId(produto.getId());
         response.setNumero(produto.getNumero());
+        response.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
         response.setNome(produto.getNome());
         response.setTipo(produto.getTipo());
         response.setDescricao(produto.getDescricao());
