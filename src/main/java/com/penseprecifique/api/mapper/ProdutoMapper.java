@@ -52,6 +52,9 @@ public class ProdutoMapper {
         response.setEstoqueAtual(produto.getEstoqueAtual());
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
         response.setAtivo(produto.getAtivo());
+        // RN-051 — cálculo trivial de agregação sobre dado já mapeado por item, sem ramificação de regra de negócio.
+        response.setAlgumInsumoNaoFracionavel(itens.stream()
+                .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel())));
         response.setFichaTecnica(itens.stream().map(this::toFichaTecnicaItemResponse).toList());
         response.setCreatedAt(produto.getCreatedAt());
         response.setUpdatedAt(produto.getUpdatedAt());
