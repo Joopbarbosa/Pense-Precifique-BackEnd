@@ -1,88 +1,89 @@
 # Pense & Precifique — Contexto do Back-End
 
-> Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/` (este arquivo
-> está na raiz do projeto, mesmo nível do `pom.xml`).
-> Atualizar a seção "Épicos implementados" a cada épico concluído.
+> **v0** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
+> Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
+> Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
 
 ---
 
 ## Stack
 
 - **Linguagem:** Java 21
-- **Framework:** Spring Boot 3
+- **Framework:** Spring Boot 3.3.5
 - **Banco:** PostgreSQL 16 (Docker)
-- **Autenticação:** JWT stateless
-- **Migrations:** Flyway (`V1__`, `V2__`... em `resources/db/migration/`)
+- **Autenticação:** JWT stateless (HS512)
+- **Migrations:** Flyway — V1__, V2__ em `resources/db/migration/`
+- **PDF:** OpenHTMLToPDF + Thymeleaf (PdfMapper pattern)
 - **Documentação:** Springdoc OpenAPI (Swagger) — apenas em `dev`
-- **Build:** Maven
+- **Build:** Maven (`./mvnw`)
 
 ---
 
-## Ambientes
+## Como subir
 
-| Profile | Como subir | Swagger | Logs |
-|---------|-----------|---------|------|
-| `dev` | `docker-compose up` | ✅ `/swagger-ui.html` | DEBUG |
-| `prod` | VPS (Skill 9) | ❌ desabilitado | INFO |
+```bash
+cd "/home/joaobarbosa/Documentos/Projetos/Pense & Precifique"
+docker compose up --build
+```
+
+| Profile | Swagger | Logs |
+|---------|---------|------|
+| `dev` | ✅ `/swagger-ui.html` | DEBUG |
+| `prod` | ❌ desabilitado | INFO |
+
+**Conta de teste:** `penseprecifique@admin.com` / `senha12345`
 
 ---
 
 ## Convenções obrigatórias
 
-- **Chaves primárias:** UUID (`uuid_generate_v4()`)
-- **Soft delete:** coluna `deleted_at` em todas as entidades — nunca `repository.delete()`
+- **PKs:** UUID
+- **Soft delete:** coluna `deleted_at` — nunca `repository.delete()`
 - **Tabelas/colunas:** `snake_case`
-- **DTOs:** separados em `request/` e `response/` — nunca expor entidade diretamente
-- **Service:** sempre interface + impl (`XxxService` + `XxxServiceImpl`)
-- **Regras de negócio:** implementadas no `Service`, nunca no `Controller`
-- **Mapper:** MapStruct — nunca converter manualmente dentro do Controller
-
+- **DTOs:** `dto/request/` e `dto/response/` — nunca expor entidade
+- **Service:** classe concreta com `@Service` (a partir do Épico 6 — sem interface+impl)
+- **Regras de negócio:** no Service, nunca no Controller
+- **Mapper:** classe concreta `@Component` com setters manuais — **não MapStruct**, apesar de versão anterior deste documento dizer o contrário. Confirmado por investigação em 2026-07-05 (execução do P-004/EP-04): nenhum `@Mapping`/`org.mapstruct` no projeto, todos os Mappers existentes seguem esse padrão manual. Corrigido aqui pra próximos prompts não inventarem convenção nova no meio do projeto.
+- **usuarioId:** sempre via `SecurityContextHolder` — nunca receber no body
+- Toda correção de bug ou tarefa de tech debt termina com commit + push antes de considerar o chat encerrado — mesmo sem fechamento de épico. Branch sempre `main`: `git push origin main`. Nunca deixar mudança sem commit entre chats.
 ---
 
 ## Estrutura de pacotes
 
 ```
 com/penseprecifique/api/
-├── config/          # SecurityConfig, CorsConfig, OpenApiConfig, JwtConfig
-├── controller/      # um Controller por entidade
-├── service/         # interface + impl/
-├── repository/      # um Repository por entidade
+├── config/           # SecurityConfig, CorsConfig, OpenApiConfig, JwtConfig
+├── controller/       # um Controller por entidade
+├── service/          # classes concretas @Service
+├── repository/       # um Repository por entidade
 ├── domain/
-│   ├── entity/      # entidades JPA
-│   └── enums/       # TipoProduto, StatusOrcamento, TipoMovimentacao, etc.
+│   ├── entity/       # entidades JPA
+│   └── enums/        # TipoProduto, StatusOrcamento, MetodoPagamento, etc.
 ├── dto/
-│   ├── request/     # DTOs de entrada
-│   └── response/    # DTOs de saída
-├── mapper/          # MapStruct
-├── security/        # JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl
-└── exception/       # GlobalExceptionHandler, exceções customizadas
+│   ├── request/      # DTOs de entrada
+│   ├── response/     # DTOs de saída
+│   └── pdf/          # OrcamentoPdfData, ItemPdfData, ReciboPdfData, ReciboPagamentoPdfData
+├── mapper/           # MapStruct + PdfMapper
+├── security/         # JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl
+└── exception/        # GlobalExceptionHandler, ResourceNotFoundException, BusinessException
 ```
 
 ---
 
-## Modelo de Produto (v4 — unificado; erratas de UI na v6)
+## Modelo de Produto
 
 ```
 TipoProduto enum:
-  PRODUTO       → tem preco_venda, aparece como item principal no orçamento
-  PRODUTO_BASE  → sem preco_venda (constraint no banco), só componente em fichas técnicas
-  CUSTOMIZACAO  → tem preco_venda, aparece como extra ao selecionar produto
+  PRODUTO       → tem preco_venda, item principal no orçamento
+  PRODUTO_BASE  → sem preco_venda, só componente em fichas técnicas
+  CUSTOMIZACAO  → tem preco_venda, extra ao selecionar produto
 ```
 
-**Constraint crítica no banco:**
+**Constraint no banco:**
 ```sql
 CONSTRAINT chk_preco_venda_tipo
   CHECK (tipo = 'PRODUTO_BASE' OR preco_venda IS NOT NULL)
 ```
-
-**Errata v6 — Cores de badge por tipo de produto** (estava invertida entre Produto e
-Produto Base nas versões anteriores; usar helper compartilhado `src/utils/badges.ts` no front):
-
-| Tipo | Cor do badge |
-|------|-------------|
-| Produto | **Azul** |
-| Produto Base | **Cinza** |
-| Customização | **Teal** |
 
 ---
 
@@ -92,129 +93,107 @@ Produto Base nas versões anteriores; usar helper compartilhado `src/utils/badge
 RASCUNHO → ENVIADO → APROVADO
   → [AGUARDANDO_SINAL] → [SINAL_PAGO]   (só quando sinal_ativo = true)
   → EM_PRODUCAO → FINALIZADO → ENTREGUE → PAGO
-  → [CANCELADO]  (disponível em todos os status, regras distintas por faixa)
+  → [CANCELADO]  (disponível em todos os status)
 ```
 
-**Novo v6 (RN-032, RN-033):**
-- `prazo_producao_dias`, `inicio_assim_que_aprovado`, `data_inicio_estimada` são informados
-  na criação do orçamento (Seção 3, Bloco B).
-- `data_aprovacao` é preenchida automaticamente quando o status avança para `APROVADO`.
+`data_aprovacao` é preenchida automaticamente quando status → APROVADO (RN-033).
 
 ---
 
-## PDFs gerados (PdfService)
+## PdfMapper Pattern (CRÍTICO)
 
-| PDF | Trigger |
-|-----|---------|
-| Orçamento | Download manual na tela de preview |
-| Recibo do sinal | Ao confirmar recebimento do sinal |
-| PDF de multa | Ao cancelar em EM_PRODUCAO ou FINALIZADO com multa |
-| Recibo de pagamento | Automaticamente ao avançar para PAGO |
-| Recibo de estorno | Ao cancelar com status SINAL_PAGO e optar por devolver |
+Toda formatação de dados para PDF acontece no Java — templates são "burros".
 
-**Novo v6:** todos os PDFs (exceto o de orçamento, que sempre exibe prazo) passam a
-exibir, na seção Datas: prazo de produção (dias úteis), início estimado (data ou
-"Assim que aprovado") e data de aprovação (quando já preenchida).
+```java
+// PdfService chama:
+ctx.setVariable("dados", pdfMapper.toOrcamentoPdfData(orc, empresa, cliente));
+
+// Template só usa:
+${dados.nomeCliente}
+${dados.numeroFormatado}
+${dados.total}
+```
+
+**Nunca** usar SpEL complexo, `T(String)`, `#dates`, `padStart` ou navegação em relacionamentos nos templates Thymeleaf. Qualquer lógica vai no PdfMapper.
 
 ---
 
-## Endpoints principais
+## Endpoints implementados
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
 | POST | /auth/login | Login |
 | POST | /auth/register | Cadastro |
-| GET/PUT | /usuarios/me | Dados do usuário logado / alterar senha |
+| GET/PUT | /usuarios/me | Dados do usuário / alterar senha |
 | GET/PUT | /empresa | Perfil da empresa |
-| GET/PUT | /configuracoes/precificacao | Configurações de preço |
-| GET/POST | /clientes | Lista (paginada) e cria clientes |
+| GET/PUT | /configuracoes/precificacao | Configurações de precificação |
+| GET/POST | /clientes | Lista paginada e cria |
 | GET/PUT/DELETE | /clientes/{id} | Detalhe, edita, inativa |
-| GET/POST | /insumos | Lista (paginada) e cria insumos |
-| POST | /insumos/{id}/baixa-manual | Baixa manual de insumo (observação obrigatória mín. 50 chars — RN-035) |
-| GET | /insumos/{id}/movimentacoes | Histórico do insumo (paginado) |
-| POST | /lotes-compra | Registra compra de insumos em lote (RN-036) |
-| GET/POST | /produtos | Lista (paginada) e cria produtos |
+| GET/POST | /insumos | Lista paginada e cria |
+| POST | /insumos/{id}/baixa-manual | Baixa manual (obs mín. 50 chars — RN-035) |
+| GET | /insumos/{id}/movimentacoes | Histórico paginado |
+| GET | /insumos/{id}/produtos-relacionados | Lista produtos cuja ficha técnica usa o insumo |
+| POST | /lotes-compra | Registra compra em lote (RN-036) |
+| GET/POST | /produtos | Lista paginada e cria |
 | GET/PUT | /produtos/{id} | Detalhe e edita |
-| POST | /produtos/{id}/baixa-manual | Baixa manual de produto (observação obrigatória mín. 50 chars — RN-035) |
-| GET | /produtos/{id}/movimentacoes | Histórico do produto (paginado) |
-| GET/POST | /producoes | Lista (paginada) e lança produção |
-| GET | /producoes/{id} | Detalhe da produção |
-| POST | /producoes/{id}/cancelar | Cancela produção e reverte estoque (RN-037) |
-| GET/POST | /orcamentos | Lista (paginada) e cria orçamentos |
-| GET | /orcamentos/{id} | Detalhe do orçamento |
-| POST | /orcamentos/{id}/avancar-status | Transição de status (registra data_aprovacao em APROVADO — RN-033) |
-| POST | /orcamentos/{id}/cancelar | Cancela orçamento (wizard varia por status) |
-| GET | /orcamentos/{id}/pdf | Download PDF do orçamento |
-| GET | /orcamentos/{id}/recibo-sinal | Download recibo do sinal |
-| GET | /orcamentos/{id}/recibo-pagamento | Download recibo completo |
-| GET | /orcamentos/{id}/pdf-multa | Download PDF de multa |
-| GET | /orcamentos/{id}/recibo-estorno | Download recibo de estorno do sinal |
+| POST | /produtos/{id}/baixa-manual | Baixa manual (obs mín. 50 chars — RN-035) |
+| GET | /produtos/{id}/movimentacoes | Histórico paginado |
+| GET/POST | /producoes | Lista paginada e lança produção |
+| GET | /producoes/{id} | Detalhe |
+| POST | /producoes/{id}/cancelar | Cancela + reverte estoque (RN-037) |
+| GET/POST | /orcamentos | Lista paginada e cria |
+| GET | /orcamentos/{id} | Detalhe |
+| POST | /orcamentos/{id}/avancar-status | Transição de status |
+| POST | /orcamentos/{id}/cancelar | Cancela (wizard por status) |
+| GET | /orcamentos/{id}/pdf | PDF do orçamento |
+| GET | /orcamentos/{id}/recibo-sinal | Recibo do sinal |
+| GET | /orcamentos/{id}/recibo-pagamento | Recibo de pagamento |
+| GET | /orcamentos/{id}/pdf-multa | PDF de multa |
+| GET | /orcamentos/{id}/recibo-estorno | Recibo de estorno do sinal |
+| GET | /dashboard | Resumo consolidado da conta |
 
 ---
 
-## Paginação "Carregar mais" (RN-034)
+## Épicos implementados ✅
 
-Todas as listagens (Insumos, Produtos, Clientes, Orçamentos, Registro de Produção,
-históricos de movimentação) retornam 20 itens por página, com cursor/offset para
-"Carregar mais". Qualquer filtro, busca ou ordenação reseta para a primeira página.
+- [x] Épico 0 — Setup do Projeto e Schema
+- [x] Épico 1 — Autenticação
+- [x] Épico 2 — Configurações
+- [x] Épico 3 — Insumos
+- [x] Épico 3.1 — Compras em Lote (RN-036)
+- [x] Épico 4 — Produtos
+- [x] Épico 5 — Clientes
+- [x] Épico 6 — Registro de Produção (incl. cancelamento RN-037)
+- [x] Épico 7 — Orçamentos (incl. todos os PDFs)
+- [x] Épico 8 — Dashboard
+
+---
+
+## Migrations ativas
+
+| Versão | Arquivo | Descrição |
+|--------|---------|-----------|
+| V1 | V1__initial_schema.sql | Schema completo |
+| V2 | V2__allow_null_insumo_id_producao_consumidos.sql | Permite insumo_id null |
+
+---
+
+## Aprendizados críticos
+
+| Regra | Contexto |
+|-------|----------|
+| Serialização JSON é camelCase (default Spring/Jackson) — nunca configurar snake_case | Confirmado via investigação: todos os DTOs (Dashboard, Produtos, Insumos, Clientes) já saem consistentes em camelCase sem `@JsonNaming`. Manter assim — qualquer mudança para snake_case quebra o frontend inteiro silenciosamente. |
+| DTO de resposta precisa expor todos os campos persistidos | `OrcamentoDetalheResponse` não incluía `percentualMulta`, `cancelamentoTipo`, `estornoSinal`, `dataEstornoSinal` — campos persistiam no banco mas a API retornava `null`, causando falha silenciosa no frontend (botão "PDF de multa" nunca aparecia). Ao adicionar campo a entidade JPA, verificar DTO de resposta e mapper imediatamente. |
+| Regra de negócio replicada em múltiplos fluxos precisa cobertura explícita em cada um | RN-006 (insumo fracionável) estava coberta em baixa manual e compra em lote, mas não em `FichaTecnicaItem` — regra existir em um lugar não garante que foi aplicada em todos os pontos de entrada. |
 
 ---
 
 ## Padrão de commits
 
 ```
-feat(escopo): descrição    → nova funcionalidade
-fix(escopo): descrição     → correção de bug
-test(escopo): descrição    → testes
-chore(escopo): descrição   → configuração e infra
-
-Exemplos:
-feat(produto): adiciona ProdutoService com RN-021 e RN-022
-feat(orcamento): implementa transição de status RASCUNHO → ENVIADO
-test(producao): cenários BDD 56 e 57 — produção por tipo
+feat(escopo): nova funcionalidade
+fix(escopo): correção de bug
+refactor(escopo): refatoração
+chore(escopo): configuração/infra
 ```
 
----
-
-## Documentos de referência
-
-| Documento | Onde | Finalidade |
-|-----------|------|-----------|
-| `PRD_Pense_Precifique_v6.md` | `claude/` | Escopo, épicos, fluxos |
-| `BUSINESS_RULES_Pense_Precifique_v6.md` | `claude/` | Entidades, RN-001 a RN-037 |
-| `SCENARIOS_Pense_Precifique_v6.md` | `claude/` | 84 cenários BDD |
-| `src/main/resources/db/migration/V1__initial_schema.sql` | raiz do projeto | Schema validado do banco |
-| `claude/prompts/BACKLOG.md` | `claude/prompts/` | Índice vivo da implementação (Skill 7) |
-
----
-
-## Épicos implementados
-
-*(Atualizado pela Skill 7 a cada épico concluído)*
-
-- [x] Épico 0 — Setup do Projeto e Schema
-- [x] Épico 1 — Autenticação
-- [x] Épico 2 — Configurações
-- [ ] Épico 3 — Insumos
-- [ ] Épico 3.1 — Compras de Insumos em Lote (RN-036)
-- [ ] Épico 4 — Produtos
-- [ ] Épico 5 — Clientes
-- [ ] Épico 6 — Registro de Produção (incl. cancelamento RN-037)
-- [ ] Épico 7 — Orçamentos
-- [ ] Épico 8 — Dashboard
-
----
-
-## Decisões técnicas registradas
-
-| Data | Decisão | Motivo |
-|------|---------|--------|
-| 2026-06-10 | JWT stateless | SaaS single-tenant, sem necessidade de OAuth social |
-| 2026-06-10 | Organização por camada | Projeto de porte médio, preferência do time |
-| 2026-06-10 | Produto unificado com enum tipo | Elimina entidade Customização separada |
-| 2026-06-10 | Soft delete universal | Rastreabilidade de dados para o negócio da artesã |
-| 2026-06-14 | Observação obrigatória (mín. 50 chars) para qualquer motivo de baixa manual (RN-035) | Substitui RN-024; rastreabilidade de ajustes manuais de estoque |
-| 2026-06-14 | Compras de insumos centralizadas em lote via carrinho (RN-036) | Simplicidade de UX; recalcula custo unitário automaticamente |
-| 2026-06-14 | Cancelamento de produção com reversão de estoque e estorno no histórico (RN-037) | Permite corrigir lançamentos errados sem editar histórico original |
-| 2026-06-14 | Paginação "Carregar mais" (20 itens) em todas as listagens (RN-034) | Performance e consistência de UX |
-| 2026-06-14 | Prazo de produção e data de aprovação automática no orçamento (RN-032, RN-033) | Visibilidade de prazos para a artesã e o cliente nos PDFs |
