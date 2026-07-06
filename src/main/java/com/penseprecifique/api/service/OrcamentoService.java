@@ -274,15 +274,18 @@ public class OrcamentoService {
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                 for (OrcamentoItem item : itensParaBaixa) {
                     Produto produto = item.getItemCatalogo().getProduto();
+                    // RN-049: baixa = quantidade do orçamento × quantidade_pacote do ItemCatalogo
+                    BigDecimal quantidadeBaixa = BigDecimal.valueOf(
+                            (long) item.getQuantidade() * item.getItemCatalogo().getQuantidadePacote());
                     produto.setEstoqueAtual(produto.getEstoqueAtual()
-                            .subtract(BigDecimal.valueOf(item.getQuantidade())));
+                            .subtract(quantidadeBaixa));
                     produtoRepository.save(produto);
 
                     movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
                             .produto(produto)
                             .tipo(TipoMovimentacaoProduto.SAIDA)
                             .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
-                            .quantidade(BigDecimal.valueOf(item.getQuantidade()))
+                            .quantidade(quantidadeBaixa)
                             .referenciaId(orcamento.getId())
                             .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
                             .estornada(false)
@@ -388,15 +391,18 @@ public class OrcamentoService {
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         for (OrcamentoItem item : itens) {
             Produto produto = item.getItemCatalogo().getProduto();
+            // RN-049: reversão espelha a baixa (quantidade × quantidade_pacote)
+            BigDecimal quantidadeReversao = BigDecimal.valueOf(
+                    (long) item.getQuantidade() * item.getItemCatalogo().getQuantidadePacote());
             produto.setEstoqueAtual(produto.getEstoqueAtual()
-                    .add(BigDecimal.valueOf(item.getQuantidade())));
+                    .add(quantidadeReversao));
             produtoRepository.save(produto);
 
             movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
                     .produto(produto)
                     .tipo(TipoMovimentacaoProduto.ENTRADA)
                     .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
-                    .quantidade(BigDecimal.valueOf(item.getQuantidade()))
+                    .quantidade(quantidadeReversao)
                     .observacao(motivo)
                     .referenciaId(orcamento.getId())
                     .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
