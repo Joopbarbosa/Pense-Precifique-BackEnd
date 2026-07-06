@@ -71,8 +71,8 @@ public class OrcamentoMapper {
     public OrcamentoItemResponse toItemResponse(OrcamentoItem item, List<OrcamentoItemCustomizacao> customizacoes) {
         OrcamentoItemResponse response = new OrcamentoItemResponse();
         response.setId(item.getId());
-        response.setProdutoId(item.getProduto().getId());
-        response.setNomeProduto(item.getProduto().getNome());
+        response.setProdutoId(item.getItemCatalogo().getProduto().getId());
+        response.setNomeProduto(item.getItemCatalogo().getProduto().getNome());
         response.setQuantidade(item.getQuantidade());
         response.setPrecoUnitario(item.getPrecoUnitario());
         response.setSubtotal(item.getSubtotal());

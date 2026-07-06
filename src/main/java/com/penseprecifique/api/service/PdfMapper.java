@@ -115,7 +115,7 @@ public class PdfMapper {
         }
         return itens.stream()
             .map(item -> ItemPdfData.builder()
-                .nomeProduto(item.getProduto() != null ? item.getProduto().getNome() : "—")
+                .nomeProduto(item.getItemCatalogo() != null ? item.getItemCatalogo().getProduto().getNome() : "—")
                 .customizacoes("—")
                 .quantidade(item.getQuantidade() != null ? item.getQuantidade().toString() : "—")
                 .precoUnitario(item.getPrecoUnitario() != null ? formatarMoeda(item.getPrecoUnitario()) : "—")
