@@ -3,6 +3,7 @@ package com.penseprecifique.api.mapper;
 import com.penseprecifique.api.domain.entity.Orcamento;
 import com.penseprecifique.api.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.domain.entity.OrcamentoItemCustomizacao;
+import com.penseprecifique.api.domain.entity.Produto;
 import com.penseprecifique.api.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.dto.response.OrcamentoItemCustomizacaoResponse;
@@ -71,8 +72,14 @@ public class OrcamentoMapper {
     public OrcamentoItemResponse toItemResponse(OrcamentoItem item, List<OrcamentoItemCustomizacao> customizacoes) {
         OrcamentoItemResponse response = new OrcamentoItemResponse();
         response.setId(item.getId());
-        response.setProdutoId(item.getItemCatalogo().getProduto().getId());
-        response.setNomeProduto(item.getItemCatalogo().getProduto().getNome());
+        Produto produtoVendido = item.getProdutoVendido();
+        response.setProdutoId(produtoVendido.getId());
+        response.setNomeProduto(produtoVendido.getNome());
+        if (item.getItemCatalogo() != null) {
+            response.setItemCatalogoId(item.getItemCatalogo().getId());
+        } else {
+            response.setMargemAplicada(item.getMargemAplicada());
+        }
         response.setQuantidade(item.getQuantidade());
         response.setPrecoUnitario(item.getPrecoUnitario());
         response.setSubtotal(item.getSubtotal());

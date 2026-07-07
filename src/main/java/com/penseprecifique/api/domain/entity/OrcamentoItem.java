@@ -24,9 +24,17 @@ public class OrcamentoItem {
     @JoinColumn(name = "orcamento_id", nullable = false)
     private Orcamento orcamento;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "item_catalogo_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "item_catalogo_id")
     private ItemCatalogo itemCatalogo;
+
+    /** RN-054 — origem alternativa ao Catálogo: produto vendido avulso, com margem aplicada no momento da venda. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "produto_id")
+    private Produto produto;
+
+    @Column(name = "margem_aplicada", precision = 5, scale = 2)
+    private BigDecimal margemAplicada;
 
     @Column(name = "quantidade", nullable = false)
     @Builder.Default
@@ -44,5 +52,10 @@ public class OrcamentoItem {
     @PrePersist
     void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();
+    }
+
+    /** RN-054 — produto vendido, seja via Catálogo (item_catalogo) ou avulso (produto direto). */
+    public Produto getProdutoVendido() {
+        return itemCatalogo != null ? itemCatalogo.getProduto() : produto;
     }
 }

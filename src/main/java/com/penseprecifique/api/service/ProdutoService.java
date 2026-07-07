@@ -10,6 +10,7 @@ import com.penseprecifique.api.domain.enums.TipoProduto;
 import com.penseprecifique.api.dto.request.BaixaManualProdutoRequest;
 import com.penseprecifique.api.dto.request.ProdutoRequest;
 import com.penseprecifique.api.dto.response.MovimentacaoProdutoResponse;
+import com.penseprecifique.api.dto.response.PrecoSugeridoResponse;
 import com.penseprecifique.api.dto.response.ProdutoDetalheResponse;
 import com.penseprecifique.api.dto.response.ProdutoResponse;
 import com.penseprecifique.api.exception.BusinessException;
@@ -169,6 +170,19 @@ public class ProdutoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
         produto.setDeletedAt(LocalDateTime.now());
         produtoRepository.save(produto);
+    }
+
+    /**
+     * RN-054 — preço sugerido de um produto avulso (sem Catálogo) dada uma margem informada na hora.
+     * Reaproveita o custo_unitario já calculado e persistido no produto (RN-039) — não recalcula ficha técnica.
+     */
+    @Transactional(readOnly = true)
+    public PrecoSugeridoResponse calcularPrecoSugeridoAvulso(UUID produtoId, BigDecimal margem) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        BigDecimal precoSugerido = calcularPrecoSugerido(produto.getPrecoCusto(), margem);
+        return new PrecoSugeridoResponse(produto.getPrecoCusto(), margem, precoSugerido);
     }
 
     @Transactional(readOnly = true)

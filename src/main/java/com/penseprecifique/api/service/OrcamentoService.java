@@ -126,28 +126,53 @@ public class OrcamentoService {
         BigDecimal subtotalOrcamento = BigDecimal.ZERO;
 
         for (OrcamentoItemRequest itemReq : request.getItens()) {
-            // RN-045 + RN-046 — item só entra no orçamento se produto e catálogo estiverem ativos.
-            ItemCatalogo itemCatalogo = buscarItemCatalogoParaVenda(itemReq.getItemCatalogoId(), usuarioId);
+            validarOrigemItem(itemReq);
 
-            // RN-048 — snapshot do preço de venda no momento exato da adição. Por ser uma cópia
-            // (não referência viva), nenhuma edição futura no catálogo/produto/margem altera este valor.
-            BigDecimal precoUnitario = itemCatalogo.getPrecoVenda();
-            BigDecimal subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
+            OrcamentoItem item;
+            BigDecimal subtotalItem;
 
-            OrcamentoItem item = OrcamentoItem.builder()
-                    .orcamento(orcamento)
-                    .itemCatalogo(itemCatalogo)
-                    .quantidade(itemReq.getQuantidade())
-                    .precoUnitario(precoUnitario)
-                    .subtotal(subtotalItem)
-                    .build();
-            item = orcamentoItemRepository.save(item);
+            if (itemReq.getItemCatalogoId() != null) {
+                // RN-045 + RN-046 — item só entra no orçamento se produto e catálogo estiverem ativos.
+                ItemCatalogo itemCatalogo = buscarItemCatalogoParaVenda(itemReq.getItemCatalogoId(), usuarioId);
 
-            // RN-048 — customizações fixas do pacote entram automaticamente (sem ação da artesã),
-            // cada uma com snapshot do preço de venda do produto CUSTOMIZACAO correspondente.
-            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(itemCatalogo.getId())) {
-                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
-                subtotalItem = subtotalItem.add(salvarCustomizacao(item, fixa.getProduto(), quantidade));
+                // RN-048 — snapshot do preço de venda no momento exato da adição. Por ser uma cópia
+                // (não referência viva), nenhuma edição futura no catálogo/produto/margem altera este valor.
+                BigDecimal precoUnitario = itemCatalogo.getPrecoVenda();
+                subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
+
+                item = OrcamentoItem.builder()
+                        .orcamento(orcamento)
+                        .itemCatalogo(itemCatalogo)
+                        .quantidade(itemReq.getQuantidade())
+                        .precoUnitario(precoUnitario)
+                        .subtotal(subtotalItem)
+                        .build();
+                item = orcamentoItemRepository.save(item);
+
+                // RN-048 — customizações fixas do pacote entram automaticamente (sem ação da artesã),
+                // cada uma com snapshot do preço de venda do produto CUSTOMIZACAO correspondente.
+                for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(itemCatalogo.getId())) {
+                    int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
+                    subtotalItem = subtotalItem.add(salvarCustomizacao(item, fixa.getProduto(), quantidade));
+                }
+            } else {
+                // RN-054 — produto avulso (sem Catálogo): preco_unitario é o snapshot definitivo informado
+                // na hora, nunca recalculado depois mesmo que margem_padrao das Configurações mude.
+                Produto produtoAvulso = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(itemReq.getProdutoId(), usuarioId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+
+                BigDecimal precoUnitario = itemReq.getPrecoUnitario();
+                subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
+
+                item = OrcamentoItem.builder()
+                        .orcamento(orcamento)
+                        .produto(produtoAvulso)
+                        .margemAplicada(itemReq.getMargemAplicada())
+                        .quantidade(itemReq.getQuantidade())
+                        .precoUnitario(precoUnitario)
+                        .subtotal(subtotalItem)
+                        .build();
+                item = orcamentoItemRepository.save(item);
             }
 
             // RN-030 (inalterado) — customizações ad-hoc adicionadas manualmente coexistem com as fixas.
@@ -179,6 +204,22 @@ public class OrcamentoService {
         orcamento = orcamentoRepository.save(orcamento);
 
         return montarDetalhe(orcamento);
+    }
+
+    /**
+     * RN-054 — a origem do item é XOR: itemCatalogoId (Catálogo) ou produtoId (avulso), nunca os dois nem nenhum.
+     * Item avulso exige precoUnitario informado (snapshot definitivo, não recalculado depois).
+     */
+    private void validarOrigemItem(OrcamentoItemRequest itemReq) {
+        boolean temCatalogo = itemReq.getItemCatalogoId() != null;
+        boolean temProduto = itemReq.getProdutoId() != null;
+        if (temCatalogo == temProduto) {
+            throw new BusinessException(
+                    "Cada item do orçamento deve ter exatamente uma origem: itemCatalogoId (Catálogo) ou produtoId (avulso).");
+        }
+        if (temProduto && itemReq.getPrecoUnitario() == null) {
+            throw new BusinessException("O preço unitário é obrigatório para item avulso (sem Catálogo).");
+        }
     }
 
     /**
@@ -274,10 +315,8 @@ public class OrcamentoService {
             case EM_PRODUCAO:
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                 for (OrcamentoItem item : itensParaBaixa) {
-                    Produto produto = item.getItemCatalogo().getProduto();
-                    // RN-049: baixa = quantidade do orçamento × quantidade_pacote do ItemCatalogo
-                    BigDecimal quantidadeBaixa = BigDecimal.valueOf(
-                            (long) item.getQuantidade() * item.getItemCatalogo().getQuantidadePacote());
+                    Produto produto = item.getProdutoVendido();
+                    BigDecimal quantidadeBaixa = calcularQuantidadeMovimentacao(item);
                     produto.setEstoqueAtual(produto.getEstoqueAtual()
                             .subtract(quantidadeBaixa));
                     produtoRepository.save(produto);
@@ -287,8 +326,9 @@ public class OrcamentoService {
                             .tipo(TipoMovimentacaoProduto.SAIDA)
                             .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
                             .quantidade(quantidadeBaixa)
-                            // RN-050: snapshot do catálogo e do preço vendido no orçamento (nunca o valor atual)
-                            .catalogoReferencia(IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero()))
+                            // RN-050: snapshot do catálogo (ou "venda sem catálogo") e do preço vendido no
+                            // orçamento (nunca o valor atual)
+                            .catalogoReferencia(catalogoReferenciaMovimentacao(item))
                             .precoVendido(item.getPrecoUnitario())
                             .referenciaId(orcamento.getId())
                             .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
@@ -394,10 +434,9 @@ public class OrcamentoService {
     private void reverterEstoque(Orcamento orcamento, String motivo) {
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         for (OrcamentoItem item : itens) {
-            Produto produto = item.getItemCatalogo().getProduto();
-            // RN-049: reversão espelha a baixa (quantidade × quantidade_pacote)
-            BigDecimal quantidadeReversao = BigDecimal.valueOf(
-                    (long) item.getQuantidade() * item.getItemCatalogo().getQuantidadePacote());
+            Produto produto = item.getProdutoVendido();
+            // RN-049: reversão espelha a baixa (quantidade × quantidade_pacote, quando aplicável)
+            BigDecimal quantidadeReversao = calcularQuantidadeMovimentacao(item);
             produto.setEstoqueAtual(produto.getEstoqueAtual()
                     .add(quantidadeReversao));
             produtoRepository.save(produto);
@@ -413,6 +452,29 @@ public class OrcamentoService {
                     .estornada(false)
                     .build());
         }
+    }
+
+    /**
+     * RN-049 — baixa/reversão de estoque: quantidade do orçamento × quantidade_pacote quando o item vem
+     * de um ItemCatalogo. RN-054 — item avulso (sem Catálogo) não tem quantidade_pacote: baixa é direto
+     * pela quantidade do orçamento.
+     */
+    private BigDecimal calcularQuantidadeMovimentacao(OrcamentoItem item) {
+        if (item.getItemCatalogo() != null) {
+            return BigDecimal.valueOf((long) item.getQuantidade() * item.getItemCatalogo().getQuantidadePacote());
+        }
+        return BigDecimal.valueOf(item.getQuantidade());
+    }
+
+    /**
+     * RN-050 + RN-054 — snapshot da origem do item na movimentação: "{CTG-N}" para Catálogo,
+     * "{PRO-N} - Venda sem catálogo" para produto avulso.
+     */
+    private String catalogoReferenciaMovimentacao(OrcamentoItem item) {
+        if (item.getItemCatalogo() != null) {
+            return IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero());
+        }
+        return IdentificadorFormatter.formatar("PRO", item.getProduto().getNumero()) + " - Venda sem catálogo";
     }
 
     private void validarRegras(OrcamentoRequest request) {

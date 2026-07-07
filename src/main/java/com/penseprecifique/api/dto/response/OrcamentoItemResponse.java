@@ -12,8 +12,12 @@ import java.util.UUID;
 public class OrcamentoItemResponse {
 
     private UUID id;
+    /** RN-054 — preenchido apenas quando a origem do item é o Catálogo. */
+    private UUID itemCatalogoId;
     private UUID produtoId;
     private String nomeProduto;
+    /** RN-054 — preenchido apenas quando a origem do item é produto avulso (sem Catálogo). */
+    private BigDecimal margemAplicada;
     private Integer quantidade;
     private BigDecimal precoUnitario;
     private BigDecimal subtotal;
