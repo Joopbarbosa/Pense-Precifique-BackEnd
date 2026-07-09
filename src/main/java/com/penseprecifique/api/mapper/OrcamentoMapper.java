@@ -10,6 +10,7 @@ import com.penseprecifique.api.dto.response.OrcamentoItemCustomizacaoResponse;
 import com.penseprecifique.api.dto.response.OrcamentoItemResponse;
 import com.penseprecifique.api.dto.response.OrcamentoResponse;
 import com.penseprecifique.api.dto.response.ReciboPagamentoResponse;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -77,6 +78,8 @@ public class OrcamentoMapper {
         response.setNomeProduto(produtoVendido.getNome());
         if (item.getItemCatalogo() != null) {
             response.setItemCatalogoId(item.getItemCatalogo().getId());
+            response.setCatalogoIdentificador(
+                    IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero()));
         } else {
             response.setMargemAplicada(item.getMargemAplicada());
         }
