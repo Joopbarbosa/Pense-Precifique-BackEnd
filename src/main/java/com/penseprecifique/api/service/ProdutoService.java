@@ -84,8 +84,12 @@ public class ProdutoService {
         BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
         response.setCustoTotalLote(custoTotalLote);
 
+        // custoUnitario recalculado ao vivo (não usa produto.getPrecoCusto(), que só é atualizado no save
+        // e fica stale se um insumo/produto base/valorHora mudar depois — bug RN-039 investigado).
+        BigDecimal custoUnitario = calcularCustoUnitario(custoTotalLote, produto.getRendimento());
+        response.setCustoUnitario(custoUnitario);
+
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO) {
-            BigDecimal custoUnitario = calcularCustoUnitario(custoTotalLote, produto.getRendimento());
             response.setPrecoSugerido(calcularPrecoSugerido(custoUnitario, produto.getMargemLucro()));
         }
         return response;
