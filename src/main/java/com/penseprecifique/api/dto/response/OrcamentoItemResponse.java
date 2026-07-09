@@ -16,6 +16,8 @@ public class OrcamentoItemResponse {
     private UUID itemCatalogoId;
     /** Identificador formatado (CTG-N) do catálogo, preenchido junto com itemCatalogoId. */
     private String catalogoIdentificador;
+    /** Nome do catálogo, preenchido junto com itemCatalogoId. */
+    private String catalogoNome;
     private UUID produtoId;
     private String nomeProduto;
     /** RN-054 — preenchido apenas quando a origem do item é produto avulso (sem Catálogo). */

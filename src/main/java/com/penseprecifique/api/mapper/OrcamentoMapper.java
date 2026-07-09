@@ -80,6 +80,7 @@ public class OrcamentoMapper {
             response.setItemCatalogoId(item.getItemCatalogo().getId());
             response.setCatalogoIdentificador(
                     IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero()));
+            response.setCatalogoNome(item.getItemCatalogo().getCatalogo().getNome());
         } else {
             response.setMargemAplicada(item.getMargemAplicada());
         }
