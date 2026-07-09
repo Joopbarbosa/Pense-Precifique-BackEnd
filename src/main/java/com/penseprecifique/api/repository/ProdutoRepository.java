@@ -16,6 +16,12 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
 
     Page<Produto> findByUsuarioIdAndTipoAndDeletedAtIsNull(UUID usuarioId, TipoProduto tipo, Pageable pageable);
 
+    Page<Produto> findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
+            UUID usuarioId, String nome, Pageable pageable);
+
+    Page<Produto> findByUsuarioIdAndTipoAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
+            UUID usuarioId, TipoProduto tipo, String nome, Pageable pageable);
+
     Optional<Produto> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
     List<Produto> findByUsuarioIdAndTipoAndDeletedAtIsNull(UUID usuarioId, TipoProduto tipo);

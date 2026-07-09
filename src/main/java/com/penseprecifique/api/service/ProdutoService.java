@@ -52,10 +52,19 @@ public class ProdutoService {
     private final UsuarioRepository usuarioRepository;
 
     @Transactional(readOnly = true)
-    public Page<ProdutoResponse> listar(TipoProduto tipo, Pageable pageable) {
+    public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
+        boolean temBusca = busca != null && !busca.isBlank();
+        if (tipo != null && temBusca) {
+            return produtoRepository.findByUsuarioIdAndTipoAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, tipo, busca, pageable)
+                    .map(produtoMapper::toResponse);
+        }
         if (tipo != null) {
             return produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo, pageable)
+                    .map(produtoMapper::toResponse);
+        }
+        if (temBusca) {
+            return produtoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, busca, pageable)
                     .map(produtoMapper::toResponse);
         }
         return produtoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable)

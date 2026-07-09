@@ -29,8 +29,9 @@ public class ProdutoController {
     @GetMapping
     public ResponseEntity<Page<ProdutoResponse>> listar(
             @RequestParam(required = false) TipoProduto tipo,
+            @RequestParam(required = false) String busca,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(produtoService.listar(tipo, pageable));
+        return ResponseEntity.ok(produtoService.listar(tipo, busca, pageable));
     }
 
     @GetMapping("/{id}")
