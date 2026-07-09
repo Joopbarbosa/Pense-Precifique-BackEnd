@@ -125,7 +125,7 @@ public class ProducaoService {
                 }
             }
         }
-        if (!insuficientes.isEmpty()) {
+        if (!insuficientes.isEmpty() && !request.isConfirmarEstoqueNegativo()) {
             throw new BusinessException("Estoque insuficiente para os insumos: " + String.join(", ", insuficientes));
         }
 

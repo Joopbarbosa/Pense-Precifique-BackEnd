@@ -27,4 +27,9 @@ public class LancarProducaoRequest {
     private Integer lotes;
 
     private LocalDateTime dataProducao;
+
+    // BUG-06 — permite gravar a produção mesmo com saldo insuficiente de insumo, quando o
+    // usuário confirma explicitamente no modal de aviso (ProducaoService.lancar ainda registra
+    // a baixa normalmente, deixando o estoque do insumo negativo).
+    private boolean confirmarEstoqueNegativo;
 }
