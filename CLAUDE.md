@@ -1,8 +1,9 @@
 # Pense & Precifique — Contexto do Back-End
 
-> **v0** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
+> **v0.2D0** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
 > Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
+> Atualizado em: 2026-07-09 — BUG-BUSCA-PRODUTO corrigido (commit 222b939, pocket de urgentes v0.2.1).
 
 ---
 
@@ -12,7 +13,7 @@
 - **Framework:** Spring Boot 3.3.5
 - **Banco:** PostgreSQL 16 (Docker)
 - **Autenticação:** JWT stateless (HS512)
-- **Migrations:** Flyway — V1__, V2__ em `resources/db/migration/`
+- **Migrations:** Flyway — `resources/db/migration/`, até V9 (V1/V2 na tabela abaixo; V4 em diante do bloco Catálogo — nomes exatos de V3/V7/V8 não confirmados nesta sessão, conferir `ls` antes de assumir)
 - **PDF:** OpenHTMLToPDF + Thymeleaf (PdfMapper pattern)
 - **Documentação:** Springdoc OpenAPI (Swagger) — apenas em `dev`
 - **Build:** Maven (`./mvnw`)
@@ -43,9 +44,17 @@ docker compose up --build
 - **DTOs:** `dto/request/` e `dto/response/` — nunca expor entidade
 - **Service:** classe concreta com `@Service` (a partir do Épico 6 — sem interface+impl)
 - **Regras de negócio:** no Service, nunca no Controller
-- **Mapper:** classe concreta `@Component` com setters manuais — **não MapStruct**, apesar de versão anterior deste documento dizer o contrário. Confirmado por investigação em 2026-07-05 (execução do P-004/EP-04): nenhum `@Mapping`/`org.mapstruct` no projeto, todos os Mappers existentes seguem esse padrão manual. Corrigido aqui pra próximos prompts não inventarem convenção nova no meio do projeto.
+- **Mapper:** classe concreta `@Component` com setters manuais — **não MapStruct**. Confirmado por investigação em 2026-07-05 (P-004/EP-04) e reconfirmado no bloco Catálogo inteiro (P-010, P-011): nenhum `@Mapping`/`org.mapstruct` no projeto.
 - **usuarioId:** sempre via `SecurityContextHolder` — nunca receber no body
+- **FK entre entidades:** `@ManyToOne` + `@JoinColumn` (objeto de relação), nunca UUID cru — confirmado em `Produto`/`Producao`/`ItemCatalogo` (bloco Catálogo).
+- **Numero sequencial:** sempre `INTEGER` + lógica de Service `ORDER BY numero DESC`/`findTopByUsuarioIdOrderByNumeroDesc` — nunca `SERIAL`, nunca ordenar por campo de data mutável (bug corrigido em `ProducaoService`, P-024.1). `UNIQUE(usuario_id, numero)` sempre que a tabela for tocada.
+- **Padrão calculado + override:** campo calculado nunca persistido (`precoSugerido`, `custoTotalLote`), campo persistido + flag `override` booleana quando há edição manual que trava recálculo automático — mas mudança de **custo** nunca recalcula o preço automaticamente, mesmo sem override, só o campo "sugerido" exibido como referência. Usado em: Produto/CUSTOMIZACAO (RN-038a), ItemCatalogo (RN-042). O item avulso do Orçamento (RN-054) usa uma versão simplificada — sem margem viva, é snapshot único no momento da adição, não relação contínua.
+- **XOR entre duas origens/campos:** modelar como CHECK constraint no banco + validação explícita no Service com `BusinessException` clara distinguindo "os dois preenchidos" de "nenhum preenchido" — nunca uma mensagem genérica única pros dois casos. Usado em: `LancarProducaoRequest` (quantidade XOR lotes, RN-051), `OrcamentoItem` (item_catalogo_id XOR produto_id, RN-054).
+- **Exceção:** `BusinessException` genérica com mensagem — não criar tipos novos.
 - Toda correção de bug ou tarefa de tech debt termina com commit + push antes de considerar o chat encerrado — mesmo sem fechamento de épico. Branch sempre `main`: `git push origin main`. Nunca deixar mudança sem commit entre chats.
+- **Se a tarefa tem código no ClickUp (ex. `BUG-06`, task `86e28j4te`), a mensagem de commit referencia o código e o nome da tarefa** — não só uma descrição livre. Padrão: `fix(escopo): descrição — ClickUp BUG-06 / 86e28j4te`.
+- **Todo prompt segue a estrutura fixa de `PADRAO_PROMPTS.md`** (ambiente, comando de commit pronto, conta de teste, checklist de validação) — decidido em 2026-07-09.
+
 ---
 
 ## Estrutura de pacotes
@@ -63,27 +72,32 @@ com/penseprecifique/api/
 │   ├── request/      # DTOs de entrada
 │   ├── response/     # DTOs de saída
 │   └── pdf/          # OrcamentoPdfData, ItemPdfData, ReciboPdfData, ReciboPagamentoPdfData
-├── mapper/           # MapStruct + PdfMapper
+├── mapper/           # @Component manual (NÃO MapStruct, apesar do nome do pacote)
 ├── security/         # JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl
 └── exception/        # GlobalExceptionHandler, ResourceNotFoundException, BusinessException
 ```
 
 ---
 
-## Modelo de Produto
+## Modelo de Produto (atualizado — bloco Catálogo)
 
 ```
 TipoProduto enum:
-  PRODUTO       → tem preco_venda, item principal no orçamento
+  PRODUTO       → NÃO tem mais preco_venda próprio (vem do Catálogo, ou de margem_aplicada
+                  ad-hoc quando vendido avulso no orçamento — RN-054). Tem rendimento,
+                  custoTotalLote, custoUnitario (calculados, RN-039).
   PRODUTO_BASE  → sem preco_venda, só componente em fichas técnicas
-  CUSTOMIZACAO  → tem preco_venda, extra ao selecionar produto
+  CUSTOMIZACAO  → tem preco_venda + margem_lucro (recriada nesta versão), com padrão
+                  calculado+override (RN-038a). Extra ao selecionar produto/item de catálogo.
 ```
 
-**Constraint no banco:**
+**Constraint atualizada (bloco Catálogo):**
 ```sql
-CONSTRAINT chk_preco_venda_tipo
-  CHECK (tipo = 'PRODUTO_BASE' OR preco_venda IS NOT NULL)
+CHECK (tipo <> 'CUSTOMIZACAO' OR preco_venda IS NOT NULL)
+-- PRODUTO e PRODUTO_BASE não exigem mais preco_venda no banco
 ```
+
+**Novos campos em Produto:** `rendimento` (obrigatório se tem ficha técnica), `algum_insumo_nao_fracionavel` (calculado, exposto pra decidir UI de Produção).
 
 ---
 
@@ -97,6 +111,18 @@ RASCUNHO → ENVIADO → APROVADO
 ```
 
 `data_aprovacao` é preenchida automaticamente quando status → APROVADO (RN-033).
+
+**Baixa de estoque acontece na transição EM_PRODUCAO → FINALIZADO**, não antes — se for testar via curl, avançar status até chegar lá antes de checar movimentação.
+
+---
+
+## OrcamentoItem (atualizado — bloco Catálogo + RN-054)
+
+`OrcamentoItem` aceita duas origens, **XOR** (constraint `chk_orcamento_item_origem_xor`):
+- `item_catalogo_id` (FK → itens_catalogo) — fluxo padrão, preço vem do Catálogo (RN-048)
+- `produto_id` + `margem_aplicada` (RN-054, venda avulsa) — preço calculado via `GET /produtos/{id}/preco-sugerido?margem=X`, snapshot gravado em `preco_unitario`, sem margem viva depois
+
+`MovimentacaoProduto.catalogo_referencia` (quando `motivo = ORCAMENTO`): `CTG-N` na origem Catálogo, `"{PRO-N} - Venda sem catálogo"` na origem avulsa — nunca fica nulo.
 
 ---
 
@@ -116,6 +142,8 @@ ${dados.total}
 
 **Nunca** usar SpEL complexo, `T(String)`, `#dates`, `padStart` ou navegação em relacionamentos nos templates Thymeleaf. Qualquer lógica vai no PdfMapper.
 
+**Identificadores sequenciais (`INS-N`/`PRO-N`/`CLI-N`/`CTG-N`) nunca aparecem em PDF** — regra explícita do bloco Catálogo (RN-053). `PdfMapper` não deve expô-los em nenhum DTO de PDF.
+
 ---
 
 ## Endpoints implementados
@@ -132,17 +160,25 @@ ${dados.total}
 | GET/POST | /insumos | Lista paginada e cria |
 | POST | /insumos/{id}/baixa-manual | Baixa manual (obs mín. 50 chars — RN-035) |
 | GET | /insumos/{id}/movimentacoes | Histórico paginado |
-| GET | /insumos/{id}/produtos-relacionados | Lista produtos cuja ficha técnica usa o insumo |
+| GET | /insumos/{id}/produtos-relacionados | Lista produtos cuja ficha técnica usa o insumo (expõe `produtoId`+`identificador`) |
 | POST | /lotes-compra | Registra compra em lote (RN-036) |
-| GET/POST | /produtos | Lista paginada e cria |
-| GET/PUT | /produtos/{id} | Detalhe e edita |
+| GET/POST | /produtos | Lista paginada e cria — `busca` corrigido em 2026-07-09 (commit `222b939`) |
+| GET/PUT | /produtos/{id} | Detalhe e edita — inclui `rendimento`, `custoTotalLote`, `custoUnitario`, `algumInsumoNaoFracionavel` |
+| GET | /produtos/{id}/preco-sugerido?margem=X | **Novo (RN-054)** — preço sugerido de venda avulsa: `{ custoUnitario, margem, precoSugerido }` |
 | POST | /produtos/{id}/baixa-manual | Baixa manual (obs mín. 50 chars — RN-035) |
-| GET | /produtos/{id}/movimentacoes | Histórico paginado |
-| GET/POST | /producoes | Lista paginada e lança produção |
+| GET | /produtos/{id}/movimentacoes | Histórico paginado — inclui `catalogoReferencia`/`precoVendido` quando `motivo=ORCAMENTO` |
+| GET/POST | /catalogos | **Novo (EP-09)** — lista e cria catálogo |
+| GET/PUT | /catalogos/{id} | **Novo (EP-09)** — detalhe (com itens) e edita |
+| POST | /catalogos/{id}/duplicar | **Novo (EP-09)** — duplica com overrides preservados (confirmar path exato) |
+| PUT | /catalogos/{id}/ativar-desativar | **Novo (EP-09)** — toggle `ativo` (confirmar path exato) |
+| POST/PUT/DELETE | /catalogos/{id}/itens | **Novo (EP-09)** — CRUD de ItemCatalogo (confirmar path exato) |
+| GET/POST | /producoes | Lista paginada e lança produção — aceita `quantidade` XOR `lotes` (RN-051) |
 | GET | /producoes/{id} | Detalhe |
+| GET | /producoes/preview | **Novo (bloco Catálogo)** — preview de estoque insuficiente antes de confirmar |
 | POST | /producoes/{id}/cancelar | Cancela + reverte estoque (RN-037) |
-| GET/POST | /orcamentos | Lista paginada e cria |
+| GET/POST | /orcamentos | Lista paginada e cria — item aceita `itemCatalogoId` OU `produtoId`+`margemAplicada`+`precoUnitario` (RN-054) |
 | GET | /orcamentos/{id} | Detalhe |
+| GET | /orcamentos/itens/busca | Busca de item de catálogo com filtro opcional por catálogo (EP-07, confirmar path exato) |
 | POST | /orcamentos/{id}/avancar-status | Transição de status |
 | POST | /orcamentos/{id}/cancelar | Cancela (wizard por status) |
 | GET | /orcamentos/{id}/pdf | PDF do orçamento |
@@ -161,11 +197,13 @@ ${dados.total}
 - [x] Épico 2 — Configurações
 - [x] Épico 3 — Insumos
 - [x] Épico 3.1 — Compras em Lote (RN-036)
-- [x] Épico 4 — Produtos
+- [x] Épico 4 — Produtos (v0 + ajuste V0.2D0: custo puro + rendimento)
 - [x] Épico 5 — Clientes
-- [x] Épico 6 — Registro de Produção (incl. cancelamento RN-037)
-- [x] Épico 7 — Orçamentos (incl. todos os PDFs)
+- [x] Épico 6 — Registro de Produção (v0 + ajuste V0.2D0: rendimento + insumo não-fracionável)
+- [x] Épico 7 — Orçamentos (v0 + ajuste V0.2D0: consome Catálogo + venda avulsa RN-054)
 - [x] Épico 8 — Dashboard
+- [x] Épico 9 — Catálogo (novo, V0.2D0)
+- [x] Épico 10 — Identificadores sequenciais (V0.2D0)
 
 ---
 
@@ -173,8 +211,10 @@ ${dados.total}
 
 | Versão | Arquivo | Descrição |
 |--------|---------|-----------|
-| V1 | V1__initial_schema.sql | Schema completo |
+| V1 | V1__initial_schema.sql | Schema completo (v0) |
 | V2 | V2__allow_null_insumo_id_producao_consumidos.sql | Permite insumo_id null |
+| V4+ | (bloco Catálogo) | `rendimento`, `margem_lucro`+`override`, tabelas `catalogos`/`itens_catalogo`/`itens_catalogo_customizacao`, `orcamento_itens.item_catalogo_id`, identificadores sequenciais — **nomes exatos de V3 a V8 não confirmados nesta sessão, conferir `ls db/migration/` antes de escrever a próxima** |
+| V9 | V9__orcamento_item_produto_avulso.sql | `produto_id`+`margem_aplicada` em `orcamento_itens`, CHECK XOR (RN-054) — confirmado |
 
 ---
 
@@ -182,9 +222,17 @@ ${dados.total}
 
 | Regra | Contexto |
 |-------|----------|
-| Serialização JSON é camelCase (default Spring/Jackson) — nunca configurar snake_case | Confirmado via investigação: todos os DTOs (Dashboard, Produtos, Insumos, Clientes) já saem consistentes em camelCase sem `@JsonNaming`. Manter assim — qualquer mudança para snake_case quebra o frontend inteiro silenciosamente. |
-| DTO de resposta precisa expor todos os campos persistidos | `OrcamentoDetalheResponse` não incluía `percentualMulta`, `cancelamentoTipo`, `estornoSinal`, `dataEstornoSinal` — campos persistiam no banco mas a API retornava `null`, causando falha silenciosa no frontend (botão "PDF de multa" nunca aparecia). Ao adicionar campo a entidade JPA, verificar DTO de resposta e mapper imediatamente. |
+| Serialização JSON é camelCase (default Spring/Jackson) — nunca configurar snake_case | Confirmado via investigação: todos os DTOs já saem consistentes em camelCase sem `@JsonNaming`. |
+| DTO de resposta precisa expor todos os campos persistidos | `OrcamentoDetalheResponse` já teve campo persistido no banco mas ausente na API (`percentualMulta`), causando falha silenciosa no frontend. Ao adicionar campo à entidade JPA, verificar DTO de resposta e mapper imediatamente. |
 | Regra de negócio replicada em múltiplos fluxos precisa cobertura explícita em cada um | RN-006 (insumo fracionável) estava coberta em baixa manual e compra em lote, mas não em `FichaTecnicaItem` — regra existir em um lugar não garante que foi aplicada em todos os pontos de entrada. |
+| "Compila limpo" nunca é validação suficiente para Service | Todo bloco Catálogo foi validado via curl com números reais que descartam coincidência (não valores redondos), inclusive casos de rejeição (XOR duplo/vazio). Regra fixa a partir daqui. |
+| Campo calculado exposto em DTO pode ficar "esquecido" se o dev assumir que existe sem checar | `precoSugerido`/`custoUnitario` só têm valor real se o Service que os calcula for de fato chamado no fluxo certo — confirmar sempre via curl, não assumir pela leitura do código. |
+
+---
+
+## Bugs conhecidos
+
+_Nenhum bug de backend em aberto registrado neste documento no momento (`BUG-BUSCA-PRODUTO` corrigido em 2026-07-09, commit `222b939` — ver histórico do ClickUp/git para bugs anteriores)._
 
 ---
 
@@ -196,4 +244,3 @@ fix(escopo): correção de bug
 refactor(escopo): refatoração
 chore(escopo): configuração/infra
 ```
-
