@@ -12,6 +12,7 @@ public record InsumoResponseDTO(
         String marca,
         String unidadeMedida,
         boolean fracionavel,
+        boolean permitirEstoqueNegativo,
         BigDecimal custoUnitario,
         BigDecimal estoqueAtual,
         BigDecimal estoqueMinimo,

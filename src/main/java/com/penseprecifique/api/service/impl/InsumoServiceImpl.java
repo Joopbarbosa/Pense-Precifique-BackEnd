@@ -29,6 +29,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -130,11 +131,13 @@ public class InsumoServiceImpl implements InsumoService {
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
 
-        if (insumo.getEstoqueAtual().compareTo(request.quantidade()) < 0) {
-            throw new BusinessException("Estoque insuficiente para realizar a baixa.");
+        BigDecimal estoqueResultante = insumo.getEstoqueAtual().subtract(request.quantidade());
+        if (estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !insumo.getPermitirEstoqueNegativo()) {
+            throw new BusinessException(
+                    "Estoque insuficiente para " + insumo.getNome() + ". Este insumo não permite estoque negativo.");
         }
 
-        insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(request.quantidade()));
+        insumo.setEstoqueAtual(estoqueResultante);
         insumoRepository.save(insumo);
 
         MovimentacaoInsumo movimentacao = MovimentacaoInsumo.builder()

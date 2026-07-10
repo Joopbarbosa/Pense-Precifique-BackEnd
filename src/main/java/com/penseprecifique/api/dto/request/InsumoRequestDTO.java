@@ -17,6 +17,8 @@ public record InsumoRequestDTO(
 
         Boolean fracionavel,
 
+        Boolean permitirEstoqueNegativo,
+
         @DecimalMin(value = "0", message = "O estoque atual não pode ser negativo")
         BigDecimal estoqueAtual,
 

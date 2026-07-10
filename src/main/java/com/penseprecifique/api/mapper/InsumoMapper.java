@@ -27,6 +27,7 @@ public class InsumoMapper {
                 insumo.getMarca(),
                 insumo.getUnidadeMedida(),
                 insumo.getFracionavel(),
+                insumo.getPermitirEstoqueNegativo(),
                 insumo.getCustoUnitario(),
                 insumo.getEstoqueAtual(),
                 insumo.getEstoqueMinimo(),
@@ -43,6 +44,7 @@ public class InsumoMapper {
                 .marca(request.marca())
                 .unidadeMedida(request.unidadeMedida())
                 .fracionavel(request.fracionavel() != null ? request.fracionavel() : true)
+                .permitirEstoqueNegativo(request.permitirEstoqueNegativo() != null ? request.permitirEstoqueNegativo() : true)
                 .custoUnitario(BigDecimal.ZERO)
                 .estoqueAtual(BigDecimal.ZERO)
                 .estoqueMinimo(request.estoqueMinimo())
@@ -56,6 +58,9 @@ public class InsumoMapper {
         insumo.setUnidadeMedida(request.unidadeMedida());
         if (request.fracionavel() != null) {
             insumo.setFracionavel(request.fracionavel());
+        }
+        if (request.permitirEstoqueNegativo() != null) {
+            insumo.setPermitirEstoqueNegativo(request.permitirEstoqueNegativo());
         }
         insumo.setEstoqueMinimo(request.estoqueMinimo());
         // custoUnitario e estoqueAtual só mudam via movimentação

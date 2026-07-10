@@ -54,6 +54,10 @@ public class Insumo {
     @Builder.Default
     private Boolean fracionavel = true;
 
+    @Column(name = "permitir_estoque_negativo", nullable = false)
+    @Builder.Default
+    private Boolean permitirEstoqueNegativo = true;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean ativo = true;
