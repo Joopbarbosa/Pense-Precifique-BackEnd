@@ -14,7 +14,7 @@ import java.util.UUID;
 
 public interface InsumoService {
 
-    Page<InsumoResponseDTO> listar(Pageable pageable);
+    Page<InsumoResponseDTO> listar(String busca, Pageable pageable);
 
     InsumoResponseDTO buscarPorId(UUID id);
 

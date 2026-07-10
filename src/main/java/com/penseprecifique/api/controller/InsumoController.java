@@ -27,8 +27,9 @@ public class InsumoController {
 
     @GetMapping
     public ResponseEntity<Page<InsumoResponseDTO>> listar(
+            @RequestParam(required = false) String busca,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(insumoService.listar(pageable));
+        return ResponseEntity.ok(insumoService.listar(busca, pageable));
     }
 
     @GetMapping("/{id}")

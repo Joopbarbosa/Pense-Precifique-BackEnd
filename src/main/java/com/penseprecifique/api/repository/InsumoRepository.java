@@ -12,6 +12,9 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
 
     Page<Insumo> findByUsuarioIdAndDeletedAtIsNull(UUID usuarioId, Pageable pageable);
 
+    Page<Insumo> findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
+            UUID usuarioId, String nome, Pageable pageable);
+
     Optional<Insumo> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
     boolean existsByNomeAndMarcaAndUsuarioIdAndDeletedAtIsNull(

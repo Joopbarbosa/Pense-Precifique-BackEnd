@@ -47,8 +47,12 @@ public class InsumoServiceImpl implements InsumoService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<InsumoResponseDTO> listar(Pageable pageable) {
+    public Page<InsumoResponseDTO> listar(String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
+        if (busca != null && !busca.isBlank()) {
+            return insumoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, busca, pageable)
+                    .map(insumoMapper::toResponse);
+        }
         return insumoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable)
                 .map(insumoMapper::toResponse);
     }
