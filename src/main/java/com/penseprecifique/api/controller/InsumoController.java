@@ -1,6 +1,7 @@
 package com.penseprecifique.api.controller;
 
 import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
+import com.penseprecifique.api.dto.request.InsumoCreateRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
@@ -36,7 +37,7 @@ public class InsumoController {
     }
 
     @PostMapping
-    public ResponseEntity<InsumoResponseDTO> cadastrar(@Valid @RequestBody InsumoRequestDTO request) {
+    public ResponseEntity<InsumoResponseDTO> cadastrar(@Valid @RequestBody InsumoCreateRequestDTO request) {
         return ResponseEntity.status(201).body(insumoService.cadastrar(request));
     }
 

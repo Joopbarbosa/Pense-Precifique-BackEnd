@@ -1,6 +1,7 @@
 package com.penseprecifique.api.service;
 
 import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
+import com.penseprecifique.api.dto.request.InsumoCreateRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
@@ -17,7 +18,7 @@ public interface InsumoService {
 
     InsumoResponseDTO buscarPorId(UUID id);
 
-    InsumoResponseDTO cadastrar(InsumoRequestDTO request);
+    InsumoResponseDTO cadastrar(InsumoCreateRequestDTO request);
 
     InsumoResponseDTO editar(UUID id, InsumoRequestDTO request);
 

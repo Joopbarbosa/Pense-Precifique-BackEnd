@@ -4,6 +4,7 @@ import com.penseprecifique.api.domain.entity.Insumo;
 import com.penseprecifique.api.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.domain.entity.Produto;
 import com.penseprecifique.api.domain.entity.Usuario;
+import com.penseprecifique.api.dto.request.InsumoCreateRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
@@ -35,7 +36,7 @@ public class InsumoMapper {
         );
     }
 
-    public Insumo toEntity(InsumoRequestDTO request, Usuario usuario) {
+    public Insumo toEntity(InsumoCreateRequestDTO request, Usuario usuario) {
         return Insumo.builder()
                 .usuario(usuario)
                 .nome(request.nome())
@@ -43,7 +44,7 @@ public class InsumoMapper {
                 .unidadeMedida(request.unidadeMedida())
                 .fracionavel(request.fracionavel() != null ? request.fracionavel() : true)
                 .custoUnitario(BigDecimal.ZERO)
-                .estoqueAtual(request.estoqueAtual() != null ? request.estoqueAtual() : BigDecimal.ZERO)
+                .estoqueAtual(BigDecimal.ZERO)
                 .estoqueMinimo(request.estoqueMinimo())
                 .ativo(true)
                 .build();

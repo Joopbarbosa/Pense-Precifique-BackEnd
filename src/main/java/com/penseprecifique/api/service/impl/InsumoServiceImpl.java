@@ -1,11 +1,13 @@
 package com.penseprecifique.api.service.impl;
 
 import com.penseprecifique.api.domain.entity.Insumo;
+import com.penseprecifique.api.domain.entity.LoteCompra;
 import com.penseprecifique.api.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
+import com.penseprecifique.api.dto.request.InsumoCreateRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
@@ -18,6 +20,7 @@ import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.InsumoService;
+import com.penseprecifique.api.service.LoteCompraService;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -40,6 +43,7 @@ public class InsumoServiceImpl implements InsumoService {
     private final UsuarioRepository usuarioRepository;
     private final InsumoMapper insumoMapper;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
+    private final LoteCompraService loteCompraService;
 
     @Override
     @Transactional(readOnly = true)
@@ -59,7 +63,7 @@ public class InsumoServiceImpl implements InsumoService {
     }
 
     @Override
-    public InsumoResponseDTO cadastrar(InsumoRequestDTO request) {
+    public InsumoResponseDTO cadastrar(InsumoCreateRequestDTO request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
         if (insumoRepository.existsByNomeAndMarcaAndUsuarioIdAndDeletedAtIsNull(
@@ -71,7 +75,13 @@ public class InsumoServiceImpl implements InsumoService {
         Insumo insumo = insumoMapper.toEntity(request, usuario);
         insumo.setNumero(NumeroSequencialUtil.proximoNumero(
                 insumoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Insumo::getNumero)));
-        return insumoMapper.toResponse(insumoRepository.save(insumo));
+        insumo = insumoRepository.save(insumo);
+
+        LoteCompra loteCompra = loteCompraService.criarLote(usuario, LocalDateTime.now());
+        loteCompraService.registrarCompraIndividual(
+                insumo, request.quantidadeCompradaInicial(), request.precoTotalCompraInicial(), loteCompra.getId());
+
+        return insumoMapper.toResponse(insumo);
     }
 
     @Override

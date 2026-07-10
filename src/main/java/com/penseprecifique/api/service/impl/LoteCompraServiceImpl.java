@@ -47,12 +47,7 @@ public class LoteCompraServiceImpl implements LoteCompraService {
 
         LocalDateTime dataCompra = request.dataCompra() != null ? request.dataCompra() : LocalDateTime.now();
 
-        LoteCompra loteCompra = LoteCompra.builder()
-                .usuario(usuario)
-                .dataCompra(dataCompra)
-                .build();
-        loteCompra = loteCompraRepository.save(loteCompra);
-        UUID loteId = loteCompra.getId();
+        LoteCompra loteCompra = criarLote(usuario, dataCompra);
 
         List<InsumoImpactoResponseDTO> insumosAtualizados = new ArrayList<>();
 
@@ -61,36 +56,8 @@ public class LoteCompraServiceImpl implements LoteCompraService {
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Insumo não encontrado: " + item.insumoId()));
 
-            BigDecimal custoUnitarioAnterior = insumo.getCustoUnitario();
-
-            BigDecimal novoCusto = item.precoTotalPago()
-                    .divide(item.quantidadeComprada(), 6, RoundingMode.HALF_UP);
-
-            insumo.setCustoUnitario(novoCusto);
-            insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(item.quantidadeComprada()));
-            insumoRepository.save(insumo);
-
-            MovimentacaoInsumo movimentacao = MovimentacaoInsumo.builder()
-                    .insumo(insumo)
-                    .tipo(TipoMovimentacaoInsumo.ENTRADA)
-                    .motivo(MotivoMovimentacaoInsumo.COMPRA)
-                    .quantidade(item.quantidadeComprada())
-                    .observacao(null)
-                    .referenciaId(loteId)
-                    .referenciaTipo(ReferenciaMovimentacaoTipo.LOTE_COMPRA)
-                    .estornada(false)
-                    .build();
-            movimentacaoInsumoRepository.save(movimentacao);
-
-            insumosAtualizados.add(new InsumoImpactoResponseDTO(
-                    insumo.getId(),
-                    insumo.getNome(),
-                    insumo.getMarca(),
-                    insumo.getUnidadeMedida(),
-                    custoUnitarioAnterior,
-                    novoCusto,
-                    item.quantidadeComprada()
-            ));
+            insumosAtualizados.add(registrarCompraIndividual(
+                    insumo, item.quantidadeComprada(), item.precoTotalPago(), loteCompra.getId()));
         }
 
         return new ImpactoAgregadoResponseDTO(
@@ -98,6 +65,49 @@ public class LoteCompraServiceImpl implements LoteCompraService {
                 loteCompra.getDataCompra(),
                 insumosAtualizados,
                 new ArrayList<>()
+        );
+    }
+
+    @Override
+    public LoteCompra criarLote(Usuario usuario, LocalDateTime dataCompra) {
+        LoteCompra loteCompra = LoteCompra.builder()
+                .usuario(usuario)
+                .dataCompra(dataCompra != null ? dataCompra : LocalDateTime.now())
+                .build();
+        return loteCompraRepository.save(loteCompra);
+    }
+
+    @Override
+    public InsumoImpactoResponseDTO registrarCompraIndividual(
+            Insumo insumo, BigDecimal quantidade, BigDecimal precoTotal, UUID loteCompraId) {
+        BigDecimal custoUnitarioAnterior = insumo.getCustoUnitario();
+
+        BigDecimal novoCusto = precoTotal.divide(quantidade, 6, RoundingMode.HALF_UP);
+
+        insumo.setCustoUnitario(novoCusto);
+        insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(quantidade));
+        insumoRepository.save(insumo);
+
+        MovimentacaoInsumo movimentacao = MovimentacaoInsumo.builder()
+                .insumo(insumo)
+                .tipo(TipoMovimentacaoInsumo.ENTRADA)
+                .motivo(MotivoMovimentacaoInsumo.COMPRA)
+                .quantidade(quantidade)
+                .observacao(null)
+                .referenciaId(loteCompraId)
+                .referenciaTipo(ReferenciaMovimentacaoTipo.LOTE_COMPRA)
+                .estornada(false)
+                .build();
+        movimentacaoInsumoRepository.save(movimentacao);
+
+        return new InsumoImpactoResponseDTO(
+                insumo.getId(),
+                insumo.getNome(),
+                insumo.getMarca(),
+                insumo.getUnidadeMedida(),
+                custoUnitarioAnterior,
+                novoCusto,
+                quantidade
         );
     }
 
