@@ -112,18 +112,36 @@ public class ProducaoService {
                 : quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
 
         // Verificação de suficiência: tudo ou nada, antes de qualquer alteração
+        // RN-059 — componente com permitirEstoqueNegativo=false bloqueia incondicionalmente,
+        // mesmo com confirmarEstoqueNegativo=true (a flag do cadastro sempre vence a do request).
         List<String> insuficientes = new ArrayList<>();
+        List<String> bloqueados = new ArrayList<>();
         for (FichaTecnicaItem item : ficha) {
             BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
             if (item.getInsumo() != null) {
-                if (item.getInsumo().getEstoqueAtual().compareTo(necessaria) < 0) {
-                    insuficientes.add(item.getInsumo().getNome());
+                Insumo insumo = item.getInsumo();
+                if (insumo.getEstoqueAtual().compareTo(necessaria) < 0) {
+                    if (Boolean.FALSE.equals(insumo.getPermitirEstoqueNegativo())) {
+                        bloqueados.add(insumo.getNome());
+                    } else {
+                        insuficientes.add(insumo.getNome());
+                    }
                 }
             } else if (item.getProdutoBase() != null) {
-                if (item.getProdutoBase().getEstoqueAtual().compareTo(necessaria) < 0) {
-                    insuficientes.add(item.getProdutoBase().getNome());
+                Produto base = item.getProdutoBase();
+                if (base.getEstoqueAtual().compareTo(necessaria) < 0) {
+                    if (Boolean.FALSE.equals(base.getPermitirEstoqueNegativo())) {
+                        bloqueados.add(base.getNome());
+                    } else {
+                        insuficientes.add(base.getNome());
+                    }
                 }
             }
+        }
+        if (!bloqueados.isEmpty()) {
+            throw new BusinessException(
+                    "Estoque insuficiente para " + String.join(", ", bloqueados)
+                            + ". Este(s) componente(s) não permite(m) estoque negativo.");
         }
         if (!insuficientes.isEmpty() && !request.isConfirmarEstoqueNegativo()) {
             throw new BusinessException("Estoque insuficiente para os insumos: " + String.join(", ", insuficientes));
