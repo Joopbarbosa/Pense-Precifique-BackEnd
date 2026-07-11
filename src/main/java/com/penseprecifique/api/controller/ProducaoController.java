@@ -1,6 +1,7 @@
 package com.penseprecifique.api.controller;
 
 import com.penseprecifique.api.dto.request.CancelarProducaoRequest;
+import com.penseprecifique.api.dto.request.LancarProducaoLoteRequest;
 import com.penseprecifique.api.dto.request.LancarProducaoRequest;
 import com.penseprecifique.api.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.dto.response.ProducaoDetalheResponse;
@@ -39,6 +40,12 @@ public class ProducaoController {
     @PostMapping
     public ResponseEntity<ProducaoDetalheResponse> lancar(@Valid @RequestBody LancarProducaoRequest request) {
         return ResponseEntity.status(201).body(producaoService.lancar(request));
+    }
+
+    @PostMapping("/lote")
+    public ResponseEntity<List<ProducaoDetalheResponse>> lancarLote(
+            @Valid @RequestBody LancarProducaoLoteRequest request) {
+        return ResponseEntity.status(201).body(producaoService.lancarLote(request));
     }
 
     @GetMapping("/preview")

@@ -15,6 +15,7 @@ import com.penseprecifique.api.domain.enums.StatusProducao;
 import com.penseprecifique.api.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.dto.request.CancelarProducaoRequest;
+import com.penseprecifique.api.dto.request.LancarProducaoLoteRequest;
 import com.penseprecifique.api.dto.request.LancarProducaoRequest;
 import com.penseprecifique.api.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.dto.response.ProducaoDetalheResponse;
@@ -41,7 +42,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -111,30 +114,67 @@ public class ProducaoService {
         BigDecimal ratioLote = ficha.isEmpty() ? BigDecimal.ZERO
                 : quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
 
+        List<ComponenteConsumo> consumo = calcularConsumo(ficha, ratioLote);
+
         // Verificação de suficiência: tudo ou nada, antes de qualquer alteração
         // RN-059 — componente com permitirEstoqueNegativo=false bloqueia incondicionalmente,
         // mesmo com confirmarEstoqueNegativo=true (a flag do cadastro sempre vence a do request).
-        List<String> insuficientes = new ArrayList<>();
+        validarEstoque(consumo, request.isConfirmarEstoqueNegativo());
+
+        Producao producao = registrarProducao(usuario, produto, quantidadeFinal, request.getDataProducao(),
+                consumo, proximoNumero(usuarioId));
+
+        List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
+        return producaoMapper.toDetalheResponse(producao, consumidos);
+    }
+
+    /**
+     * RN-060 — lançamento de múltiplas produções na mesma sessão: o consumo de cada componente
+     * é somado entre todos os itens da lista antes de checar estoque (tudo ou nada), depois cada
+     * produção é gravada individualmente com seu próprio número sequencial (PRD-N).
+     */
+    public List<ProducaoDetalheResponse> lancarLote(LancarProducaoLoteRequest request) {
+        Usuario usuario = getUsuarioAutenticado();
+        UUID usuarioId = usuario.getId();
+
+        List<ItemPreparado> preparados = new ArrayList<>();
+        Map<UUID, BigDecimal> consumoAcumulado = new LinkedHashMap<>();
+        Map<UUID, ComponenteConsumo> componentesPorId = new LinkedHashMap<>();
+
+        for (LancarProducaoRequest item : request.getProducoes()) {
+            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(item.getProdutoId(), usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+
+            List<FichaTecnicaItem> ficha = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+            BigDecimal quantidadeFinal = calcularQuantidadeFinal(item, produto);
+            if (!ficha.isEmpty()) {
+                exigirRendimentoValido(produto);
+            }
+            BigDecimal ratioLote = ficha.isEmpty() ? BigDecimal.ZERO
+                    : quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
+
+            List<ComponenteConsumo> consumo = calcularConsumo(ficha, ratioLote);
+            preparados.add(new ItemPreparado(item, produto, quantidadeFinal, consumo));
+
+            for (ComponenteConsumo c : consumo) {
+                UUID componenteId = c.getComponenteId();
+                consumoAcumulado.merge(componenteId, c.quantidadeNecessaria(), BigDecimal::add);
+                componentesPorId.putIfAbsent(componenteId, c);
+            }
+        }
+
+        // Checagem combinada de estoque (tudo ou nada) — consumo somado por componente entre
+        // todas as produções da sessão, RN-059 e RN-052 aplicadas ao lote como um todo.
         List<String> bloqueados = new ArrayList<>();
-        for (FichaTecnicaItem item : ficha) {
-            BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
-            if (item.getInsumo() != null) {
-                Insumo insumo = item.getInsumo();
-                if (insumo.getEstoqueAtual().compareTo(necessaria) < 0) {
-                    if (Boolean.FALSE.equals(insumo.getPermitirEstoqueNegativo())) {
-                        bloqueados.add(insumo.getNome());
-                    } else {
-                        insuficientes.add(insumo.getNome());
-                    }
-                }
-            } else if (item.getProdutoBase() != null) {
-                Produto base = item.getProdutoBase();
-                if (base.getEstoqueAtual().compareTo(necessaria) < 0) {
-                    if (Boolean.FALSE.equals(base.getPermitirEstoqueNegativo())) {
-                        bloqueados.add(base.getNome());
-                    } else {
-                        insuficientes.add(base.getNome());
-                    }
+        List<String> insuficientes = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : consumoAcumulado.entrySet()) {
+            ComponenteConsumo componente = componentesPorId.get(entry.getKey());
+            BigDecimal resultante = componente.getEstoqueAtual().subtract(entry.getValue());
+            if (resultante.compareTo(BigDecimal.ZERO) < 0) {
+                if (Boolean.FALSE.equals(componente.permitirEstoqueNegativo())) {
+                    bloqueados.add(componente.getNome());
+                } else {
+                    insuficientes.add(componente.getNome());
                 }
             }
         }
@@ -143,86 +183,23 @@ public class ProducaoService {
                     "Estoque insuficiente para " + String.join(", ", bloqueados)
                             + ". Este(s) componente(s) não permite(m) estoque negativo.");
         }
-        if (!insuficientes.isEmpty() && !request.isConfirmarEstoqueNegativo()) {
+        boolean todasConfirmam = request.getProducoes().stream().allMatch(LancarProducaoRequest::isConfirmarEstoqueNegativo);
+        if (!insuficientes.isEmpty() && !todasConfirmam) {
             throw new BusinessException("Estoque insuficiente para os insumos: " + String.join(", ", insuficientes));
         }
 
-        // Criação da produção
-        Producao producao = Producao.builder()
-                .usuario(usuario)
-                .produto(produto)
-                .quantidade(quantidadeFinal)
-                .dataProducao(request.getDataProducao() != null ? request.getDataProducao() : LocalDateTime.now())
-                .status(StatusProducao.ATIVA)
-                .numero(proximoNumero(usuarioId))
-                .build();
-        producao = producaoRepository.save(producao);
+        // Gravação — validação combinada já passou, cada produção é gravada individualmente
+        // com seu próprio número sequencial (a sessão não é uma entidade nova, só agrupador de request).
+        List<ProducaoDetalheResponse> respostas = new ArrayList<>();
+        int numero = proximoNumero(usuarioId);
+        for (ItemPreparado preparado : preparados) {
+            Producao producao = registrarProducao(usuario, preparado.produto(), preparado.quantidadeFinal(),
+                    preparado.request().getDataProducao(), preparado.consumo(), numero++);
 
-        // Baixa dos componentes da ficha técnica
-        for (FichaTecnicaItem item : ficha) {
-            BigDecimal consumida = item.getQuantidade().multiply(ratioLote);
-
-            if (item.getInsumo() != null) {
-                Insumo insumo = item.getInsumo();
-                insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(consumida));
-                insumoRepository.save(insumo);
-
-                movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
-                        .insumo(insumo)
-                        .tipo(TipoMovimentacaoInsumo.SAIDA)
-                        .motivo(MotivoMovimentacaoInsumo.PRODUCAO)
-                        .quantidade(consumida)
-                        .referenciaId(producao.getId())
-                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO)
-                        .estornada(false)
-                        .build());
-
-                producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
-                        .producao(producao)
-                        .insumo(insumo)
-                        .quantidade(consumida)
-                        .build());
-
-            } else if (item.getProdutoBase() != null) {
-                // Produto base é consumido do próprio estoque de produto.
-                Produto base = item.getProdutoBase();
-                base.setEstoqueAtual(base.getEstoqueAtual().subtract(consumida));
-                produtoRepository.save(base);
-
-                movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
-                        .produto(base)
-                        .tipo(TipoMovimentacaoProduto.SAIDA)
-                        .motivo(MotivoMovimentacaoProduto.PRODUCAO)
-                        .quantidade(consumida)
-                        .referenciaId(producao.getId())
-                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
-                        .estornada(false)
-                        .build());
-
-                producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
-                        .producao(producao)
-                        .produtoBase(base)
-                        .quantidade(consumida)
-                        .build());
-            }
+            List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
+            respostas.add(producaoMapper.toDetalheResponse(producao, consumidos));
         }
-
-        // Entrada do produto produzido
-        produto.setEstoqueAtual(produto.getEstoqueAtual().add(quantidadeFinal));
-        produtoRepository.save(produto);
-
-        movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
-                .produto(produto)
-                .tipo(TipoMovimentacaoProduto.ENTRADA)
-                .motivo(MotivoMovimentacaoProduto.PRODUCAO)
-                .quantidade(quantidadeFinal)
-                .referenciaId(producao.getId())
-                .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
-                .estornada(false)
-                .build());
-
-        List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos);
+        return respostas;
     }
 
     public ProducaoDetalheResponse cancelar(UUID id, CancelarProducaoRequest request) {
@@ -324,6 +301,149 @@ public class ProducaoService {
         producao = producaoRepository.save(producao);
 
         return producaoMapper.toDetalheResponse(producao, consumidos);
+    }
+
+    /** Representa o consumo necessário de um componente da ficha técnica — insumo XOR produto-base. */
+    private record ComponenteConsumo(Insumo insumo, Produto produtoBase, BigDecimal quantidadeNecessaria) {
+        UUID getComponenteId() {
+            return insumo != null ? insumo.getId() : produtoBase.getId();
+        }
+
+        BigDecimal getEstoqueAtual() {
+            return insumo != null ? insumo.getEstoqueAtual() : produtoBase.getEstoqueAtual();
+        }
+
+        Boolean permitirEstoqueNegativo() {
+            return insumo != null ? insumo.getPermitirEstoqueNegativo() : produtoBase.getPermitirEstoqueNegativo();
+        }
+
+        String getNome() {
+            return insumo != null ? insumo.getNome() : produtoBase.getNome();
+        }
+    }
+
+    /** Item de `lancarLote()` já com produto, ficha resolvidos e consumo calculado, aguardando a checagem combinada. */
+    private record ItemPreparado(LancarProducaoRequest request, Produto produto, BigDecimal quantidadeFinal,
+                                  List<ComponenteConsumo> consumo) {
+    }
+
+    /** RN-051 — consumo de cada componente da ficha técnica, proporcional ao ratio do lote produzido. */
+    private List<ComponenteConsumo> calcularConsumo(List<FichaTecnicaItem> ficha, BigDecimal ratioLote) {
+        List<ComponenteConsumo> consumo = new ArrayList<>();
+        for (FichaTecnicaItem item : ficha) {
+            BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
+            if (item.getInsumo() != null) {
+                consumo.add(new ComponenteConsumo(item.getInsumo(), null, necessaria));
+            } else if (item.getProdutoBase() != null) {
+                consumo.add(new ComponenteConsumo(null, item.getProdutoBase(), necessaria));
+            }
+        }
+        return consumo;
+    }
+
+    /**
+     * Verificação de suficiência de estoque, tudo ou nada, antes de qualquer alteração — RN-059
+     * (permitirEstoqueNegativo=false bloqueia incondicionalmente) + RN-052 (permitirEstoqueNegativo=true
+     * só bloqueia se o usuário não confirmou estoque negativo).
+     */
+    private void validarEstoque(List<ComponenteConsumo> consumo, boolean confirmarEstoqueNegativo) {
+        List<String> insuficientes = new ArrayList<>();
+        List<String> bloqueados = new ArrayList<>();
+        for (ComponenteConsumo c : consumo) {
+            if (c.getEstoqueAtual().compareTo(c.quantidadeNecessaria()) < 0) {
+                if (Boolean.FALSE.equals(c.permitirEstoqueNegativo())) {
+                    bloqueados.add(c.getNome());
+                } else {
+                    insuficientes.add(c.getNome());
+                }
+            }
+        }
+        if (!bloqueados.isEmpty()) {
+            throw new BusinessException(
+                    "Estoque insuficiente para " + String.join(", ", bloqueados)
+                            + ". Este(s) componente(s) não permite(m) estoque negativo.");
+        }
+        if (!insuficientes.isEmpty() && !confirmarEstoqueNegativo) {
+            throw new BusinessException("Estoque insuficiente para os insumos: " + String.join(", ", insuficientes));
+        }
+    }
+
+    /** Grava a Producao, a baixa de cada componente consumido e a entrada do produto produzido. */
+    private Producao registrarProducao(Usuario usuario, Produto produto, BigDecimal quantidadeFinal,
+                                        LocalDateTime dataProducao, List<ComponenteConsumo> consumo, Integer numero) {
+        Producao producao = Producao.builder()
+                .usuario(usuario)
+                .produto(produto)
+                .quantidade(quantidadeFinal)
+                .dataProducao(dataProducao != null ? dataProducao : LocalDateTime.now())
+                .status(StatusProducao.ATIVA)
+                .numero(numero)
+                .build();
+        producao = producaoRepository.save(producao);
+
+        for (ComponenteConsumo c : consumo) {
+            BigDecimal consumida = c.quantidadeNecessaria();
+
+            if (c.insumo() != null) {
+                Insumo insumo = c.insumo();
+                insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(consumida));
+                insumoRepository.save(insumo);
+
+                movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                        .insumo(insumo)
+                        .tipo(TipoMovimentacaoInsumo.SAIDA)
+                        .motivo(MotivoMovimentacaoInsumo.PRODUCAO)
+                        .quantidade(consumida)
+                        .referenciaId(producao.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO)
+                        .estornada(false)
+                        .build());
+
+                producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
+                        .producao(producao)
+                        .insumo(insumo)
+                        .quantidade(consumida)
+                        .build());
+
+            } else if (c.produtoBase() != null) {
+                // Produto base é consumido do próprio estoque de produto.
+                Produto base = c.produtoBase();
+                base.setEstoqueAtual(base.getEstoqueAtual().subtract(consumida));
+                produtoRepository.save(base);
+
+                movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                        .produto(base)
+                        .tipo(TipoMovimentacaoProduto.SAIDA)
+                        .motivo(MotivoMovimentacaoProduto.PRODUCAO)
+                        .quantidade(consumida)
+                        .referenciaId(producao.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
+                        .estornada(false)
+                        .build());
+
+                producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
+                        .producao(producao)
+                        .produtoBase(base)
+                        .quantidade(consumida)
+                        .build());
+            }
+        }
+
+        // Entrada do produto produzido
+        produto.setEstoqueAtual(produto.getEstoqueAtual().add(quantidadeFinal));
+        produtoRepository.save(produto);
+
+        movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                .produto(produto)
+                .tipo(TipoMovimentacaoProduto.ENTRADA)
+                .motivo(MotivoMovimentacaoProduto.PRODUCAO)
+                .quantidade(quantidadeFinal)
+                .referenciaId(producao.getId())
+                .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
+                .estornada(false)
+                .build());
+
+        return producao;
     }
 
     private InsumoConsumidoResponse montarPreview(FichaTecnicaItem item, BigDecimal quantidadeFinal) {
