@@ -66,7 +66,7 @@ public class InsumoMapper {
         // custoUnitario e estoqueAtual só mudam via movimentação
     }
 
-    public MovimentacaoInsumoResponseDTO toMovimentacaoResponse(MovimentacaoInsumo mov) {
+    public MovimentacaoInsumoResponseDTO toMovimentacaoResponse(MovimentacaoInsumo mov, String referencia) {
         return new MovimentacaoInsumoResponseDTO(
                 mov.getId(),
                 mov.getTipo(),
@@ -75,6 +75,7 @@ public class InsumoMapper {
                 mov.getObservacao(),
                 mov.getReferenciaId(),
                 mov.getReferenciaTipo(),
+                referencia,
                 mov.getEstornada(),
                 mov.getCreatedAt()
         );

@@ -16,6 +16,7 @@ public record MovimentacaoInsumoResponseDTO(
         String observacao,
         UUID referenciaId,
         ReferenciaMovimentacaoTipo referenciaTipo,
+        String referencia,
         boolean estornada,
         LocalDateTime createdAt
 ) {}

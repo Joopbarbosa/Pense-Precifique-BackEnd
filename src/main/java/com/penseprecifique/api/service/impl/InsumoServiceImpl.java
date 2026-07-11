@@ -3,8 +3,11 @@ package com.penseprecifique.api.service.impl;
 import com.penseprecifique.api.domain.entity.Insumo;
 import com.penseprecifique.api.domain.entity.LoteCompra;
 import com.penseprecifique.api.domain.entity.MovimentacaoInsumo;
+import com.penseprecifique.api.domain.entity.Orcamento;
+import com.penseprecifique.api.domain.entity.Producao;
 import com.penseprecifique.api.domain.entity.Usuario;
 import com.penseprecifique.api.domain.enums.MotivoMovimentacaoInsumo;
+import com.penseprecifique.api.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.dto.request.InsumoCreateRequestDTO;
@@ -18,9 +21,12 @@ import com.penseprecifique.api.mapper.InsumoMapper;
 import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
+import com.penseprecifique.api.repository.OrcamentoRepository;
+import com.penseprecifique.api.repository.ProducaoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.InsumoService;
 import com.penseprecifique.api.service.LoteCompraService;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,7 +38,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +54,8 @@ public class InsumoServiceImpl implements InsumoService {
     private final InsumoMapper insumoMapper;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final LoteCompraService loteCompraService;
+    private final ProducaoRepository producaoRepository;
+    private final OrcamentoRepository orcamentoRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -120,8 +131,47 @@ public class InsumoServiceImpl implements InsumoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
-        return movimentacaoInsumoRepository.findByInsumoIdOrderByCreatedAtDesc(insumoId, pageable)
-                .map(insumoMapper::toMovimentacaoResponse);
+
+        Page<MovimentacaoInsumo> movimentacoes =
+                movimentacaoInsumoRepository.findByInsumoIdOrderByCreatedAtDesc(insumoId, pageable);
+
+        Set<UUID> producaoIds = referenciaIdsDoTipo(movimentacoes, ReferenciaMovimentacaoTipo.PRODUCAO);
+        Map<UUID, Integer> numeroProducaoPorId = producaoIds.isEmpty() ? Map.of()
+                : producaoRepository.findAllById(producaoIds).stream()
+                        .collect(Collectors.toMap(Producao::getId, Producao::getNumero));
+
+        Set<UUID> orcamentoIds = referenciaIdsDoTipo(movimentacoes, ReferenciaMovimentacaoTipo.ORCAMENTO);
+        Map<UUID, Integer> numeroOrcamentoPorId = orcamentoIds.isEmpty() ? Map.of()
+                : orcamentoRepository.findAllById(orcamentoIds).stream()
+                        .collect(Collectors.toMap(Orcamento::getId, Orcamento::getNumero));
+
+        return movimentacoes.map(mov -> insumoMapper.toMovimentacaoResponse(
+                mov, resolverReferencia(mov, numeroProducaoPorId, numeroOrcamentoPorId)));
+    }
+
+    private Set<UUID> referenciaIdsDoTipo(Page<MovimentacaoInsumo> movimentacoes, ReferenciaMovimentacaoTipo tipo) {
+        return movimentacoes.getContent().stream()
+                .filter(m -> m.getReferenciaTipo() == tipo)
+                .map(MovimentacaoInsumo::getReferenciaId)
+                .collect(Collectors.toSet());
+    }
+
+    private String resolverReferencia(
+            MovimentacaoInsumo mov, Map<UUID, Integer> numeroProducaoPorId, Map<UUID, Integer> numeroOrcamentoPorId) {
+        if (mov.getReferenciaTipo() == null) {
+            return null;
+        }
+        return switch (mov.getReferenciaTipo()) {
+            case LOTE_COMPRA -> "Compra em lote";
+            case PRODUCAO -> {
+                Integer numero = numeroProducaoPorId.get(mov.getReferenciaId());
+                yield numero != null ? IdentificadorFormatter.formatar("PRD", numero) : "PRD-?";
+            }
+            case ORCAMENTO -> {
+                Integer numero = numeroOrcamentoPorId.get(mov.getReferenciaId());
+                yield numero != null ? IdentificadorFormatter.formatar("ORC", numero) : "ORC-?";
+            }
+        };
     }
 
     @Override
@@ -149,7 +199,7 @@ public class InsumoServiceImpl implements InsumoService {
                 .estornada(false)
                 .build();
 
-        return insumoMapper.toMovimentacaoResponse(movimentacaoInsumoRepository.save(movimentacao));
+        return insumoMapper.toMovimentacaoResponse(movimentacaoInsumoRepository.save(movimentacao), null);
     }
 
     @Override
