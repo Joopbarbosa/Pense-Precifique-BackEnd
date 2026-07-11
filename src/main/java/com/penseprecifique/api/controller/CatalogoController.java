@@ -20,8 +20,11 @@ public class CatalogoController {
     private final CatalogoService catalogoService;
 
     @GetMapping
-    public ResponseEntity<List<CatalogoResponse>> listar() {
-        return ResponseEntity.ok(catalogoService.listar());
+    public ResponseEntity<List<CatalogoResponse>> listar(
+            @RequestParam(required = false) String busca,
+            @RequestParam(required = false) String ordenarPor,
+            @RequestParam(required = false, defaultValue = "ASC") String direcao) {
+        return ResponseEntity.ok(catalogoService.listar(busca, ordenarPor, direcao));
     }
 
     @GetMapping("/{id}")

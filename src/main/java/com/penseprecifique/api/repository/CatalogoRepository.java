@@ -17,5 +17,7 @@ public interface CatalogoRepository extends JpaRepository<Catalogo, UUID> {
 
     List<Catalogo> findByUsuarioId(UUID usuarioId);
 
+    List<Catalogo> findByUsuarioIdAndNomeContainingIgnoreCase(UUID usuarioId, String nome);
+
     boolean existsByUsuarioIdAndNomeIgnoreCase(UUID usuarioId, String nome);
 }

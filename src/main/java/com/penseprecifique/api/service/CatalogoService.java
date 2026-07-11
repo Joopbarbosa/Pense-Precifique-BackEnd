@@ -20,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,12 +41,45 @@ public class CatalogoService {
     // Consultas
     // ---------------------------------------------------------------
 
+    /**
+     * RN-057 — busca por nome (case-insensitive, vazio/nulo retorna tudo — RN-055) e ordenação
+     * clicável por coluna. `quantidadeItens` não é coluna persistida (calculado em toResponse via
+     * count), então a ordenação é feita em memória sobre a lista já mapeada, uniforme pros 4 campos.
+     */
     @Transactional(readOnly = true)
-    public List<CatalogoResponse> listar() {
+    public List<CatalogoResponse> listar(String busca, String ordenarPor, String direcao) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        return catalogoRepository.findByUsuarioId(usuarioId).stream()
+
+        List<Catalogo> catalogos = (busca != null && !busca.isBlank())
+                ? catalogoRepository.findByUsuarioIdAndNomeContainingIgnoreCase(usuarioId, busca.trim())
+                : catalogoRepository.findByUsuarioId(usuarioId);
+
+        List<CatalogoResponse> resultado = new ArrayList<>(catalogos.stream()
                 .map(this::toResponse)
-                .toList();
+                .toList());
+
+        Comparator<CatalogoResponse> comparador = resolverComparador(ordenarPor);
+        if (comparador != null) {
+            if ("DESC".equalsIgnoreCase(direcao)) {
+                comparador = comparador.reversed();
+            }
+            resultado.sort(comparador);
+        }
+
+        return resultado;
+    }
+
+    private Comparator<CatalogoResponse> resolverComparador(String ordenarPor) {
+        if (ordenarPor == null) {
+            return null;
+        }
+        return switch (ordenarPor) {
+            case "numero" -> Comparator.comparing(CatalogoResponse::getNumero, Comparator.nullsLast(Integer::compareTo));
+            case "nome" -> Comparator.comparing(CatalogoResponse::getNome, String.CASE_INSENSITIVE_ORDER);
+            case "margem" -> Comparator.comparing(CatalogoResponse::getMargem, Comparator.nullsLast(BigDecimal::compareTo));
+            case "quantidadeItens" -> Comparator.comparing(CatalogoResponse::getQuantidadeItens, Comparator.nullsLast(Integer::compareTo));
+            default -> null;
+        };
     }
 
     @Transactional(readOnly = true)
