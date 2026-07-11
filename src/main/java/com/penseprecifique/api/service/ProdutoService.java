@@ -213,11 +213,13 @@ public class ProdutoService {
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
 
-        if (produto.getEstoqueAtual().compareTo(request.getQuantidade()) < 0) {
-            throw new BusinessException("Estoque insuficiente para realizar a baixa.");
+        BigDecimal estoqueResultante = produto.getEstoqueAtual().subtract(request.getQuantidade());
+        if (estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !produto.getPermitirEstoqueNegativo()) {
+            throw new BusinessException(
+                    "Estoque insuficiente para " + produto.getNome() + ". Este produto não permite estoque negativo.");
         }
 
-        produto.setEstoqueAtual(produto.getEstoqueAtual().subtract(request.getQuantidade()));
+        produto.setEstoqueAtual(estoqueResultante);
         produtoRepository.save(produto);
 
         MovimentacaoProduto movimentacao = MovimentacaoProduto.builder()

@@ -68,6 +68,10 @@ public class Produto {
     @Column(name = "estoque_minimo", precision = 15, scale = 4)
     private BigDecimal estoqueMinimo;
 
+    @Column(name = "permitir_estoque_negativo", nullable = false)
+    @Builder.Default
+    private Boolean permitirEstoqueNegativo = true;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean ativo = true;

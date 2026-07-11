@@ -33,6 +33,7 @@ public class ProdutoMapper {
         response.setCustoUnitario(produto.getPrecoCusto());
         response.setEstoqueAtual(produto.getEstoqueAtual());
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
+        response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
         response.setAtivo(produto.getAtivo());
         response.setCreatedAt(produto.getCreatedAt());
         response.setUpdatedAt(produto.getUpdatedAt());
@@ -56,6 +57,7 @@ public class ProdutoMapper {
         response.setCustoUnitario(produto.getPrecoCusto());
         response.setEstoqueAtual(produto.getEstoqueAtual());
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
+        response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
         response.setAtivo(produto.getAtivo());
         // RN-051 — cálculo trivial de agregação sobre dado já mapeado por item, sem ramificação de regra de negócio.
         response.setAlgumInsumoNaoFracionavel(itens.stream()
@@ -79,6 +81,7 @@ public class ProdutoMapper {
                 .precoCusto(BigDecimal.ZERO)
                 .estoqueAtual(request.getEstoqueAtual() != null ? request.getEstoqueAtual() : BigDecimal.ZERO)
                 .estoqueMinimo(request.getEstoqueMinimo())
+                .permitirEstoqueNegativo(request.getPermitirEstoqueNegativo() != null ? request.getPermitirEstoqueNegativo() : true)
                 .ativo(true)
                 .build();
     }
@@ -92,6 +95,9 @@ public class ProdutoMapper {
         produto.setMargemLucro(request.getMargemLucro());
         produto.setRendimento(request.getRendimento());
         produto.setEstoqueMinimo(request.getEstoqueMinimo());
+        if (request.getPermitirEstoqueNegativo() != null) {
+            produto.setPermitirEstoqueNegativo(request.getPermitirEstoqueNegativo());
+        }
         // precoCusto e estoqueAtual só mudam via movimentação/recálculo de ficha
         // precoVenda/margemLucro/override (RN-038a) são recalculados/ajustados pelo ProdutoService logo em seguida
     }

@@ -30,6 +30,7 @@ public class ProdutoResponse {
     private BigDecimal custoUnitario;
     private BigDecimal estoqueAtual;
     private BigDecimal estoqueMinimo;
+    private boolean permitirEstoqueNegativo;
     private boolean ativo;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

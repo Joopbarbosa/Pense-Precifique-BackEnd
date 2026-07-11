@@ -38,6 +38,8 @@ public class ProdutoRequest {
 
     private BigDecimal estoqueMinimo;
 
+    private Boolean permitirEstoqueNegativo;
+
     @NotNull
     @Valid
     private List<FichaTecnicaItemRequest> fichaTecnica = new ArrayList<>();

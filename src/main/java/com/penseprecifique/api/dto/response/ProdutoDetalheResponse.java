@@ -33,6 +33,7 @@ public class ProdutoDetalheResponse {
     private BigDecimal custoUnitario;
     private BigDecimal estoqueAtual;
     private BigDecimal estoqueMinimo;
+    private boolean permitirEstoqueNegativo;
     private boolean ativo;
     /** RN-051 — true se algum insumo direto da ficha técnica não for fracionável; decide o modo do campo de produção (quantidade livre vs. lotes). */
     private boolean algumInsumoNaoFracionavel;
