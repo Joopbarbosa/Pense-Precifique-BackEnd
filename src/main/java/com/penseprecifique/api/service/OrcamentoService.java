@@ -52,7 +52,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -314,6 +316,7 @@ public class OrcamentoService {
 
             case EM_PRODUCAO:
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+                validarEstoqueParaFinalizar(itensParaBaixa);
                 for (OrcamentoItem item : itensParaBaixa) {
                     Produto produto = item.getProdutoVendido();
                     BigDecimal quantidadeBaixa = calcularQuantidadeMovimentacao(item);
@@ -451,6 +454,36 @@ public class OrcamentoService {
                     .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
                     .estornada(false)
                     .build());
+        }
+    }
+
+    /**
+     * RN-059 — produto com permitirEstoqueNegativo=false bloqueia o avanço para FINALIZADO
+     * incondicionalmente (tudo ou nada, antes de qualquer baixa), sem opção de forçar. Quantidade é
+     * acumulada por produto caso o mesmo produto apareça em mais de um item do orçamento, para refletir
+     * o efeito real da baixa sequencial.
+     */
+    private void validarEstoqueParaFinalizar(List<OrcamentoItem> itens) {
+        Map<UUID, BigDecimal> quantidadeAcumulada = new LinkedHashMap<>();
+        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
+        for (OrcamentoItem item : itens) {
+            Produto produto = item.getProdutoVendido();
+            quantidadeAcumulada.merge(produto.getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
+            produtosPorId.putIfAbsent(produto.getId(), produto);
+        }
+
+        List<String> bloqueados = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumulada.entrySet()) {
+            Produto produto = produtosPorId.get(entry.getKey());
+            BigDecimal resultante = produto.getEstoqueAtual().subtract(entry.getValue());
+            if (resultante.compareTo(BigDecimal.ZERO) < 0 && !produto.getPermitirEstoqueNegativo()) {
+                bloqueados.add(produto.getNome());
+            }
+        }
+        if (!bloqueados.isEmpty()) {
+            throw new BusinessException(
+                    "Estoque insuficiente para " + String.join(", ", bloqueados)
+                            + ". Este(s) produto(s) não permite(m) estoque negativo.");
         }
     }
 
