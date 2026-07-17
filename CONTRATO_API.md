@@ -44,3 +44,41 @@
 - `identificador` no formato `ORC-N` (sem zero-padding, sem cedilha) — RN-053, nunca aparece em PDF.
 - `numero` (Integer cru) é mantido ao lado de `identificador` para uso interno/ordenação, seguindo o mesmo padrão de `InsumoResponseDTO`.
 - Diferente de outros módulos (ex: `GET /produtos?busca=`, que filtra pelo nome do próprio recurso): aqui `busca` filtra por `cliente.nome`, não pelo nome do orçamento (que não existe como campo).
+
+---
+
+## GET /producoes
+
+**Autenticação:** Bearer JWT obrigatório
+
+**Query params:**
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|-------------|-----------|
+| page      | int  | não         | Página (default 0) |
+| size      | int  | não         | Itens por página (default 20) |
+
+**Response 200:**
+```json
+{
+  "content": [
+    {
+      "id": "uuid",
+      "numero": 3,
+      "identificador": "PRD-3",
+      "produtoId": "uuid",
+      "nomeProduto": "Bolo de Cenoura",
+      "tipoProduto": "PRODUTO",
+      "quantidade": 10.0000,
+      "dataProducao": "2026-07-16T22:00:00",
+      "status": "ATIVA"
+    }
+  ],
+  "totalElements": 28,
+  "totalPages": 2,
+  "last": false
+}
+```
+
+**Comportamento:**
+- Ordenação: `numero DESC` (maior número primeiro) — corrigido de `dataProducao DESC` (bug #99), pois `dataProducao` é campo mutável e não garante ordem de lançamento.
+- Diferente de outros módulos, Produção não aceita parâmetro `?busca=` nesta versão.
