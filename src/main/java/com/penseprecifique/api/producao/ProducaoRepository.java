@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
 
-    Page<Producao> findByUsuarioIdOrderByDataProducaoDesc(UUID usuarioId, Pageable pageable);
+    Page<Producao> findByUsuarioIdOrderByNumeroDesc(UUID usuarioId, Pageable pageable);
 
     Optional<Producao> findByIdAndUsuarioId(UUID id, UUID usuarioId);
 

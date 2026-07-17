@@ -63,7 +63,7 @@ public class ProducaoService {
     @Transactional(readOnly = true)
     public Page<ProducaoResponse> listar(Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        return producaoRepository.findByUsuarioIdOrderByDataProducaoDesc(usuarioId, pageable)
+        return producaoRepository.findByUsuarioIdOrderByNumeroDesc(usuarioId, pageable)
                 .map(producaoMapper::toResponse);
     }
 
