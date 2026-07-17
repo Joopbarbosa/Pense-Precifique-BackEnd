@@ -1,9 +1,9 @@
 # Pense & Precifique — Contexto do Back-End
 
-> **v0.2D0** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
+> **V0.5** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
 > Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Atualizado em: 2026-07-09 — BUG-BUSCA-PRODUTO corrigido (commit 222b939); OrcamentoItemResponse ganhou catalogoIdentificador + catalogoNome (BUG-04, commits 1ab552d/03a68be). Pocket de urgentes v0.2.1.
+> Atualizado em: 2026-07-17 — Pocket de fechamento V0.5: refactor completo de pacotes (de estrutura flat `controller/service/repository` para pacotes por módulo — #56 a #67), índices de apoio a FKs/usuario_id (V12–V16, #56), busca por cliente em `GET /orcamentos` + prefixo `ORC-N` (#93), ordenação de `GET /producoes` por `numero DESC` (#99).
 
 ---
 
@@ -13,7 +13,7 @@
 - **Framework:** Spring Boot 3.3.5
 - **Banco:** PostgreSQL 16 (Docker)
 - **Autenticação:** JWT stateless (HS512)
-- **Migrations:** Flyway — `resources/db/migration/`, até V9 (V1/V2 na tabela abaixo; V4 em diante do bloco Catálogo — nomes exatos de V3/V7/V8 não confirmados nesta sessão, conferir `ls` antes de assumir)
+- **Migrations:** Flyway — `resources/db/migration/`, até V16 (tabela completa abaixo, todos os nomes confirmados via `ls`)
 - **PDF:** OpenHTMLToPDF + Thymeleaf (PdfMapper pattern)
 - **Documentação:** Springdoc OpenAPI (Swagger) — apenas em `dev`
 - **Build:** Maven (`./mvnw`)
@@ -52,30 +52,45 @@ docker compose up --build
 - **XOR entre duas origens/campos:** modelar como CHECK constraint no banco + validação explícita no Service com `BusinessException` clara distinguindo "os dois preenchidos" de "nenhum preenchido" — nunca uma mensagem genérica única pros dois casos. Usado em: `LancarProducaoRequest` (quantidade XOR lotes, RN-051), `OrcamentoItem` (item_catalogo_id XOR produto_id, RN-054).
 - **Exceção:** `BusinessException` genérica com mensagem — não criar tipos novos.
 - Toda correção de bug ou tarefa de tech debt termina com commit + push antes de considerar o chat encerrado — mesmo sem fechamento de épico. Branch sempre `main`: `git push origin main`. Nunca deixar mudança sem commit entre chats.
-- **Se a tarefa tem código no ClickUp (ex. `BUG-06`, task `86e28j4te`), a mensagem de commit referencia o código e o nome da tarefa** — não só uma descrição livre. Padrão: `fix(escopo): descrição — ClickUp BUG-06 / 86e28j4te`.
-- **Todo prompt segue a estrutura fixa de `PADRAO_PROMPTS.md`** (ambiente, comando de commit pronto, conta de teste, checklist de validação) — decidido em 2026-07-09.
+- **Rastreamento migrou de ClickUp para OpenProject.** Se a tarefa tem número no OpenProject (ex. `#93`), a mensagem de commit começa com o número. Padrão real confirmado em `git log --oneline -15`: `#N tipo(escopo): descrição` (ex. `#93 feat: adicionar busca por cliente em GET /orcamentos e prefixo ORC-N no mapper`) — número como **prefixo**, sem a palavra "OpenProject" no corpo. Commits antigos com `ClickUp <código> / <task-id>` são histórico, não o padrão atual.
+- **Todo prompt segue a estrutura fixa de `PADRAO_PROMPTS.md`** (ambiente, comando de commit pronto, conta de teste, checklist de validação) — decidido em 2026-07-09. Arquivo confirmado em `/home/joaobarbosa/Documentos/Projetos/Pense Software/Skills/PADRAO_PROMPTS.md` (fora deste projeto, pasta irmã "Pense Software").
 
 ---
 
-## Estrutura de pacotes
+## Estrutura de pacotes (refactor V0.5 — #56 a #67)
+
+Pacote flat antigo (`controller/`, `service/`, `repository/`, `config/`, `domain/`, `dto/`, `mapper/`, `security/`, `exception/` na raiz de `api/`) foi **extinto**. Estrutura atual é por módulo de domínio, Controller+Service+Repository juntos na mesma pasta:
 
 ```
 com/penseprecifique/api/
-├── config/           # SecurityConfig, CorsConfig, OpenApiConfig, JwtConfig
-├── controller/       # um Controller por entidade
-├── service/          # classes concretas @Service
-├── repository/       # um Repository por entidade
-├── domain/
-│   ├── entity/       # entidades JPA
-│   └── enums/        # TipoProduto, StatusOrcamento, MetodoPagamento, etc.
-├── dto/
-│   ├── request/      # DTOs de entrada
-│   ├── response/     # DTOs de saída
-│   └── pdf/          # OrcamentoPdfData, ItemPdfData, ReciboPdfData, ReciboPagamentoPdfData
-├── mapper/           # @Component manual (NÃO MapStruct, apesar do nome do pacote)
-├── security/         # JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl
-└── exception/        # GlobalExceptionHandler, ResourceNotFoundException, BusinessException
+├── auth/             # AuthController, AuthService(+Impl), UsuarioController, UsuarioService(+Impl), UsuarioRepository
+├── catalogo/          # CatalogoController, ItemCatalogoController, CatalogoService, ItemCatalogoService, repositories
+├── cliente/           # ClienteController, ClienteService(+Impl), ClienteRepository
+├── dashboard/         # DashboardController, DashboardService
+├── empresa/           # EmpresaController, ConfiguracaoController, services(+Impl), repositories
+├── insumo/            # InsumoController, LoteCompraController, services(+Impl), repositories (inclui MovimentacaoInsumoRepository)
+├── orcamento/         # OrcamentoController, OrcamentoService, OrcamentoRepository + repositories de item/recibo
+├── producao/          # ProducaoController, ProducaoService, ProducaoRepository, ProducaoInsumoConsumidoRepository
+├── produto/           # ProdutoController, ProdutoService, FichaTecnicaService, repositories
+├── pdf/               # PdfService, PdfMapper (pattern inalterado, ver seção própria)
+├── shared/
+│   ├── domain/
+│   │   ├── entity/       # entidades JPA
+│   │   ├── enums/        # TipoProduto, StatusOrcamento, MetodoPagamento, etc.
+│   │   └── converter/
+│   ├── dto/
+│   │   ├── request/      # DTOs de entrada
+│   │   ├── response/     # DTOs de saída
+│   │   └── pdf/          # OrcamentoPdfData, ItemPdfData, ReciboPdfData, ReciboPagamentoPdfData
+│   ├── mapper/           # @Component manual (NÃO MapStruct, apesar do nome do pacote)
+│   └── exception/        # GlobalExceptionHandler, ResourceNotFoundException, BusinessException, UnauthorizedException
+├── infra/
+│   ├── config/           # SecurityConfig
+│   └── security/         # JwtTokenProvider, JwtAuthenticationFilter, UserDetailsServiceImpl
+└── util/              # IdentificadorFormatter (RN-053, ORC-N/INS-N/etc.), NumeroSequencialUtil — utilitários globais sem módulo dono
 ```
+
+**Exceção intencional confirmada:** `service/PdfHelper.java` ficou fora do escopo do refactor — segue no pacote flat antigo `service/` (o único arquivo restante lá; `service/impl/`, `controller/` e `repository/` na raiz de `api/` estão vazios, sobra local do refactor, não versionados no git).
 
 ---
 
@@ -152,7 +167,8 @@ ${dados.total}
 |--------|----------|-----------|
 | POST | /auth/login | Login |
 | POST | /auth/register | Cadastro |
-| GET/PUT | /usuarios/me | Dados do usuário / alterar senha |
+| GET | /usuarios/me | Dados do usuário |
+| PUT | /usuarios/me/senha | Altera senha (`senhaAtual`, `novaSenha`, `confirmarNovaSenha`) — implementado desde o Épico 1, conectado ao frontend na V0.5 (#111) |
 | GET/PUT | /empresa | Perfil da empresa |
 | GET/PUT | /configuracoes/precificacao | Configurações de precificação |
 | GET/POST | /clientes | Lista paginada e cria |
@@ -172,11 +188,11 @@ ${dados.total}
 | POST | /catalogos/{id}/duplicar | **Novo (EP-09)** — duplica com overrides preservados (confirmar path exato) |
 | PUT | /catalogos/{id}/ativar-desativar | **Novo (EP-09)** — toggle `ativo` (confirmar path exato) |
 | POST/PUT/DELETE | /catalogos/{id}/itens | **Novo (EP-09)** — CRUD de ItemCatalogo (confirmar path exato) |
-| GET/POST | /producoes | Lista paginada e lança produção — aceita `quantidade` XOR `lotes` (RN-051) |
+| GET/POST | /producoes | Lista paginada e lança produção — aceita `quantidade` XOR `lotes` (RN-051); listagem ordenada por `numero DESC` (#99), nunca por campo de data mutável |
 | GET | /producoes/{id} | Detalhe |
 | GET | /producoes/preview | **Novo (bloco Catálogo)** — preview de estoque insuficiente antes de confirmar |
 | POST | /producoes/{id}/cancelar | Cancela + reverte estoque (RN-037) |
-| GET/POST | /orcamentos | Lista paginada e cria — item aceita `itemCatalogoId` OU `produtoId`+`margemAplicada`+`precoUnitario` (RN-054) |
+| GET/POST | /orcamentos | Lista paginada e cria — item aceita `itemCatalogoId` OU `produtoId`+`margemAplicada`+`precoUnitario` (RN-054). `GET` aceita `?busca=` opcional (case-insensitive, filtra por `cliente.nome`), combinável com `?status=` (#93) |
 | GET | /orcamentos/{id} | Detalhe — item de catálogo expõe `catalogoIdentificador` (`CTG-N`) e `catalogoNome`, ambos preenchidos em `OrcamentoMapper` a partir de `item.getItemCatalogo().getCatalogo()` (desde v0.2.1, commits `1ab552d`/`03a68be`) |
 | GET | /orcamentos/itens/busca | Busca de item de catálogo com filtro opcional por catálogo (EP-07, confirmar path exato) |
 | POST | /orcamentos/{id}/avancar-status | Transição de status |
@@ -213,10 +229,20 @@ ${dados.total}
 |--------|---------|-----------|
 | V1 | V1__initial_schema.sql | Schema completo (v0) |
 | V2 | V2__allow_null_insumo_id_producao_consumidos.sql | Permite insumo_id null |
-| V4+ | (bloco Catálogo) | `rendimento`, `margem_lucro`+`override`, tabelas `catalogos`/`itens_catalogo`/`itens_catalogo_customizacao`, `orcamento_itens.item_catalogo_id`, identificadores sequenciais — **nomes exatos de V3 a V8 não confirmados nesta sessão, conferir `ls db/migration/` antes de escrever a próxima** |
-| V9 | V9__orcamento_item_produto_avulso.sql | `produto_id`+`margem_aplicada` em `orcamento_itens`, CHECK XOR (RN-054) — confirmado |
+| V3 | V3__add_fracionavel_to_insumos.sql | Coluna `fracionavel` em `insumos` |
+| V4 | V4__ajusta_produtos_rendimento_preco_venda.sql | `rendimento`, ajustes em `preco_venda` de `produtos` |
+| V5 | V5__add_margem_lucro_override_produtos.sql | `margem_lucro` + flag `override` em `produtos` |
+| V6 | V6__cria_catalogos_itens_catalogo.sql | Tabelas `catalogos`/`itens_catalogo` |
+| V7 | V7__orcamento_itens_item_catalogo_id_movimentacoes_campos.sql | `orcamento_itens.item_catalogo_id`, campos de movimentação |
+| V8 | V8__numero_sequencial_insumos_produtos_clientes.sql | Identificadores sequenciais (`numero`) em insumos/produtos/clientes |
+| V9 | V9__orcamento_item_produto_avulso.sql | `produto_id`+`margem_aplicada` em `orcamento_itens`, CHECK XOR (RN-054) |
 | V10 | V10__insumo_permitir_estoque_negativo.sql | Coluna `permitir_estoque_negativo` (BOOLEAN, default true) em `insumos` — RN-059 |
 | V11 | V11__produto_permitir_estoque_negativo.sql | Coluna `permitir_estoque_negativo` (BOOLEAN, default true) em `produtos` — RN-059 |
+| V12 | V12__indices_fk_orcamento_item_customizacoes.sql | Índices de apoio às FKs de `orcamento_item_customizacoes` (#56) |
+| V13 | V13__indices_fk_producao_insumos_consumidos.sql | Índices de apoio às FKs de `producao_insumos_consumidos` (#56) |
+| V14 | V14__indice_fk_producoes_produto_id.sql | Índice de apoio à FK `producoes.produto_id` (#56) |
+| V15 | V15__indice_fk_itens_catalogo_customizacao_produto_id.sql | Índice de apoio à FK `itens_catalogo_customizacao.produto_id` (#56) |
+| V16 | V16__indices_usuario_id_sem_indice.sql | Índices em colunas `usuario_id` que ainda não tinham índice (#56) |
 
 ---
 
@@ -229,20 +255,33 @@ ${dados.total}
 | Regra de negócio replicada em múltiplos fluxos precisa cobertura explícita em cada um | RN-006 (insumo fracionável) estava coberta em baixa manual e compra em lote, mas não em `FichaTecnicaItem` — regra existir em um lugar não garante que foi aplicada em todos os pontos de entrada. |
 | "Compila limpo" nunca é validação suficiente para Service | Todo bloco Catálogo foi validado via curl com números reais que descartam coincidência (não valores redondos), inclusive casos de rejeição (XOR duplo/vazio). Regra fixa a partir daqui. |
 | Campo calculado exposto em DTO pode ficar "esquecido" se o dev assumir que existe sem checar | `precoSugerido`/`custoUnitario` só têm valor real se o Service que os calcula for de fato chamado no fluxo certo — confirmar sempre via curl, não assumir pela leitura do código. |
+| **A API não tem prefixo `/api`** — base é `http://localhost:8080/auth/login`, nunca `http://localhost:8080/api/auth/login` | Armadilha de validação via curl: o backend não libera `/error` no `SecurityConfig`, então uma rota inexistente como `/api/auth/login` retorna **401** em vez de 404 — parece erro de autenticação mas é só rota errada. Confirmado: `/api/...` → 401 (mascarado); `/auth/login` → 400 (rota real, corpo inválido). Sempre conferir a rota sem `/api` antes de investigar autenticação. |
 
 ---
 
 ## Bugs conhecidos
 
-_Nenhum bug de backend em aberto registrado neste documento no momento (`BUG-BUSCA-PRODUTO` corrigido em 2026-07-09, commit `222b939` — ver histórico do ClickUp/git para bugs anteriores)._
+_Nenhum bug de backend em aberto registrado neste documento no momento (`BUG-BUSCA-PRODUTO` corrigido em 2026-07-09, commit `222b939`; `BUG-BUSCA-ORCAMENTO` corrigido em #93, V0.5 — ver git log para bugs anteriores)._
 
 ---
 
 ## Padrão de commits
 
+Rastreamento de tarefas migrou de ClickUp para OpenProject. Formato real confirmado em `git log --oneline -15` — número da issue como **prefixo**, sem a palavra "OpenProject":
+
 ```
-feat(escopo): nova funcionalidade
-fix(escopo): correção de bug
-refactor(escopo): refatoração
-chore(escopo): configuração/infra
+#N feat: nova funcionalidade
+#N fix: correção de bug
+#N refactor: refatoração
+#N chore: configuração/infra
 ```
+
+Escopo entre parênteses é opcional e aparece quando ajuda a localizar o módulo (`fix(escopo): ...`). Sem número de issue (ex. doc solto), usar só `tipo: descrição`.
+
+**Nota:** o frontend (`pense-precifique-frontend/CLAUDE.md`) documenta um padrão diferente (`tipo(escopo): descrição — OpenProject #N`, número como sufixo) — os dois repositórios convergiram para OpenProject mas com formatos de commit distintos; cada um segue o próprio `git log`, não o do outro.
+
+---
+
+## Documentação externa
+
+`CONTRATO_API.md` não vive em `pense-precifique-backend/` — está em `docs/` na **raiz do projeto** (`/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/docs/CONTRATO_API.md`, um nível acima deste repositório). Essa pasta raiz **não é um repositório git** (`pense-precifique-backend/` e `pense-precifique-frontend/` são repos git independentes dentro dela); mudanças em `docs/` não são versionadas — editar o arquivo diretamente, sem esperar `git add`/commit nele. Mesma pasta contém `BUSINESS_RULES.md`, `PRD.md`, `SCENARIOS.md`, `DEPLOY.md`, `ESTRUTURA.md`.
