@@ -1,8 +1,7 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.shared.dto.request.ConfiguracaoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.ConfiguracaoResponseDTO;
-import com.penseprecifique.api.service.ConfiguracaoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

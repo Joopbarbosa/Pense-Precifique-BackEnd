@@ -1,13 +1,11 @@
-package com.penseprecifique.api.service.impl;
+package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.shared.domain.entity.Empresa;
 import com.penseprecifique.api.shared.dto.request.EmpresaRequestDTO;
 import com.penseprecifique.api.shared.dto.response.EmpresaResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
-import com.penseprecifique.api.repository.EmpresaRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
-import com.penseprecifique.api.service.EmpresaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;

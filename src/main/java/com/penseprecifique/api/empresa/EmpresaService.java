@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.shared.dto.request.EmpresaRequestDTO;
 import com.penseprecifique.api.shared.dto.response.EmpresaResponseDTO;

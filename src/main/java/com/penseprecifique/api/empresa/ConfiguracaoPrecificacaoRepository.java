@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.shared.domain.entity.ConfiguracaoPrecificacao;
 import org.springframework.data.jpa.repository.JpaRepository;

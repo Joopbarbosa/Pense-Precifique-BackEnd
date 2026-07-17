@@ -16,7 +16,7 @@ import com.penseprecifique.api.shared.dto.response.ProdutoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProdutoMapper;
-import com.penseprecifique.api.repository.ConfiguracaoPrecificacaoRepository;
+import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;

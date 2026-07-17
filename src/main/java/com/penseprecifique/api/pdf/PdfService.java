@@ -9,7 +9,7 @@ import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
-import com.penseprecifique.api.repository.EmpresaRepository;
+import com.penseprecifique.api.empresa.EmpresaRepository;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.repository.ReciboPagamentoRepository;
