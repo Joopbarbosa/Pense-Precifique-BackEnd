@@ -6,7 +6,7 @@ import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
-import com.penseprecifique.api.service.ItemCatalogoService;
+import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.service.OrcamentoService;
 import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;

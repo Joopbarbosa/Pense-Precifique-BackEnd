@@ -1,8 +1,7 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.shared.dto.request.ItemCatalogoRequest;
 import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
-import com.penseprecifique.api.service.ItemCatalogoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

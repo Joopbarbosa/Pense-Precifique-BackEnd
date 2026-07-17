@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
@@ -13,9 +13,6 @@ import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ItemCatalogoMapper;
-import com.penseprecifique.api.repository.CatalogoRepository;
-import com.penseprecifique.api.repository.ItemCatalogoCustomizacaoRepository;
-import com.penseprecifique.api.repository.ItemCatalogoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;

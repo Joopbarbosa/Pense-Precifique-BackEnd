@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import org.springframework.data.jpa.repository.JpaRepository;
