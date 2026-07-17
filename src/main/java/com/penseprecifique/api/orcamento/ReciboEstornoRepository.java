@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.entity.ReciboEstorno;
 import org.springframework.data.jpa.repository.JpaRepository;

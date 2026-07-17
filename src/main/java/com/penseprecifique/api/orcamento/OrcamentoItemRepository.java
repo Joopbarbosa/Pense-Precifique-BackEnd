@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import org.springframework.data.domain.Pageable;

@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
@@ -33,12 +33,7 @@ import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoCustomizacaoRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
-import com.penseprecifique.api.repository.OrcamentoItemCustomizacaoRepository;
-import com.penseprecifique.api.repository.OrcamentoItemRepository;
-import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
-import com.penseprecifique.api.repository.ReciboEstornoRepository;
-import com.penseprecifique.api.repository.ReciboPagamentoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;

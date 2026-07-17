@@ -1,4 +1,4 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
@@ -7,7 +7,6 @@ import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
-import com.penseprecifique.api.service.OrcamentoService;
 import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
