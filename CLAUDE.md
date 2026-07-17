@@ -3,7 +3,7 @@
 > **v0.2D0** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
 > Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Atualizado em: 2026-07-09 — BUG-BUSCA-PRODUTO corrigido (commit 222b939, pocket de urgentes v0.2.1).
+> Atualizado em: 2026-07-09 — BUG-BUSCA-PRODUTO corrigido (commit 222b939); OrcamentoItemResponse ganhou catalogoIdentificador + catalogoNome (BUG-04, commits 1ab552d/03a68be). Pocket de urgentes v0.2.1.
 
 ---
 
@@ -177,7 +177,7 @@ ${dados.total}
 | GET | /producoes/preview | **Novo (bloco Catálogo)** — preview de estoque insuficiente antes de confirmar |
 | POST | /producoes/{id}/cancelar | Cancela + reverte estoque (RN-037) |
 | GET/POST | /orcamentos | Lista paginada e cria — item aceita `itemCatalogoId` OU `produtoId`+`margemAplicada`+`precoUnitario` (RN-054) |
-| GET | /orcamentos/{id} | Detalhe |
+| GET | /orcamentos/{id} | Detalhe — item de catálogo expõe `catalogoIdentificador` (`CTG-N`) e `catalogoNome`, ambos preenchidos em `OrcamentoMapper` a partir de `item.getItemCatalogo().getCatalogo()` (desde v0.2.1, commits `1ab552d`/`03a68be`) |
 | GET | /orcamentos/itens/busca | Busca de item de catálogo com filtro opcional por catálogo (EP-07, confirmar path exato) |
 | POST | /orcamentos/{id}/avancar-status | Transição de status |
 | POST | /orcamentos/{id}/cancelar | Cancela (wizard por status) |
