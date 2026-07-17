@@ -1,16 +1,16 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.domain.entity.ItemCatalogo;
-import com.penseprecifique.api.domain.entity.Produto;
-import com.penseprecifique.api.domain.entity.Usuario;
-import com.penseprecifique.api.domain.enums.TipoProduto;
-import com.penseprecifique.api.dto.request.CatalogoRequest;
-import com.penseprecifique.api.dto.request.CustomizacaoAnexadaRequest;
-import com.penseprecifique.api.dto.request.DuplicarCatalogoRequest;
-import com.penseprecifique.api.dto.request.ItemCatalogoRequest;
-import com.penseprecifique.api.dto.response.CatalogoResponse;
-import com.penseprecifique.api.dto.response.ItemCatalogoResponse;
-import com.penseprecifique.api.exception.BusinessException;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
+import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.dto.request.CatalogoRequest;
+import com.penseprecifique.api.shared.dto.request.CustomizacaoAnexadaRequest;
+import com.penseprecifique.api.shared.dto.request.DuplicarCatalogoRequest;
+import com.penseprecifique.api.shared.dto.request.ItemCatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.CatalogoResponse;
+import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
+import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.repository.ItemCatalogoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
