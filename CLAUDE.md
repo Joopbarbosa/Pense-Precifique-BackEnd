@@ -215,6 +215,8 @@ ${dados.total}
 | V2 | V2__allow_null_insumo_id_producao_consumidos.sql | Permite insumo_id null |
 | V4+ | (bloco Catálogo) | `rendimento`, `margem_lucro`+`override`, tabelas `catalogos`/`itens_catalogo`/`itens_catalogo_customizacao`, `orcamento_itens.item_catalogo_id`, identificadores sequenciais — **nomes exatos de V3 a V8 não confirmados nesta sessão, conferir `ls db/migration/` antes de escrever a próxima** |
 | V9 | V9__orcamento_item_produto_avulso.sql | `produto_id`+`margem_aplicada` em `orcamento_itens`, CHECK XOR (RN-054) — confirmado |
+| V10 | V10__insumo_permitir_estoque_negativo.sql | Coluna `permitir_estoque_negativo` (BOOLEAN, default true) em `insumos` — RN-059 |
+| V11 | V11__produto_permitir_estoque_negativo.sql | Coluna `permitir_estoque_negativo` (BOOLEAN, default true) em `produtos` — RN-059 |
 
 ---
 
