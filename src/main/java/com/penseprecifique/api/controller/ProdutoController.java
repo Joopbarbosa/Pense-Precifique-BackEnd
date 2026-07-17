@@ -1,12 +1,12 @@
 package com.penseprecifique.api.controller;
 
-import com.penseprecifique.api.domain.enums.TipoProduto;
-import com.penseprecifique.api.dto.request.BaixaManualProdutoRequest;
-import com.penseprecifique.api.dto.request.ProdutoRequest;
-import com.penseprecifique.api.dto.response.MovimentacaoProdutoResponse;
-import com.penseprecifique.api.dto.response.PrecoSugeridoResponse;
-import com.penseprecifique.api.dto.response.ProdutoDetalheResponse;
-import com.penseprecifique.api.dto.response.ProdutoResponse;
+import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.dto.request.BaixaManualProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.MovimentacaoProdutoResponse;
+import com.penseprecifique.api.shared.dto.response.PrecoSugeridoResponse;
+import com.penseprecifique.api.shared.dto.response.ProdutoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.ProdutoResponse;
 import com.penseprecifique.api.service.ProdutoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

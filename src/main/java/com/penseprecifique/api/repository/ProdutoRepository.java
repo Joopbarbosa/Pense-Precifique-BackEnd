@@ -1,7 +1,7 @@
 package com.penseprecifique.api.repository;
 
-import com.penseprecifique.api.domain.entity.Produto;
-import com.penseprecifique.api.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

@@ -1,11 +1,11 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.dto.request.BaixaManualInsumoRequestDTO;
-import com.penseprecifique.api.dto.request.InsumoCreateRequestDTO;
-import com.penseprecifique.api.dto.request.InsumoRequestDTO;
-import com.penseprecifique.api.dto.response.InsumoResponseDTO;
-import com.penseprecifique.api.dto.response.MovimentacaoInsumoResponseDTO;
-import com.penseprecifique.api.dto.response.ProdutoRelacionadoResponse;
+import com.penseprecifique.api.shared.dto.request.BaixaManualInsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.request.InsumoCreateRequestDTO;
+import com.penseprecifique.api.shared.dto.request.InsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.response.InsumoResponseDTO;
+import com.penseprecifique.api.shared.dto.response.MovimentacaoInsumoResponseDTO;
+import com.penseprecifique.api.shared.dto.response.ProdutoRelacionadoResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 

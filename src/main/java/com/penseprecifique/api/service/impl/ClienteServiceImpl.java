@@ -1,12 +1,12 @@
 package com.penseprecifique.api.service.impl;
 
-import com.penseprecifique.api.domain.entity.Cliente;
-import com.penseprecifique.api.domain.entity.Usuario;
-import com.penseprecifique.api.dto.request.ClienteRequest;
-import com.penseprecifique.api.dto.response.ClienteResponse;
-import com.penseprecifique.api.exception.BusinessException;
-import com.penseprecifique.api.exception.ResourceNotFoundException;
-import com.penseprecifique.api.mapper.ClienteMapper;
+import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.dto.request.ClienteRequest;
+import com.penseprecifique.api.shared.dto.response.ClienteResponse;
+import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.mapper.ClienteMapper;
 import com.penseprecifique.api.repository.ClienteRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.ClienteService;

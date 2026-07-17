@@ -1,12 +1,12 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.domain.entity.Orcamento;
-import com.penseprecifique.api.domain.entity.Usuario;
-import com.penseprecifique.api.domain.enums.StatusOrcamento;
-import com.penseprecifique.api.dto.response.DashboardResponse;
-import com.penseprecifique.api.dto.response.OrcamentoResumoDTO;
-import com.penseprecifique.api.dto.response.ProdutoVendidoDTO;
-import com.penseprecifique.api.exception.BusinessException;
+import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.shared.dto.response.DashboardResponse;
+import com.penseprecifique.api.shared.dto.response.OrcamentoResumoDTO;
+import com.penseprecifique.api.shared.dto.response.ProdutoVendidoDTO;
+import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;

@@ -1,6 +1,6 @@
 package com.penseprecifique.api.security;
 
-import com.penseprecifique.api.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;

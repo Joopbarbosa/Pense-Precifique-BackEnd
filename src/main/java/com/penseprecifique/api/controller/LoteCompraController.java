@@ -1,7 +1,7 @@
 package com.penseprecifique.api.controller;
 
-import com.penseprecifique.api.dto.request.RegistrarLoteCompraRequestDTO;
-import com.penseprecifique.api.dto.response.ImpactoAgregadoResponseDTO;
+import com.penseprecifique.api.shared.dto.request.RegistrarLoteCompraRequestDTO;
+import com.penseprecifique.api.shared.dto.response.ImpactoAgregadoResponseDTO;
 import com.penseprecifique.api.service.LoteCompraService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

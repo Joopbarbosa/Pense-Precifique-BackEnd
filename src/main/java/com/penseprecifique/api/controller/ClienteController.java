@@ -1,7 +1,7 @@
 package com.penseprecifique.api.controller;
 
-import com.penseprecifique.api.dto.request.ClienteRequest;
-import com.penseprecifique.api.dto.response.ClienteResponse;
+import com.penseprecifique.api.shared.dto.request.ClienteRequest;
+import com.penseprecifique.api.shared.dto.response.ClienteResponse;
 import com.penseprecifique.api.service.ClienteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

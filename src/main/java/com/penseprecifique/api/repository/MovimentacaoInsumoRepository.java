@@ -1,8 +1,8 @@
 package com.penseprecifique.api.repository;
 
-import com.penseprecifique.api.domain.entity.MovimentacaoInsumo;
-import com.penseprecifique.api.domain.enums.MotivoMovimentacaoInsumo;
-import com.penseprecifique.api.domain.enums.ReferenciaMovimentacaoTipo;
+import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
+import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
+import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

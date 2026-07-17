@@ -1,11 +1,11 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.domain.entity.Insumo;
-import com.penseprecifique.api.domain.entity.LoteCompra;
-import com.penseprecifique.api.domain.entity.Usuario;
-import com.penseprecifique.api.dto.request.RegistrarLoteCompraRequestDTO;
-import com.penseprecifique.api.dto.response.ImpactoAgregadoResponseDTO;
-import com.penseprecifique.api.dto.response.InsumoImpactoResponseDTO;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.LoteCompra;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.dto.request.RegistrarLoteCompraRequestDTO;
+import com.penseprecifique.api.shared.dto.response.ImpactoAgregadoResponseDTO;
+import com.penseprecifique.api.shared.dto.response.InsumoImpactoResponseDTO;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

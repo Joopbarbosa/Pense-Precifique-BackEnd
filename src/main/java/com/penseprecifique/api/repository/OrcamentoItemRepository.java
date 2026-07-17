@@ -1,6 +1,6 @@
 package com.penseprecifique.api.repository;
 
-import com.penseprecifique.api.domain.entity.OrcamentoItem;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

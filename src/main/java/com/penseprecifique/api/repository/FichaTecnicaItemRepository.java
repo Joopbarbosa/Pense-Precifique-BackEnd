@@ -1,7 +1,7 @@
 package com.penseprecifique.api.repository;
 
-import com.penseprecifique.api.domain.entity.FichaTecnicaItem;
-import com.penseprecifique.api.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Produto;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

@@ -1,15 +1,15 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.domain.entity.Catalogo;
-import com.penseprecifique.api.domain.entity.ItemCatalogo;
-import com.penseprecifique.api.domain.entity.ItemCatalogoCustomizacao;
-import com.penseprecifique.api.domain.entity.Usuario;
-import com.penseprecifique.api.dto.request.CatalogoRequest;
-import com.penseprecifique.api.dto.request.DuplicarCatalogoRequest;
-import com.penseprecifique.api.dto.response.CatalogoResponse;
-import com.penseprecifique.api.exception.BusinessException;
-import com.penseprecifique.api.exception.ResourceNotFoundException;
-import com.penseprecifique.api.mapper.CatalogoMapper;
+import com.penseprecifique.api.shared.domain.entity.Catalogo;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.dto.request.CatalogoRequest;
+import com.penseprecifique.api.shared.dto.request.DuplicarCatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.CatalogoResponse;
+import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.mapper.CatalogoMapper;
 import com.penseprecifique.api.repository.CatalogoRepository;
 import com.penseprecifique.api.repository.ItemCatalogoCustomizacaoRepository;
 import com.penseprecifique.api.repository.ItemCatalogoRepository;

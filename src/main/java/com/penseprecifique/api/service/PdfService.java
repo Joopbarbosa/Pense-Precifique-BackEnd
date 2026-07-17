@@ -1,14 +1,14 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.domain.entity.Empresa;
-import com.penseprecifique.api.domain.entity.Orcamento;
-import com.penseprecifique.api.domain.entity.OrcamentoItem;
-import com.penseprecifique.api.domain.entity.ReciboPagamento;
-import com.penseprecifique.api.domain.entity.Usuario;
-import com.penseprecifique.api.domain.enums.StatusOrcamento;
-import com.penseprecifique.api.domain.enums.TipoCancelamento;
-import com.penseprecifique.api.exception.BusinessException;
-import com.penseprecifique.api.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.domain.entity.Empresa;
+import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
+import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
+import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.repository.EmpresaRepository;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;

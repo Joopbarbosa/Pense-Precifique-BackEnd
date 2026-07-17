@@ -1,7 +1,7 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.dto.request.EmpresaRequestDTO;
-import com.penseprecifique.api.dto.response.EmpresaResponseDTO;
+import com.penseprecifique.api.shared.dto.request.EmpresaRequestDTO;
+import com.penseprecifique.api.shared.dto.response.EmpresaResponseDTO;
 
 public interface EmpresaService {
     EmpresaResponseDTO getEmpresa();

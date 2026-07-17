@@ -1,8 +1,8 @@
 package com.penseprecifique.api.controller;
 
-import com.penseprecifique.api.dto.request.CatalogoRequest;
-import com.penseprecifique.api.dto.request.DuplicarCatalogoRequest;
-import com.penseprecifique.api.dto.response.CatalogoResponse;
+import com.penseprecifique.api.shared.dto.request.CatalogoRequest;
+import com.penseprecifique.api.shared.dto.request.DuplicarCatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.CatalogoResponse;
 import com.penseprecifique.api.service.CatalogoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

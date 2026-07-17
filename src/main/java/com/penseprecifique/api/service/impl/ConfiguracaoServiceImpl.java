@@ -1,9 +1,9 @@
 package com.penseprecifique.api.service.impl;
 
-import com.penseprecifique.api.domain.entity.ConfiguracaoPrecificacao;
-import com.penseprecifique.api.dto.request.ConfiguracaoRequestDTO;
-import com.penseprecifique.api.dto.response.ConfiguracaoResponseDTO;
-import com.penseprecifique.api.exception.BusinessException;
+import com.penseprecifique.api.shared.domain.entity.ConfiguracaoPrecificacao;
+import com.penseprecifique.api.shared.dto.request.ConfiguracaoRequestDTO;
+import com.penseprecifique.api.shared.dto.response.ConfiguracaoResponseDTO;
+import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.repository.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.ConfiguracaoService;

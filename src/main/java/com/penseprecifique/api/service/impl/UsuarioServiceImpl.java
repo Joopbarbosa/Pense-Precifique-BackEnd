@@ -1,9 +1,9 @@
 package com.penseprecifique.api.service.impl;
 
-import com.penseprecifique.api.domain.entity.Usuario;
-import com.penseprecifique.api.dto.request.AlterarSenhaRequestDTO;
-import com.penseprecifique.api.dto.response.UsuarioResponseDTO;
-import com.penseprecifique.api.exception.BusinessException;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.dto.request.AlterarSenhaRequestDTO;
+import com.penseprecifique.api.shared.dto.response.UsuarioResponseDTO;
+import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.UsuarioService;
 import lombok.RequiredArgsConstructor;

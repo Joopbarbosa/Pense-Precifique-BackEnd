@@ -1,7 +1,7 @@
 package com.penseprecifique.api.repository;
 
-import com.penseprecifique.api.domain.entity.Orcamento;
-import com.penseprecifique.api.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

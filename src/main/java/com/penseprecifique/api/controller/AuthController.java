@@ -1,8 +1,8 @@
 package com.penseprecifique.api.controller;
 
-import com.penseprecifique.api.dto.request.CadastroRequestDTO;
-import com.penseprecifique.api.dto.request.LoginRequestDTO;
-import com.penseprecifique.api.dto.response.AuthResponseDTO;
+import com.penseprecifique.api.shared.dto.request.CadastroRequestDTO;
+import com.penseprecifique.api.shared.dto.request.LoginRequestDTO;
+import com.penseprecifique.api.shared.dto.response.AuthResponseDTO;
 import com.penseprecifique.api.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

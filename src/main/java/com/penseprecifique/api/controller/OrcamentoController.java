@@ -1,11 +1,11 @@
 package com.penseprecifique.api.controller;
 
-import com.penseprecifique.api.domain.enums.StatusOrcamento;
-import com.penseprecifique.api.dto.request.AvancaStatusRequest;
-import com.penseprecifique.api.dto.request.OrcamentoRequest;
-import com.penseprecifique.api.dto.response.ItemCatalogoBuscaResponse;
-import com.penseprecifique.api.dto.response.OrcamentoDetalheResponse;
-import com.penseprecifique.api.dto.response.OrcamentoResponse;
+import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
+import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
+import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
+import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
 import com.penseprecifique.api.service.ItemCatalogoService;
 import com.penseprecifique.api.service.OrcamentoService;
 import com.penseprecifique.api.service.PdfService;

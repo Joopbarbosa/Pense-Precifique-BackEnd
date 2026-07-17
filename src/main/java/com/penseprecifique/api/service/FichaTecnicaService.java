@@ -1,12 +1,12 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.domain.entity.FichaTecnicaItem;
-import com.penseprecifique.api.domain.entity.Insumo;
-import com.penseprecifique.api.domain.entity.Produto;
-import com.penseprecifique.api.domain.enums.TipoProduto;
-import com.penseprecifique.api.dto.request.FichaTecnicaItemRequest;
-import com.penseprecifique.api.exception.BusinessException;
-import com.penseprecifique.api.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.dto.request.FichaTecnicaItemRequest;
+import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;

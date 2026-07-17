@@ -1,8 +1,8 @@
 package com.penseprecifique.api.service;
 
-import com.penseprecifique.api.domain.entity.*;
-import com.penseprecifique.api.domain.enums.MetodoPagamento;
-import com.penseprecifique.api.dto.pdf.*;
+import com.penseprecifique.api.shared.domain.entity.*;
+import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.dto.pdf.*;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
