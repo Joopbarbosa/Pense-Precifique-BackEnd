@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -27,8 +27,6 @@ import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.MovimentacaoProdutoRepository;
-import com.penseprecifique.api.repository.ProducaoInsumoConsumidoRepository;
-import com.penseprecifique.api.repository.ProducaoRepository;
 import com.penseprecifique.api.repository.ProdutoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;

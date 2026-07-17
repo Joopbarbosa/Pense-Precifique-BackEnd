@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
 import org.springframework.data.jpa.repository.JpaRepository;

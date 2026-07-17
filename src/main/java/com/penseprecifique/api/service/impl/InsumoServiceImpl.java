@@ -22,7 +22,7 @@ import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.InsumoRepository;
 import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
-import com.penseprecifique.api.repository.ProducaoRepository;
+import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import com.penseprecifique.api.service.InsumoService;
 import com.penseprecifique.api.service.LoteCompraService;

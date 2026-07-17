@@ -1,4 +1,4 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.LancarProducaoLoteRequest;
@@ -6,7 +6,6 @@ import com.penseprecifique.api.shared.dto.request.LancarProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
-import com.penseprecifique.api.service.ProducaoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
