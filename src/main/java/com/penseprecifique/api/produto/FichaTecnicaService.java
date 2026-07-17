@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.produto;
 
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -7,9 +7,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.FichaTecnicaItemRequest;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
-import com.penseprecifique.api.repository.FichaTecnicaItemRepository;
 import com.penseprecifique.api.repository.InsumoRepository;
-import com.penseprecifique.api.repository.ProdutoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

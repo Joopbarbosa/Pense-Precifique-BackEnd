@@ -16,7 +16,7 @@ import com.penseprecifique.api.shared.mapper.ItemCatalogoMapper;
 import com.penseprecifique.api.repository.CatalogoRepository;
 import com.penseprecifique.api.repository.ItemCatalogoCustomizacaoRepository;
 import com.penseprecifique.api.repository.ItemCatalogoRepository;
-import com.penseprecifique.api.repository.ProdutoRepository;
+import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;

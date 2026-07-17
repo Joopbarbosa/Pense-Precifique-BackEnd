@@ -1,4 +1,4 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.produto;
 
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.BaixaManualProdutoRequest;
@@ -7,7 +7,6 @@ import com.penseprecifique.api.shared.dto.response.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.PrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.ProdutoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProdutoResponse;
-import com.penseprecifique.api.service.ProdutoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.produto;
 
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
