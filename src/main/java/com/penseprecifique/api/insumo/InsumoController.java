@@ -1,4 +1,4 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.dto.request.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.InsumoCreateRequestDTO;
@@ -6,7 +6,6 @@ import com.penseprecifique.api.shared.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.InsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.ProdutoRelacionadoResponse;
-import com.penseprecifique.api.service.InsumoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

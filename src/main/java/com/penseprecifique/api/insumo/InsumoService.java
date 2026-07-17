@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.dto.request.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.InsumoCreateRequestDTO;

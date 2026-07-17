@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.domain.entity.LoteCompra;
 import org.springframework.data.jpa.repository.JpaRepository;

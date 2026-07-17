@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service.impl;
+package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.LoteCompra;
@@ -13,11 +13,7 @@ import com.penseprecifique.api.shared.dto.response.ImpactoAgregadoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.InsumoImpactoResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
-import com.penseprecifique.api.repository.InsumoRepository;
-import com.penseprecifique.api.repository.LoteCompraRepository;
-import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
-import com.penseprecifique.api.service.LoteCompraService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;

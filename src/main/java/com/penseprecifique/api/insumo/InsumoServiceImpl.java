@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service.impl;
+package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.LoteCompra;
@@ -19,13 +19,9 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.InsumoMapper;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
-import com.penseprecifique.api.repository.InsumoRepository;
-import com.penseprecifique.api.repository.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.repository.UsuarioRepository;
-import com.penseprecifique.api.service.InsumoService;
-import com.penseprecifique.api.service.LoteCompraService;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
