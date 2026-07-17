@@ -32,8 +32,9 @@ public class OrcamentoController {
     @GetMapping
     public ResponseEntity<Page<OrcamentoResponse>> listar(
             @RequestParam(required = false) StatusOrcamento status,
+            @RequestParam(required = false) String busca,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(orcamentoService.listar(status, pageable));
+        return ResponseEntity.ok(orcamentoService.listar(status, busca, pageable));
     }
 
     @GetMapping("/itens-catalogo")

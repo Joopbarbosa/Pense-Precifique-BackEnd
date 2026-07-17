@@ -79,11 +79,21 @@ public class OrcamentoService {
     private final OrcamentoMapper orcamentoMapper;
 
     @Transactional(readOnly = true)
-    public Page<OrcamentoResponse> listar(StatusOrcamento status, Pageable pageable) {
+    public Page<OrcamentoResponse> listar(StatusOrcamento status, String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        Page<Orcamento> page = (status != null)
-                ? orcamentoRepository.findByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, status, pageable)
-                : orcamentoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable);
+        boolean temBusca = busca != null && !busca.isBlank();
+        Page<Orcamento> page;
+        if (status != null && temBusca) {
+            page = orcamentoRepository.findByUsuarioIdAndStatusAndClienteNomeContainingIgnoreCaseAndDeletedAtIsNull(
+                    usuarioId, status, busca, pageable);
+        } else if (status != null) {
+            page = orcamentoRepository.findByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, status, pageable);
+        } else if (temBusca) {
+            page = orcamentoRepository.findByUsuarioIdAndClienteNomeContainingIgnoreCaseAndDeletedAtIsNull(
+                    usuarioId, busca, pageable);
+        } else {
+            page = orcamentoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable);
+        }
         return page.map(orcamentoMapper::toResponse);
     }
 

@@ -22,6 +22,7 @@ public class OrcamentoMapper {
         OrcamentoResponse response = new OrcamentoResponse();
         response.setId(orcamento.getId());
         response.setNumero(orcamento.getNumero());
+        response.setIdentificador(IdentificadorFormatter.formatar("ORC", orcamento.getNumero()));
         response.setNomeCliente(orcamento.getCliente().getNome());
         response.setStatus(orcamento.getStatus());
         response.setTotal(orcamento.getTotal());
