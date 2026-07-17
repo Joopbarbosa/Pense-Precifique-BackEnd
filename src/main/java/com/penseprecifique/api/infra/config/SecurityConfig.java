@@ -1,6 +1,6 @@
-package com.penseprecifique.api.config;
+package com.penseprecifique.api.infra.config;
 
-import com.penseprecifique.api.security.JwtAuthenticationFilter;
+import com.penseprecifique.api.infra.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;

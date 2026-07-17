@@ -6,7 +6,7 @@ import com.penseprecifique.api.shared.dto.request.LoginRequestDTO;
 import com.penseprecifique.api.shared.dto.response.AuthResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.repository.UsuarioRepository;
-import com.penseprecifique.api.security.JwtTokenProvider;
+import com.penseprecifique.api.infra.security.JwtTokenProvider;
 import com.penseprecifique.api.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;

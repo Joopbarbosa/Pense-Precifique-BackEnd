@@ -1,4 +1,4 @@
-package com.penseprecifique.api.security;
+package com.penseprecifique.api.infra.security;
 
 import com.penseprecifique.api.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;

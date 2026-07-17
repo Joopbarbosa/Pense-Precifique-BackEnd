@@ -1,4 +1,4 @@
-package com.penseprecifique.api.security;
+package com.penseprecifique.api.infra.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
