@@ -1,11 +1,9 @@
-package com.penseprecifique.api.service.impl;
+package com.penseprecifique.api.auth;
 
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.AlterarSenhaRequestDTO;
 import com.penseprecifique.api.shared.dto.response.UsuarioResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
-import com.penseprecifique.api.repository.UsuarioRepository;
-import com.penseprecifique.api.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;

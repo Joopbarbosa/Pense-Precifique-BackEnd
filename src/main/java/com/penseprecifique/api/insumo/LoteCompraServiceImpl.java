@@ -13,7 +13,7 @@ import com.penseprecifique.api.shared.dto.response.ImpactoAgregadoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.InsumoImpactoResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
-import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;

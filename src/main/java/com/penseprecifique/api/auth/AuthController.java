@@ -1,9 +1,8 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.auth;
 
 import com.penseprecifique.api.shared.dto.request.CadastroRequestDTO;
 import com.penseprecifique.api.shared.dto.request.LoginRequestDTO;
 import com.penseprecifique.api.shared.dto.response.AuthResponseDTO;
-import com.penseprecifique.api.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;

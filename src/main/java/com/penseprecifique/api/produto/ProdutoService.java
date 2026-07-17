@@ -17,7 +17,7 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProdutoMapper;
 import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
-import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

@@ -39,7 +39,7 @@ import com.penseprecifique.api.repository.OrcamentoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.repository.ReciboEstornoRepository;
 import com.penseprecifique.api.repository.ReciboPagamentoRepository;
-import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

@@ -7,7 +7,7 @@ import com.penseprecifique.api.shared.dto.response.ClienteResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ClienteMapper;
-import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

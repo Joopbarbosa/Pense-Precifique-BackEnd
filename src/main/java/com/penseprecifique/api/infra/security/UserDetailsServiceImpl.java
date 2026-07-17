@@ -1,6 +1,6 @@
 package com.penseprecifique.api.infra.security;
 
-import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;

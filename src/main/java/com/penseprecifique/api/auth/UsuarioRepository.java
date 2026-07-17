@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.auth;
 
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;

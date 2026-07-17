@@ -13,7 +13,7 @@ import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.repository.ItemCatalogoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
-import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.auth.UsuarioRepository;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

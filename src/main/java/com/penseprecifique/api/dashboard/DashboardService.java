@@ -9,7 +9,7 @@ import com.penseprecifique.api.shared.dto.response.ProdutoVendidoDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.repository.OrcamentoItemRepository;
 import com.penseprecifique.api.repository.OrcamentoRepository;
-import com.penseprecifique.api.repository.UsuarioRepository;
+import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
