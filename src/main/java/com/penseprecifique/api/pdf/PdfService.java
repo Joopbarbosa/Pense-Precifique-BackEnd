@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.domain.entity.Empresa;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;

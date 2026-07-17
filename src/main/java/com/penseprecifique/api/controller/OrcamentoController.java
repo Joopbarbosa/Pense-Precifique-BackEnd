@@ -8,7 +8,7 @@ import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
 import com.penseprecifique.api.service.ItemCatalogoService;
 import com.penseprecifique.api.service.OrcamentoService;
-import com.penseprecifique.api.service.PdfService;
+import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
