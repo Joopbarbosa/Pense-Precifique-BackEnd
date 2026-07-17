@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.dashboard;
 
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;

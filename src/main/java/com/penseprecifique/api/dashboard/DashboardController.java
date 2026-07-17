@@ -1,7 +1,6 @@
-package com.penseprecifique.api.controller;
+package com.penseprecifique.api.dashboard;
 
 import com.penseprecifique.api.shared.dto.response.DashboardResponse;
-import com.penseprecifique.api.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
