@@ -1,4 +1,4 @@
-package com.penseprecifique.api.repository;
+package com.penseprecifique.api.cliente;
 
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import org.springframework.data.domain.Page;

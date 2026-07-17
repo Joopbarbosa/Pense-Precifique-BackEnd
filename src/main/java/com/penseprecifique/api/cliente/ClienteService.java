@@ -1,4 +1,4 @@
-package com.penseprecifique.api.service;
+package com.penseprecifique.api.cliente;
 
 import com.penseprecifique.api.shared.dto.request.ClienteRequest;
 import com.penseprecifique.api.shared.dto.response.ClienteResponse;

@@ -29,7 +29,7 @@ import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.OrcamentoMapper;
-import com.penseprecifique.api.repository.ClienteRepository;
+import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.repository.ItemCatalogoCustomizacaoRepository;
 import com.penseprecifique.api.repository.ItemCatalogoRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
