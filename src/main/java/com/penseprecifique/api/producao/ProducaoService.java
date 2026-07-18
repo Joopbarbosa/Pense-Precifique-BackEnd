@@ -94,7 +94,7 @@ public class ProducaoService {
         }
 
         return producaoRepository.buscar(usuarioId, estado, buscaNumero, buscaNome, pageable)
-                .map(producaoMapper::toResponse);
+                .map(this::montarResponseComAlertas);
     }
 
     @Transactional(readOnly = true)
@@ -102,7 +102,14 @@ public class ProducaoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
-        return montarDetalhe(producao, List.of());
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        return montarDetalhe(producao, calcularAlertasAoVivo(produtos));
+    }
+
+    /** #123 — alertasInsumos recalculado ao vivo em GET /producoes e GET /producoes/{id}, mesmo cálculo de RN-064. */
+    private ProducaoResponse montarResponseComAlertas(Producao producao) {
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos));
     }
 
     @Transactional(readOnly = true)
@@ -851,6 +858,75 @@ public class ProducaoService {
             BigDecimal ratioLote = quantidade.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
 
             for (FichaTecnicaItem item : validados.fichas().get(produto.getId())) {
+                BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
+                if (item.getInsumo() != null) {
+                    necessidadePorComponente.merge(item.getInsumo().getId(), necessaria, BigDecimal::add);
+                    insumosPorId.putIfAbsent(item.getInsumo().getId(), item.getInsumo());
+                } else if (item.getProdutoBase() != null) {
+                    necessidadePorComponente.merge(item.getProdutoBase().getId(), necessaria, BigDecimal::add);
+                    produtosBasePorId.putIfAbsent(item.getProdutoBase().getId(), item.getProdutoBase());
+                }
+            }
+        }
+
+        List<AlertaInsumoResponse> alertas = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : necessidadePorComponente.entrySet()) {
+            UUID componenteId = entry.getKey();
+            BigDecimal necessaria = entry.getValue();
+
+            String nome;
+            BigDecimal estoqueAtual;
+            Boolean permitirEstoqueNegativo;
+            if (insumosPorId.containsKey(componenteId)) {
+                Insumo insumo = insumosPorId.get(componenteId);
+                nome = insumo.getNome();
+                estoqueAtual = insumo.getEstoqueAtual();
+                permitirEstoqueNegativo = insumo.getPermitirEstoqueNegativo();
+            } else {
+                Produto base = produtosBasePorId.get(componenteId);
+                nome = base.getNome();
+                estoqueAtual = base.getEstoqueAtual();
+                permitirEstoqueNegativo = base.getPermitirEstoqueNegativo();
+            }
+
+            SituacaoAlertaInsumo situacao;
+            if (estoqueAtual.compareTo(necessaria) >= 0) {
+                situacao = SituacaoAlertaInsumo.SUFICIENTE;
+            } else if (Boolean.FALSE.equals(permitirEstoqueNegativo)) {
+                situacao = SituacaoAlertaInsumo.BLOQUEIO_FUTURO;
+            } else {
+                situacao = SituacaoAlertaInsumo.AVISO;
+            }
+
+            AlertaInsumoResponse alerta = new AlertaInsumoResponse();
+            alerta.setNomeInsumo(nome);
+            alerta.setEstoqueAtual(estoqueAtual);
+            alerta.setQuantidadeNecessaria(necessaria);
+            alerta.setSituacao(situacao);
+            alertas.add(alerta);
+        }
+        return alertas;
+    }
+
+    /**
+     * RN-064/#123 — mesmo cálculo de {@link #calcularAlertas(ProdutosValidados)}, mas a partir de
+     * {@code ProducaoProduto} já persistido (GET /producoes e GET /producoes/{id}), sem passar pelas
+     * validações de {@link #validarEResolverProdutos}. Produto com rendimento inválido é ignorado em
+     * vez de lançar exceção — é um cálculo informativo de leitura, não pode quebrar o GET.
+     */
+    private List<AlertaInsumoResponse> calcularAlertasAoVivo(List<ProducaoProduto> produtosDaProducao) {
+        Map<UUID, BigDecimal> necessidadePorComponente = new LinkedHashMap<>();
+        Map<UUID, Insumo> insumosPorId = new LinkedHashMap<>();
+        Map<UUID, Produto> produtosBasePorId = new LinkedHashMap<>();
+
+        for (ProducaoProduto producaoProduto : produtosDaProducao) {
+            Produto produto = producaoProduto.getProduto();
+            if (produto.getRendimento() == null || produto.getRendimento().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            BigDecimal ratioLote = producaoProduto.getQuantidade().divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
+
+            for (FichaTecnicaItem item : fichaTecnicaItemRepository.findByProdutoId(produto.getId())) {
                 BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
                 if (item.getInsumo() != null) {
                     necessidadePorComponente.merge(item.getInsumo().getId(), necessaria, BigDecimal::add);
