@@ -1,10 +1,13 @@
 package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.shared.dto.request.AgruparProducoesRequest;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
+import com.penseprecifique.api.shared.dto.response.AgruparProducoesResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
@@ -67,7 +70,7 @@ public class ProducaoController {
     }
 
     @PostMapping("/{id}/iniciar")
-    public ResponseEntity<ProducaoDetalheResponse> iniciar(
+    public ResponseEntity<Object> iniciar(
             @PathVariable UUID id,
             @RequestBody(required = false) IniciarProducaoRequest request) {
         return ResponseEntity.ok(producaoService.iniciar(id, request != null ? request : new IniciarProducaoRequest()));
@@ -81,12 +84,19 @@ public class ProducaoController {
     }
 
     @PostMapping("/{id}/retomar")
-    public ResponseEntity<ProducaoDetalheResponse> retomar(@PathVariable UUID id) {
-        return ResponseEntity.ok(producaoService.retomar(id));
+    public ResponseEntity<Object> retomar(
+            @PathVariable UUID id,
+            @RequestBody(required = false) RetormarProducaoRequest request) {
+        return ResponseEntity.ok(producaoService.retomar(id, request));
     }
 
     @PostMapping("/{id}/finalizar")
     public ResponseEntity<ProducaoDetalheResponse> finalizar(@PathVariable UUID id) {
         return ResponseEntity.ok(producaoService.finalizar(id));
+    }
+
+    @PostMapping("/agrupar")
+    public ResponseEntity<AgruparProducoesResponse> agrupar(@Valid @RequestBody AgruparProducoesRequest request) {
+        return ResponseEntity.ok(producaoService.agrupar(request));
     }
 }
