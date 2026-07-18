@@ -28,14 +28,16 @@ public class Producao {
     @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "produto_id", nullable = false)
+    // Nulo para produções do fluxo novo (N produtos via ProducaoProduto) — só preenchido
+    // em produções legadas do fluxo antigo (1 produto, imediato).
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "produto_id")
     private Produto produto;
 
     @Column(name = "numero", updatable = false)
     private Integer numero;
 
-    @Column(name = "quantidade", nullable = false, precision = 10, scale = 4)
+    @Column(name = "quantidade", precision = 10, scale = 4)
     private BigDecimal quantidade;
 
     @Column(name = "data_producao", nullable = false)
