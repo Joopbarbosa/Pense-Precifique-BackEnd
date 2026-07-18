@@ -1,12 +1,10 @@
 package com.penseprecifique.api.shared.domain.entity;
 
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.StatusProducao;
 import com.penseprecifique.api.shared.domain.enums.TipoOrigemProducao;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -28,31 +26,11 @@ public class Producao {
     @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
-    // Nulo para produções do fluxo novo (N produtos via ProducaoProduto) — só preenchido
-    // em produções legadas do fluxo antigo (1 produto, imediato).
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "produto_id")
-    private Produto produto;
-
     @Column(name = "numero", updatable = false)
     private Integer numero;
 
-    @Column(name = "quantidade", precision = 10, scale = 4)
-    private BigDecimal quantidade;
-
     @Column(name = "data_producao", nullable = false)
     private LocalDateTime dataProducao;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    @Builder.Default
-    private StatusProducao status = StatusProducao.ATIVA;
-
-    @Column(name = "observacao_cancelamento", columnDefinition = "TEXT")
-    private String observacaoCancelamento;
-
-    @Column(name = "data_cancelamento")
-    private LocalDateTime dataCancelamento;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "estado", nullable = false)
