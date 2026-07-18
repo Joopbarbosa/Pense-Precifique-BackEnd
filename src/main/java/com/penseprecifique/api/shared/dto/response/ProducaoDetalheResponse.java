@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,10 +25,6 @@ public class ProducaoDetalheResponse {
     private String justificativaNaoRealizada;
     private UUID producaoOrigemId;
     private TipoOrigemProducao tipoOrigem;
-
-    // Cancelamento do fluxo legado (RN-anterior, mantido para produções ATIVA/CANCELADA antigas)
-    private String observacaoCancelamento;
-    private LocalDateTime dataCancelamento;
 
     private List<ProducaoProdutoResponse> produtos;
     private List<AlertaInsumoResponse> alertasInsumos;

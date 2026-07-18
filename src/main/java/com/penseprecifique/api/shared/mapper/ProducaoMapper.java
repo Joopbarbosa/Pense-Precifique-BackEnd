@@ -48,8 +48,6 @@ public class ProducaoMapper {
         response.setJustificativaNaoRealizada(producao.getJustificativaNaoRealizada());
         response.setProducaoOrigemId(producao.getProducaoOrigem() != null ? producao.getProducaoOrigem().getId() : null);
         response.setTipoOrigem(producao.getTipoOrigem());
-        response.setObservacaoCancelamento(producao.getObservacaoCancelamento());
-        response.setDataCancelamento(producao.getDataCancelamento());
         response.setProdutos(produtos.stream().map(this::toProducaoProdutoResponse).toList());
         response.setAlertasInsumos(alertasInsumos);
         response.setInsumosConsumidos(insumosConsumidos.stream().map(this::toInsumoConsumidoResponse).toList());
