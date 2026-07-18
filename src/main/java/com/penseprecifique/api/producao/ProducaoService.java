@@ -370,6 +370,39 @@ public class ProducaoService {
         return montarDetalhe(producao, List.of());
     }
 
+    /** RN-070 — finaliza produção: incrementa estoque de cada produto pela quantidade produzida,
+     *  registra a entrada, preenche dataTerminoReal e vai para FINALIZADA (imutável, sem saída). */
+    public ProducaoDetalheResponse finalizar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.EM_ANDAMENTO) {
+            throw new BusinessException("Apenas produções em andamento podem ser finalizadas");
+        }
+
+        List<ProducaoProduto> produtosDaProducao = producaoProdutoRepository.findByProducaoId(producao.getId());
+        for (ProducaoProduto producaoProduto : produtosDaProducao) {
+            Produto produto = producaoProduto.getProduto();
+            produto.setEstoqueAtual(produto.getEstoqueAtual().add(producaoProduto.getQuantidade()));
+            produtoRepository.save(produto);
+
+            movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                    .produto(produto)
+                    .tipo(TipoMovimentacaoProduto.ENTRADA)
+                    .motivo(MotivoMovimentacaoProduto.PRODUCAO)
+                    .quantidade(producaoProduto.getQuantidade())
+                    .referenciaId(producao.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
+                    .estornada(false)
+                    .build());
+        }
+
+        producao.setDataTerminoReal(LocalDate.now());
+        transicionar(producao, EstadoProducao.FINALIZADA, OrigemHistoricoStatus.USUARIO, null);
+        return montarDetalhe(producao, List.of());
+    }
+
     private void transicionar(Producao producao, EstadoProducao novoEstado, OrigemHistoricoStatus origem, String justificativa) {
         EstadoProducao estadoAnterior = producao.getEstado();
         producao.setEstado(novoEstado);

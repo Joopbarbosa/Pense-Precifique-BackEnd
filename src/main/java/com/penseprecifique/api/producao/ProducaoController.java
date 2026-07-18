@@ -84,4 +84,9 @@ public class ProducaoController {
     public ResponseEntity<ProducaoDetalheResponse> retomar(@PathVariable UUID id) {
         return ResponseEntity.ok(producaoService.retomar(id));
     }
+
+    @PostMapping("/{id}/finalizar")
+    public ResponseEntity<ProducaoDetalheResponse> finalizar(@PathVariable UUID id) {
+        return ResponseEntity.ok(producaoService.finalizar(id));
+    }
 }
