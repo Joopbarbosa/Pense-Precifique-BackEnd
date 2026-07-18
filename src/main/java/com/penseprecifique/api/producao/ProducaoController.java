@@ -3,6 +3,8 @@ package com.penseprecifique.api.producao;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
@@ -62,5 +64,24 @@ public class ProducaoController {
             @PathVariable UUID id,
             @Valid @RequestBody CancelarProducaoRequest request) {
         return ResponseEntity.ok(producaoService.cancelar(id, request));
+    }
+
+    @PostMapping("/{id}/iniciar")
+    public ResponseEntity<ProducaoDetalheResponse> iniciar(
+            @PathVariable UUID id,
+            @RequestBody(required = false) IniciarProducaoRequest request) {
+        return ResponseEntity.ok(producaoService.iniciar(id, request != null ? request : new IniciarProducaoRequest()));
+    }
+
+    @PostMapping("/{id}/travar")
+    public ResponseEntity<ProducaoDetalheResponse> travar(
+            @PathVariable UUID id,
+            @Valid @RequestBody TravarProducaoRequest request) {
+        return ResponseEntity.ok(producaoService.travar(id, request));
+    }
+
+    @PostMapping("/{id}/retomar")
+    public ResponseEntity<ProducaoDetalheResponse> retomar(@PathVariable UUID id) {
+        return ResponseEntity.ok(producaoService.retomar(id));
     }
 }
