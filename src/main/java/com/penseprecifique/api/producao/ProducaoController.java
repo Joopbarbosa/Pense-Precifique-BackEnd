@@ -1,8 +1,8 @@
 package com.penseprecifique.api.producao;
 
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
-import com.penseprecifique.api.shared.dto.request.LancarProducaoLoteRequest;
-import com.penseprecifique.api.shared.dto.request.LancarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
@@ -27,8 +27,10 @@ public class ProducaoController {
 
     @GetMapping
     public ResponseEntity<Page<ProducaoResponse>> listar(
+            @RequestParam(required = false) String busca,
+            @RequestParam(required = false) EstadoProducao estado,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(producaoService.listar(pageable));
+        return ResponseEntity.ok(producaoService.listar(busca, estado, pageable));
     }
 
     @GetMapping("/{id}")
@@ -37,14 +39,15 @@ public class ProducaoController {
     }
 
     @PostMapping
-    public ResponseEntity<ProducaoDetalheResponse> lancar(@Valid @RequestBody LancarProducaoRequest request) {
-        return ResponseEntity.status(201).body(producaoService.lancar(request));
+    public ResponseEntity<ProducaoDetalheResponse> criar(@Valid @RequestBody CriarProducaoRequest request) {
+        return ResponseEntity.status(201).body(producaoService.criarProducao(request));
     }
 
-    @PostMapping("/lote")
-    public ResponseEntity<List<ProducaoDetalheResponse>> lancarLote(
-            @Valid @RequestBody LancarProducaoLoteRequest request) {
-        return ResponseEntity.status(201).body(producaoService.lancarLote(request));
+    @PutMapping("/{id}")
+    public ResponseEntity<ProducaoDetalheResponse> editar(
+            @PathVariable UUID id,
+            @Valid @RequestBody CriarProducaoRequest request) {
+        return ResponseEntity.ok(producaoService.editarProducao(id, request));
     }
 
     @GetMapping("/preview")

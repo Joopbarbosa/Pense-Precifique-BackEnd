@@ -1,22 +1,28 @@
 package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
+import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
+import com.penseprecifique.api.shared.domain.enums.OrigemHistoricoStatus;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
+import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.domain.enums.StatusProducao;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
-import com.penseprecifique.api.shared.dto.request.LancarProducaoLoteRequest;
-import com.penseprecifique.api.shared.dto.request.LancarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
@@ -38,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,6 +58,8 @@ import java.util.UUID;
 public class ProducaoService {
 
     private final ProducaoRepository producaoRepository;
+    private final ProducaoProdutoRepository producaoProdutoRepository;
+    private final HistoricoStatusProducaoRepository historicoStatusProducaoRepository;
     private final ProducaoInsumoConsumidoRepository producaoInsumoConsumidoRepository;
     private final ProdutoRepository produtoRepository;
     private final InsumoRepository insumoRepository;
@@ -61,9 +70,22 @@ public class ProducaoService {
     private final ProducaoMapper producaoMapper;
 
     @Transactional(readOnly = true)
-    public Page<ProducaoResponse> listar(Pageable pageable) {
+    public Page<ProducaoResponse> listar(String busca, EstadoProducao estado, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        return producaoRepository.findByUsuarioIdOrderByNumeroDesc(usuarioId, pageable)
+
+        Integer buscaNumero = null;
+        String buscaNome = null;
+        if (busca != null && !busca.isBlank()) {
+            String normalizado = busca.trim();
+            String semPrefixo = normalizado.toUpperCase().startsWith("PRD-") ? normalizado.substring(4) : normalizado;
+            if (semPrefixo.matches("\\d+")) {
+                buscaNumero = Integer.valueOf(semPrefixo);
+            } else {
+                buscaNome = normalizado;
+            }
+        }
+
+        return producaoRepository.buscar(usuarioId, estado, buscaNumero, buscaNome, pageable)
                 .map(producaoMapper::toResponse);
     }
 
@@ -73,7 +95,8 @@ public class ProducaoService {
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
         List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos);
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, List.of());
     }
 
     @Transactional(readOnly = true)
@@ -90,114 +113,73 @@ public class ProducaoService {
         return preview;
     }
 
-    public ProducaoDetalheResponse lancar(LancarProducaoRequest request) {
+    /** RN-061/062/064/077 — cria produção com N produtos, sem movimentação de estoque. Nasce AGUARDANDO_INICIO. */
+    public ProducaoDetalheResponse criarProducao(CriarProducaoRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         UUID usuarioId = usuario.getId();
 
-        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(request.getProdutoId(), usuarioId)
-                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        LocalDate dataInicio = request.getDataInicio() != null ? request.getDataInicio() : LocalDate.now();
+        validarDatas(dataInicio, request.getDataTerminoPrevista());
 
-        List<FichaTecnicaItem> ficha = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+        ProdutosValidados validados = validarEResolverProdutos(request.getProdutos(), usuarioId);
 
-        // RN-051 — quantidade final: lotes × rendimento (insumo não-fracionável) ou quantidade livre (todos fracionáveis).
-        BigDecimal quantidadeFinal = calcularQuantidadeFinal(request, produto);
+        Producao producao = Producao.builder()
+                .usuario(usuario)
+                .numero(proximoNumero(usuarioId))
+                .estado(EstadoProducao.AGUARDANDO_INICIO)
+                .dataInicio(dataInicio)
+                .dataTerminoPrevista(request.getDataTerminoPrevista())
+                .observacoes(request.getObservacoes())
+                .build();
+        producao = producaoRepository.save(producao);
 
-        // RN-051 — FichaTecnicaItem.quantidade agora significa "por lote"; a baixa é proporcional
-        // à quantidade final produzida em relação ao rendimento do lote (ficha vazia → ratio nunca usado).
-        // Dado legado anterior à RN-039 (rendimento obrigatório) pode ter escapado da obrigatoriedade — só
-        // importa aqui quando há ficha técnica de fato, senão o ratio nunca é usado.
-        if (!ficha.isEmpty()) {
-            exigirRendimentoValido(produto);
-        }
-        BigDecimal ratioLote = ficha.isEmpty() ? BigDecimal.ZERO
-                : quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
+        List<ProducaoProduto> produtosGravados = gravarProducaoProdutos(producao, validados);
 
-        List<ComponenteConsumo> consumo = calcularConsumo(ficha, ratioLote);
+        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                .producao(producao)
+                .statusAnterior(null)
+                .statusNovo(EstadoProducao.AGUARDANDO_INICIO)
+                .origem(OrigemHistoricoStatus.USUARIO)
+                .build());
 
-        // Verificação de suficiência: tudo ou nada, antes de qualquer alteração
-        // RN-059 — componente com permitirEstoqueNegativo=false bloqueia incondicionalmente,
-        // mesmo com confirmarEstoqueNegativo=true (a flag do cadastro sempre vence a do request).
-        validarEstoque(consumo, request.isConfirmarEstoqueNegativo());
-
-        Producao producao = registrarProducao(usuario, produto, quantidadeFinal, request.getDataProducao(),
-                consumo, proximoNumero(usuarioId));
-
-        List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos);
+        List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
+        return producaoMapper.toDetalheResponse(producao, List.of(), produtosGravados, alertas);
     }
 
-    /**
-     * RN-060 — lançamento de múltiplas produções na mesma sessão: o consumo de cada componente
-     * é somado entre todos os itens da lista antes de checar estoque (tudo ou nada), depois cada
-     * produção é gravada individualmente com seu próprio número sequencial (PRD-N).
-     */
-    public List<ProducaoDetalheResponse> lancarLote(LancarProducaoLoteRequest request) {
-        Usuario usuario = getUsuarioAutenticado();
-        UUID usuarioId = usuario.getId();
+    /** RN-063 — edição restrita a AGUARDANDO_INICIO; substitui a lista de produtos por completo. */
+    public ProducaoDetalheResponse editarProducao(UUID id, CriarProducaoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
 
-        List<ItemPreparado> preparados = new ArrayList<>();
-        Map<UUID, BigDecimal> consumoAcumulado = new LinkedHashMap<>();
-        Map<UUID, ComponenteConsumo> componentesPorId = new LinkedHashMap<>();
-
-        for (LancarProducaoRequest item : request.getProducoes()) {
-            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(item.getProdutoId(), usuarioId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
-
-            List<FichaTecnicaItem> ficha = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
-            BigDecimal quantidadeFinal = calcularQuantidadeFinal(item, produto);
-            if (!ficha.isEmpty()) {
-                exigirRendimentoValido(produto);
-            }
-            BigDecimal ratioLote = ficha.isEmpty() ? BigDecimal.ZERO
-                    : quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
-
-            List<ComponenteConsumo> consumo = calcularConsumo(ficha, ratioLote);
-            preparados.add(new ItemPreparado(item, produto, quantidadeFinal, consumo));
-
-            for (ComponenteConsumo c : consumo) {
-                UUID componenteId = c.getComponenteId();
-                consumoAcumulado.merge(componenteId, c.quantidadeNecessaria(), BigDecimal::add);
-                componentesPorId.putIfAbsent(componenteId, c);
-            }
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Apenas produções aguardando início podem ser editadas");
         }
 
-        // Checagem combinada de estoque (tudo ou nada) — consumo somado por componente entre
-        // todas as produções da sessão, RN-059 e RN-052 aplicadas ao lote como um todo.
-        List<String> bloqueados = new ArrayList<>();
-        List<String> insuficientes = new ArrayList<>();
-        for (Map.Entry<UUID, BigDecimal> entry : consumoAcumulado.entrySet()) {
-            ComponenteConsumo componente = componentesPorId.get(entry.getKey());
-            BigDecimal resultante = componente.getEstoqueAtual().subtract(entry.getValue());
-            if (resultante.compareTo(BigDecimal.ZERO) < 0) {
-                if (Boolean.FALSE.equals(componente.permitirEstoqueNegativo())) {
-                    bloqueados.add(componente.getNome());
-                } else {
-                    insuficientes.add(componente.getNome());
-                }
-            }
-        }
-        if (!bloqueados.isEmpty()) {
-            throw new BusinessException(
-                    "Estoque insuficiente para " + String.join(", ", bloqueados)
-                            + ". Este(s) componente(s) não permite(m) estoque negativo.");
-        }
-        boolean todasConfirmam = request.getProducoes().stream().allMatch(LancarProducaoRequest::isConfirmarEstoqueNegativo);
-        if (!insuficientes.isEmpty() && !todasConfirmam) {
-            throw new BusinessException("Estoque insuficiente para os insumos: " + String.join(", ", insuficientes));
-        }
+        LocalDate dataInicio = request.getDataInicio() != null ? request.getDataInicio() : producao.getDataInicio();
+        validarDatas(dataInicio, request.getDataTerminoPrevista());
 
-        // Gravação — validação combinada já passou, cada produção é gravada individualmente
-        // com seu próprio número sequencial (a sessão não é uma entidade nova, só agrupador de request).
-        List<ProducaoDetalheResponse> respostas = new ArrayList<>();
-        int numero = proximoNumero(usuarioId);
-        for (ItemPreparado preparado : preparados) {
-            Producao producao = registrarProducao(usuario, preparado.produto(), preparado.quantidadeFinal(),
-                    preparado.request().getDataProducao(), preparado.consumo(), numero++);
+        ProdutosValidados validados = validarEResolverProdutos(request.getProdutos(), usuarioId);
 
-            List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
-            respostas.add(producaoMapper.toDetalheResponse(producao, consumidos));
-        }
-        return respostas;
+        producaoProdutoRepository.deleteAll(producaoProdutoRepository.findByProducaoId(producao.getId()));
+
+        producao.setDataInicio(dataInicio);
+        producao.setDataTerminoPrevista(request.getDataTerminoPrevista());
+        producao.setObservacoes(request.getObservacoes());
+        producao = producaoRepository.save(producao);
+
+        List<ProducaoProduto> produtosGravados = gravarProducaoProdutos(producao, validados);
+
+        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                .producao(producao)
+                .statusAnterior(EstadoProducao.AGUARDANDO_INICIO)
+                .statusNovo(EstadoProducao.AGUARDANDO_INICIO)
+                .origem(OrigemHistoricoStatus.USUARIO)
+                .justificativa("Edição")
+                .build());
+
+        List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
+        return producaoMapper.toDetalheResponse(producao, List.of(), produtosGravados, alertas);
     }
 
     public ProducaoDetalheResponse cancelar(UUID id, CancelarProducaoRequest request) {
@@ -205,6 +187,13 @@ public class ProducaoService {
 
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        // Produção do fluxo novo (N produtos, sem coluna legada produto_id) — nenhum estoque foi
+        // movimentado na criação, então a reversão incondicional abaixo (fluxo legado) não se aplica.
+        if (producao.getProduto() == null) {
+            throw new BusinessException(
+                    "Use o endpoint /producoes/{id}/cancelar do novo ciclo de vida — será disponibilizado em breve.");
+        }
 
         if (producao.getStatus() == StatusProducao.CANCELADA) {
             throw new BusinessException("Esta produção já foi cancelada.");
@@ -294,158 +283,134 @@ public class ProducaoService {
         }
 
         producao.setStatus(StatusProducao.CANCELADA);
+        producao.setEstado(EstadoProducao.CANCELADA);
         producao.setObservacaoCancelamento(request.getObservacao());
         producao.setDataCancelamento(LocalDateTime.now());
         producao = producaoRepository.save(producao);
 
-        return producaoMapper.toDetalheResponse(producao, consumidos);
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, List.of());
     }
 
-    /** Representa o consumo necessário de um componente da ficha técnica — insumo XOR produto-base. */
-    private record ComponenteConsumo(Insumo insumo, Produto produtoBase, BigDecimal quantidadeNecessaria) {
-        UUID getComponenteId() {
-            return insumo != null ? insumo.getId() : produtoBase.getId();
-        }
+    /** Produtos já validados (existem, ativos, com ficha técnica + rendimento) e quantidades agregadas por RN-061. */
+    private record ProdutosValidados(List<Produto> produtos, Map<UUID, BigDecimal> quantidades,
+                                      Map<UUID, List<FichaTecnicaItem>> fichas) {
+    }
 
-        BigDecimal getEstoqueAtual() {
-            return insumo != null ? insumo.getEstoqueAtual() : produtoBase.getEstoqueAtual();
-        }
-
-        Boolean permitirEstoqueNegativo() {
-            return insumo != null ? insumo.getPermitirEstoqueNegativo() : produtoBase.getPermitirEstoqueNegativo();
-        }
-
-        String getNome() {
-            return insumo != null ? insumo.getNome() : produtoBase.getNome();
+    private void validarDatas(LocalDate dataInicio, LocalDate dataTerminoPrevista) {
+        if (dataTerminoPrevista.isBefore(dataInicio)) {
+            throw new BusinessException("Data de término prevista deve ser igual ou posterior à data de início");
         }
     }
 
-    /** Item de `lancarLote()` já com produto, ficha resolvidos e consumo calculado, aguardando a checagem combinada. */
-    private record ItemPreparado(LancarProducaoRequest request, Produto produto, BigDecimal quantidadeFinal,
-                                  List<ComponenteConsumo> consumo) {
-    }
+    /** RN-061 — existência/ativo, duplicatas somadas; RN-077 — ficha técnica + rendimento obrigatórios. */
+    private ProdutosValidados validarEResolverProdutos(List<ProducaoProdutoRequest> itens, UUID usuarioId) {
+        Map<UUID, BigDecimal> quantidades = new LinkedHashMap<>();
+        for (ProducaoProdutoRequest item : itens) {
+            quantidades.merge(item.getProdutoId(), item.getQuantidade(), BigDecimal::add);
+        }
 
-    /** RN-051 — consumo de cada componente da ficha técnica, proporcional ao ratio do lote produzido. */
-    private List<ComponenteConsumo> calcularConsumo(List<FichaTecnicaItem> ficha, BigDecimal ratioLote) {
-        List<ComponenteConsumo> consumo = new ArrayList<>();
-        for (FichaTecnicaItem item : ficha) {
-            BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
-            if (item.getInsumo() != null) {
-                consumo.add(new ComponenteConsumo(item.getInsumo(), null, necessaria));
-            } else if (item.getProdutoBase() != null) {
-                consumo.add(new ComponenteConsumo(null, item.getProdutoBase(), necessaria));
+        List<Produto> produtos = new ArrayList<>();
+        Map<UUID, List<FichaTecnicaItem>> fichas = new LinkedHashMap<>();
+        for (UUID produtoId : quantidades.keySet()) {
+            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+
+            if (!Boolean.TRUE.equals(produto.getAtivo())) {
+                throw new BusinessException("Produto " + produto.getNome() + " está inativo");
             }
+
+            List<FichaTecnicaItem> ficha = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+            if (ficha.isEmpty() || produto.getRendimento() == null || produto.getRendimento().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("Produto " + produto.getNome()
+                        + " não tem ficha técnica completa ou rendimento válido — complete o cadastro antes de incluir em uma produção");
+            }
+
+            produtos.add(produto);
+            fichas.put(produtoId, ficha);
         }
-        return consumo;
+
+        return new ProdutosValidados(produtos, quantidades, fichas);
+    }
+
+    private List<ProducaoProduto> gravarProducaoProdutos(Producao producao, ProdutosValidados validados) {
+        List<ProducaoProduto> gravados = new ArrayList<>();
+        for (Produto produto : validados.produtos()) {
+            gravados.add(producaoProdutoRepository.save(ProducaoProduto.builder()
+                    .producao(producao)
+                    .produto(produto)
+                    .quantidade(validados.quantidades().get(produto.getId()))
+                    .build()));
+        }
+        return gravados;
     }
 
     /**
-     * Verificação de suficiência de estoque, tudo ou nada, antes de qualquer alteração — RN-059
-     * (permitirEstoqueNegativo=false bloqueia incondicionalmente) + RN-052 (permitirEstoqueNegativo=true
-     * só bloqueia se o usuário não confirmou estoque negativo).
+     * RN-064 — alertas informativos de estoque, nunca bloqueiam a criação/edição. Consumo de cada
+     * insumo é somado entre todos os produtos da produção antes de comparar com o estoque atual.
      */
-    private void validarEstoque(List<ComponenteConsumo> consumo, boolean confirmarEstoqueNegativo) {
-        List<String> insuficientes = new ArrayList<>();
-        List<String> bloqueados = new ArrayList<>();
-        for (ComponenteConsumo c : consumo) {
-            if (c.getEstoqueAtual().compareTo(c.quantidadeNecessaria()) < 0) {
-                if (Boolean.FALSE.equals(c.permitirEstoqueNegativo())) {
-                    bloqueados.add(c.getNome());
-                } else {
-                    insuficientes.add(c.getNome());
+    private List<AlertaInsumoResponse> calcularAlertas(ProdutosValidados validados) {
+        Map<UUID, BigDecimal> necessidadePorComponente = new LinkedHashMap<>();
+        Map<UUID, Insumo> insumosPorId = new LinkedHashMap<>();
+        Map<UUID, Produto> produtosBasePorId = new LinkedHashMap<>();
+
+        for (Produto produto : validados.produtos()) {
+            BigDecimal quantidade = validados.quantidades().get(produto.getId());
+            BigDecimal ratioLote = quantidade.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
+
+            for (FichaTecnicaItem item : validados.fichas().get(produto.getId())) {
+                BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
+                if (item.getInsumo() != null) {
+                    necessidadePorComponente.merge(item.getInsumo().getId(), necessaria, BigDecimal::add);
+                    insumosPorId.putIfAbsent(item.getInsumo().getId(), item.getInsumo());
+                } else if (item.getProdutoBase() != null) {
+                    necessidadePorComponente.merge(item.getProdutoBase().getId(), necessaria, BigDecimal::add);
+                    produtosBasePorId.putIfAbsent(item.getProdutoBase().getId(), item.getProdutoBase());
                 }
             }
         }
-        if (!bloqueados.isEmpty()) {
-            throw new BusinessException(
-                    "Estoque insuficiente para " + String.join(", ", bloqueados)
-                            + ". Este(s) componente(s) não permite(m) estoque negativo.");
-        }
-        if (!insuficientes.isEmpty() && !confirmarEstoqueNegativo) {
-            throw new BusinessException("Estoque insuficiente para os insumos: " + String.join(", ", insuficientes));
-        }
-    }
 
-    /** Grava a Producao, a baixa de cada componente consumido e a entrada do produto produzido. */
-    private Producao registrarProducao(Usuario usuario, Produto produto, BigDecimal quantidadeFinal,
-                                        LocalDateTime dataProducao, List<ComponenteConsumo> consumo, Integer numero) {
-        Producao producao = Producao.builder()
-                .usuario(usuario)
-                .produto(produto)
-                .quantidade(quantidadeFinal)
-                .dataProducao(dataProducao != null ? dataProducao : LocalDateTime.now())
-                .status(StatusProducao.ATIVA)
-                .numero(numero)
-                .build();
-        producao = producaoRepository.save(producao);
+        List<AlertaInsumoResponse> alertas = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : necessidadePorComponente.entrySet()) {
+            UUID componenteId = entry.getKey();
+            BigDecimal necessaria = entry.getValue();
 
-        for (ComponenteConsumo c : consumo) {
-            BigDecimal consumida = c.quantidadeNecessaria();
-
-            if (c.insumo() != null) {
-                Insumo insumo = c.insumo();
-                insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(consumida));
-                insumoRepository.save(insumo);
-
-                movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
-                        .insumo(insumo)
-                        .tipo(TipoMovimentacaoInsumo.SAIDA)
-                        .motivo(MotivoMovimentacaoInsumo.PRODUCAO)
-                        .quantidade(consumida)
-                        .referenciaId(producao.getId())
-                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO)
-                        .estornada(false)
-                        .build());
-
-                producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
-                        .producao(producao)
-                        .insumo(insumo)
-                        .quantidade(consumida)
-                        .build());
-
-            } else if (c.produtoBase() != null) {
-                // Produto base é consumido do próprio estoque de produto.
-                Produto base = c.produtoBase();
-                base.setEstoqueAtual(base.getEstoqueAtual().subtract(consumida));
-                produtoRepository.save(base);
-
-                movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
-                        .produto(base)
-                        .tipo(TipoMovimentacaoProduto.SAIDA)
-                        .motivo(MotivoMovimentacaoProduto.PRODUCAO)
-                        .quantidade(consumida)
-                        .referenciaId(producao.getId())
-                        .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
-                        .estornada(false)
-                        .build());
-
-                producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
-                        .producao(producao)
-                        .produtoBase(base)
-                        .quantidade(consumida)
-                        .build());
+            String nome;
+            BigDecimal estoqueAtual;
+            Boolean permitirEstoqueNegativo;
+            if (insumosPorId.containsKey(componenteId)) {
+                Insumo insumo = insumosPorId.get(componenteId);
+                nome = insumo.getNome();
+                estoqueAtual = insumo.getEstoqueAtual();
+                permitirEstoqueNegativo = insumo.getPermitirEstoqueNegativo();
+            } else {
+                Produto base = produtosBasePorId.get(componenteId);
+                nome = base.getNome();
+                estoqueAtual = base.getEstoqueAtual();
+                permitirEstoqueNegativo = base.getPermitirEstoqueNegativo();
             }
+
+            SituacaoAlertaInsumo situacao;
+            if (estoqueAtual.compareTo(necessaria) >= 0) {
+                situacao = SituacaoAlertaInsumo.SUFICIENTE;
+            } else if (Boolean.FALSE.equals(permitirEstoqueNegativo)) {
+                situacao = SituacaoAlertaInsumo.BLOQUEIO_FUTURO;
+            } else {
+                situacao = SituacaoAlertaInsumo.AVISO;
+            }
+
+            AlertaInsumoResponse alerta = new AlertaInsumoResponse();
+            alerta.setNomeInsumo(nome);
+            alerta.setEstoqueAtual(estoqueAtual);
+            alerta.setQuantidadeNecessaria(necessaria);
+            alerta.setSituacao(situacao);
+            alertas.add(alerta);
         }
-
-        // Entrada do produto produzido
-        produto.setEstoqueAtual(produto.getEstoqueAtual().add(quantidadeFinal));
-        produtoRepository.save(produto);
-
-        movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
-                .produto(produto)
-                .tipo(TipoMovimentacaoProduto.ENTRADA)
-                .motivo(MotivoMovimentacaoProduto.PRODUCAO)
-                .quantidade(quantidadeFinal)
-                .referenciaId(producao.getId())
-                .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
-                .estornada(false)
-                .build());
-
-        return producao;
+        return alertas;
     }
 
     private InsumoConsumidoResponse montarPreview(FichaTecnicaItem item, BigDecimal quantidadeFinal) {
-        // RN-051 — mesma fórmula proporcional do lancar(); dado legado anterior à RN-039 pode ter rendimento nulo.
+        // RN-051 — mesma fórmula proporcional do fluxo antigo; dado legado anterior à RN-039 pode ter rendimento nulo.
         Produto produto = item.getProduto();
         exigirRendimentoValido(produto);
         BigDecimal ratioLote = quantidadeFinal.divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
@@ -483,26 +448,6 @@ public class ProducaoService {
             throw new BusinessException(
                     "Produto sem rendimento configurado — complete o cadastro do produto antes de lançar produção.");
         }
-    }
-
-    /** RN-051 — lotes (algum insumo não-fracionável) XOR quantidade livre (todos fracionáveis), nunca os dois. */
-    private BigDecimal calcularQuantidadeFinal(LancarProducaoRequest request, Produto produto) {
-        boolean temQuantidade = request.getQuantidade() != null;
-        boolean temLotes = request.getLotes() != null;
-
-        if (!temQuantidade && !temLotes) {
-            throw new BusinessException("Informe a quantidade produzida ou o número de lotes.");
-        }
-        if (temQuantidade && temLotes) {
-            throw new BusinessException(
-                    "Informe apenas um dos dois: quantidade produzida OU número de lotes, não os dois ao mesmo tempo.");
-        }
-
-        if (temLotes) {
-            exigirRendimentoValido(produto);
-            return produto.getRendimento().multiply(BigDecimal.valueOf(request.getLotes()));
-        }
-        return request.getQuantidade();
     }
 
     private Integer proximoNumero(UUID usuarioId) {

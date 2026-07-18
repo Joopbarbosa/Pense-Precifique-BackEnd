@@ -2,8 +2,11 @@ package com.penseprecifique.api.shared.mapper;
 
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
+import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
+import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.ProducaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
@@ -18,29 +21,44 @@ public class ProducaoMapper {
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
         response.setIdentificador(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
-        response.setProdutoId(producao.getProduto().getId());
-        response.setNomeProduto(producao.getProduto().getNome());
-        response.setTipoProduto(producao.getProduto().getTipo());
-        response.setQuantidade(producao.getQuantidade());
-        response.setDataProducao(producao.getDataProducao());
-        response.setStatus(producao.getStatus());
+        response.setEstado(producao.getEstado());
+        response.setDataInicio(producao.getDataInicio());
+        response.setDataTerminoPrevista(producao.getDataTerminoPrevista());
+        response.setObservacoes(producao.getObservacoes());
         return response;
     }
 
-    public ProducaoDetalheResponse toDetalheResponse(Producao producao, List<ProducaoInsumoConsumido> insumosConsumidos) {
+    public ProducaoDetalheResponse toDetalheResponse(Producao producao,
+                                                       List<ProducaoInsumoConsumido> insumosConsumidos,
+                                                       List<ProducaoProduto> produtos,
+                                                       List<AlertaInsumoResponse> alertasInsumos) {
         ProducaoDetalheResponse response = new ProducaoDetalheResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
         response.setIdentificador(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
-        response.setProdutoId(producao.getProduto().getId());
-        response.setNomeProduto(producao.getProduto().getNome());
-        response.setTipoProduto(producao.getProduto().getTipo());
-        response.setQuantidade(producao.getQuantidade());
-        response.setDataProducao(producao.getDataProducao());
-        response.setStatus(producao.getStatus());
+        response.setEstado(producao.getEstado());
+        response.setDataInicio(producao.getDataInicio());
+        response.setDataTerminoPrevista(producao.getDataTerminoPrevista());
+        response.setDataTerminoReal(producao.getDataTerminoReal());
+        response.setObservacoes(producao.getObservacoes());
+        response.setJustificativaCancelamento(producao.getJustificativaCancelamento());
+        response.setJustificativaNaoRealizada(producao.getJustificativaNaoRealizada());
+        response.setProducaoOrigemId(producao.getProducaoOrigem() != null ? producao.getProducaoOrigem().getId() : null);
+        response.setTipoOrigem(producao.getTipoOrigem());
         response.setObservacaoCancelamento(producao.getObservacaoCancelamento());
         response.setDataCancelamento(producao.getDataCancelamento());
+        response.setProdutos(produtos.stream().map(this::toProducaoProdutoResponse).toList());
+        response.setAlertasInsumos(alertasInsumos);
         response.setInsumosConsumidos(insumosConsumidos.stream().map(this::toInsumoConsumidoResponse).toList());
+        return response;
+    }
+
+    public ProducaoProdutoResponse toProducaoProdutoResponse(ProducaoProduto producaoProduto) {
+        ProducaoProdutoResponse response = new ProducaoProdutoResponse();
+        response.setProdutoId(producaoProduto.getProduto().getId());
+        response.setNomeProduto(producaoProduto.getProduto().getNome());
+        response.setTipoProduto(producaoProduto.getProduto().getTipo());
+        response.setQuantidade(producaoProduto.getQuantidade());
         return response;
     }
 

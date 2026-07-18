@@ -1,11 +1,11 @@
 package com.penseprecifique.api.shared.dto.response;
 
-import com.penseprecifique.api.shared.domain.enums.StatusProducao;
-import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.shared.domain.enums.TipoOrigemProducao;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -17,13 +17,21 @@ public class ProducaoDetalheResponse {
     private UUID id;
     private Integer numero;
     private String identificador;
-    private UUID produtoId;
-    private String nomeProduto;
-    private TipoProduto tipoProduto;
-    private BigDecimal quantidade;
-    private LocalDateTime dataProducao;
-    private StatusProducao status;
+    private EstadoProducao estado;
+    private LocalDate dataInicio;
+    private LocalDate dataTerminoPrevista;
+    private LocalDate dataTerminoReal;
+    private String observacoes;
+    private String justificativaCancelamento;
+    private String justificativaNaoRealizada;
+    private UUID producaoOrigemId;
+    private TipoOrigemProducao tipoOrigem;
+
+    // Cancelamento do fluxo legado (RN-anterior, mantido para produções ATIVA/CANCELADA antigas)
     private String observacaoCancelamento;
     private LocalDateTime dataCancelamento;
+
+    private List<ProducaoProdutoResponse> produtos;
+    private List<AlertaInsumoResponse> alertasInsumos;
     private List<InsumoConsumidoResponse> insumosConsumidos;
 }

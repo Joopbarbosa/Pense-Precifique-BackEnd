@@ -1,12 +1,10 @@
 package com.penseprecifique.api.shared.dto.response;
 
-import com.penseprecifique.api.shared.domain.enums.StatusProducao;
-import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Getter
@@ -16,10 +14,8 @@ public class ProducaoResponse {
     private UUID id;
     private Integer numero;
     private String identificador;
-    private UUID produtoId;
-    private String nomeProduto;
-    private TipoProduto tipoProduto;
-    private BigDecimal quantidade;
-    private LocalDateTime dataProducao;
-    private StatusProducao status;
+    private EstadoProducao estado;
+    private LocalDate dataInicio;
+    private LocalDate dataTerminoPrevista;
+    private String observacoes;
 }
