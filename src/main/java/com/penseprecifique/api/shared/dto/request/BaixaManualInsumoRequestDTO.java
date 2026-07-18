@@ -18,6 +18,6 @@ public record BaixaManualInsumoRequestDTO(
         MotivoMovimentacaoInsumo motivo,
 
         @NotBlank(message = "A observação é obrigatória")
-        @Size(min = 50, message = "A observação deve ter no mínimo 50 caracteres")
+        @Size(min = 30, message = "A observação deve ter no mínimo 30 caracteres")
         String observacao
 ) {}

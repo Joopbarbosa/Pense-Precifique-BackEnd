@@ -22,6 +22,6 @@ public class AvancaStatusRequest {
     private boolean estornarSinal;
     private LocalDateTime dataEstornoSinal;
 
-    @Size(min = 50, message = "A justificativa deve ter no mínimo 50 caracteres")
+    @Size(min = 30, message = "A justificativa deve ter no mínimo 30 caracteres")
     private String justificativa;
 }
