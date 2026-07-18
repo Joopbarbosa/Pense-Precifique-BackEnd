@@ -23,6 +23,7 @@ import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.response.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoItemResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
@@ -58,7 +59,7 @@ import java.util.UUID;
 public class OrcamentoService {
 
     private static final BigDecimal CEM = new BigDecimal("100");
-    private static final int MIN_OBS_OUTRO = 50;
+    private static final int MIN_OBS_OUTRO = 30;
 
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
@@ -210,7 +211,44 @@ public class OrcamentoService {
 
         orcamento = orcamentoRepository.save(orcamento);
 
-        return montarDetalhe(orcamento);
+        OrcamentoDetalheResponse response = montarDetalhe(orcamento);
+        List<OrcamentoItem> itensGravados = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        response.setAvisosEstoque(calcularAvisosEstoque(itensGravados));
+        return response;
+    }
+
+    /**
+     * UC-037/#126 — aviso informativo (nunca bloqueia) de estoque insuficiente para os produtos
+     * vendidos no orçamento, calculado só na criação. Quantidade é acumulada por produto quando o
+     * mesmo produto aparece em mais de um item (mesmo critério de RN-059/validarEstoqueParaFinalizar),
+     * para refletir a necessidade real somada, não item a item isoladamente.
+     */
+    private List<AvisoEstoqueResponse> calcularAvisosEstoque(List<OrcamentoItem> itens) {
+        Map<UUID, BigDecimal> quantidadeAcumulada = new LinkedHashMap<>();
+        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
+        for (OrcamentoItem item : itens) {
+            Produto produto = item.getProdutoVendido();
+            quantidadeAcumulada.merge(produto.getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
+            produtosPorId.putIfAbsent(produto.getId(), produto);
+        }
+
+        List<AvisoEstoqueResponse> avisos = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumulada.entrySet()) {
+            Produto produto = produtosPorId.get(entry.getKey());
+            BigDecimal necessaria = entry.getValue();
+            if (produto.getEstoqueAtual().compareTo(necessaria) < 0) {
+                AvisoEstoqueResponse aviso = new AvisoEstoqueResponse();
+                aviso.setProdutoId(produto.getId());
+                aviso.setNomeProduto(produto.getNome());
+                aviso.setEstoqueAtual(produto.getEstoqueAtual());
+                aviso.setQuantidadeNecessaria(necessaria);
+                aviso.setMensagem("Estoque insuficiente para " + necessaria.stripTrailingZeros().toPlainString()
+                        + " unidades de " + produto.getNome() + ". Estoque atual: "
+                        + produto.getEstoqueAtual().stripTrailingZeros().toPlainString());
+                avisos.add(aviso);
+            }
+        }
+        return avisos;
     }
 
     /**

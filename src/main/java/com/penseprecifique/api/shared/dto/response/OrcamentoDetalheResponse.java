@@ -46,4 +46,6 @@ public class OrcamentoDetalheResponse {
     private List<OrcamentoItemResponse> itens;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    /** UC-037/#126 — avisos informativos de estoque insuficiente, calculados só na criação (POST /orcamentos). */
+    private List<AvisoEstoqueResponse> avisosEstoque;
 }
