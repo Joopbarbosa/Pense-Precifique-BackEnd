@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,6 +21,9 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
     Optional<Producao> findByNumeroAndUsuarioId(Integer numero, UUID usuarioId);
 
     Optional<Producao> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
+
+    // RN-073/UC-036 — produções filhas de uma divisão (DIVISAO) ou agrupamento (AGRUPAMENTO).
+    List<Producao> findByProducaoOrigemId(UUID producaoOrigemId);
 
     // RN-076/#123 — busca por numero (PRD-N) OU nome de produto (via producao_produtos), filtro por
     // estado, ordenado por dataInicio DESC (produções legadas sem dataInicio ficam por último).

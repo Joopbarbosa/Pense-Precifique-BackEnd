@@ -18,19 +18,25 @@ import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
+import com.penseprecifique.api.shared.domain.enums.TipoOrigemProducao;
+import com.penseprecifique.api.shared.dto.request.AgruparProducoesRequest;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ConsumoRealRequest;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
+import com.penseprecifique.api.shared.dto.response.AgruparProducoesResponse;
 import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.DivisaoProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProducaoMapper;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
@@ -48,6 +54,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -210,9 +217,22 @@ public class ProducaoService {
         }
 
         // EM_ANDAMENTO ou TRAVADA — insumos já baixados no iniciar(), exige declaração de consumo real.
+        aplicarConsumoReal(producao, request.getConsumoReal(), request.getJustificativa());
+
+        producao.setJustificativaCancelamento(request.getJustificativa());
+        transicionar(producao, EstadoProducao.CANCELADA, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
+        return montarDetalhe(producao, List.of());
+    }
+
+    /**
+     * RN-072 — aplica a declaração de consumo real de uma produção com insumos já baixados
+     * (EM_ANDAMENTO/TRAVADA), estornando a diferença por componente. Extraído de cancelar() para reuso
+     * em agrupar() (RN-074), que precisa da mesma lógica para as produções originais já em andamento.
+     */
+    private void aplicarConsumoReal(Producao producao, List<ConsumoRealRequest> consumoReal, String justificativa) {
         Map<UUID, ConsumoRealRequest> declarado = new LinkedHashMap<>();
-        if (request.getConsumoReal() != null) {
-            for (ConsumoRealRequest item : request.getConsumoReal()) {
+        if (consumoReal != null) {
+            for (ConsumoRealRequest item : consumoReal) {
                 UUID componenteId = item.getInsumoId() != null ? item.getInsumoId() : item.getProdutoBaseId();
                 declarado.put(componenteId, item);
             }
@@ -238,13 +258,9 @@ public class ProducaoService {
             BigDecimal diferenca = original.subtract(consumidoReal);
             if (diferenca.compareTo(BigDecimal.ZERO) > 0) {
                 boolean totalmenteEstornado = consumidoReal.compareTo(BigDecimal.ZERO) == 0;
-                estornarComponente(producao, consumido, diferenca, totalmenteEstornado, request.getJustificativa());
+                estornarComponente(producao, consumido, diferenca, totalmenteEstornado, justificativa);
             }
         }
-
-        producao.setJustificativaCancelamento(request.getJustificativa());
-        transicionar(producao, EstadoProducao.CANCELADA, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
-        return montarDetalhe(producao, List.of());
     }
 
     /**
@@ -308,8 +324,8 @@ public class ProducaoService {
     }
 
     /** RN-065/066/067 — inicia produção: sem bloqueante, baixa insumos e vai para EM_ANDAMENTO;
-     *  com bloqueante, trava automaticamente (SISTEMA) sem baixar nada. */
-    public ProducaoDetalheResponse iniciar(UUID id, IniciarProducaoRequest request) {
+     *  com bloqueante, trava automaticamente (SISTEMA) sem baixar nada, a menos que request.dividir=true. */
+    public Object iniciar(UUID id, IniciarProducaoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
@@ -322,6 +338,9 @@ public class ProducaoService {
         VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
 
         if (!verificacao.bloqueantes().isEmpty()) {
+            if (Boolean.TRUE.equals(request.getDividir())) {
+                return dividir(producao, produtosDaProducao, verificacao);
+            }
             transicionar(producao, EstadoProducao.TRAVADA, OrigemHistoricoStatus.SISTEMA,
                     "Insumo(s) bloqueante(s): " + String.join(", ", verificacao.bloqueantes()));
             return montarDetalhe(producao, List.of());
@@ -355,7 +374,7 @@ public class ProducaoService {
      *     e, se liberado, baixa pela primeira vez; (b) trava veio de travar() manual após iniciar() já ter
      *     baixado — não há o que reverificar nem baixar de novo (dobraria o consumo), só volta o estado.
      */
-    public ProducaoDetalheResponse retomar(UUID id) {
+    public Object retomar(UUID id, RetormarProducaoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
@@ -374,6 +393,9 @@ public class ProducaoService {
         VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
 
         if (!verificacao.bloqueantes().isEmpty()) {
+            if (request != null && Boolean.TRUE.equals(request.getDividir())) {
+                return dividir(producao, produtosDaProducao, verificacao);
+            }
             // Permanece TRAVADA — tentativa sem sucesso não é uma transição de estado, sem histórico novo.
             return montarDetalhe(producao, List.of());
         }
@@ -384,6 +406,111 @@ public class ProducaoService {
 
         transicionar(producao, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, null);
         return montarDetalhe(producao, List.of());
+    }
+
+    /** Produtos da produção classificados conforme algum componente da ficha técnica está entre os bloqueantes. */
+    private record ProdutosDivididos(List<ProducaoProduto> semBloqueio, List<ProducaoProduto> comBloqueio) {
+    }
+
+    private ProdutosDivididos classificarPorBloqueio(List<ProducaoProduto> produtosDaProducao, List<String> nomesBloqueantes) {
+        List<ProducaoProduto> semBloqueio = new ArrayList<>();
+        List<ProducaoProduto> comBloqueio = new ArrayList<>();
+        for (ProducaoProduto producaoProduto : produtosDaProducao) {
+            boolean bloqueado = fichaTecnicaItemRepository.findByProdutoId(producaoProduto.getProduto().getId()).stream()
+                    .anyMatch(item -> nomesBloqueantes.contains(nomeComponente(item)));
+            (bloqueado ? comBloqueio : semBloqueio).add(producaoProduto);
+        }
+        return new ProdutosDivididos(semBloqueio, comBloqueio);
+    }
+
+    private String nomeComponente(FichaTecnicaItem item) {
+        if (item.getInsumo() != null) {
+            return item.getInsumo().getNome();
+        }
+        return item.getProdutoBase() != null ? item.getProdutoBase().getNome() : null;
+    }
+
+    /**
+     * RN-065 — divide a produção quando iniciar()/retomar() encontram bloqueante e o usuário optou por
+     * dividir em vez de travar tudo. Produtos sem bloqueio formam uma nova produção que já baixa insumos
+     * e vai para EM_ANDAMENTO; produtos com bloqueio formam outra, TRAVADA, sem baixar nada; a produção
+     * original vira NÃO_REALIZADA, substituída pelas duas novas.
+     */
+    private DivisaoProducaoResponse dividir(Producao producaoOriginal, List<ProducaoProduto> produtosDaProducao,
+                                              VerificacaoInsumos verificacao) {
+        ProdutosDivididos divididos = classificarPorBloqueio(produtosDaProducao, verificacao.bloqueantes());
+
+        if (divididos.semBloqueio().isEmpty()) {
+            throw new BusinessException("Não é possível dividir — todos os produtos têm insumos bloqueantes. "
+                    + "Opções: resolver o estoque ou cancelar a produção.");
+        }
+
+        String identificadorOriginal = IdentificadorFormatter.formatar("PRD", producaoOriginal.getNumero());
+
+        Producao producaoA = criarProducaoFilha(producaoOriginal, divididos.semBloqueio(), TipoOrigemProducao.DIVISAO);
+        List<ProducaoProduto> produtosA = producaoProdutoRepository.findByProducaoId(producaoA.getId());
+        VerificacaoInsumos verificacaoA = verificarComponentes(produtosA);
+        for (ComponenteNecessidade componente : verificacaoA.componentes()) {
+            baixarComponente(producaoA, componente);
+        }
+        registrarNascimento(producaoA, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.SISTEMA,
+                "Criada por divisão de " + identificadorOriginal);
+
+        Producao producaoB = criarProducaoFilha(producaoOriginal, divididos.comBloqueio(), TipoOrigemProducao.DIVISAO);
+        registrarNascimento(producaoB, EstadoProducao.TRAVADA, OrigemHistoricoStatus.SISTEMA,
+                "Criada por divisão de " + identificadorOriginal + ". Insumo(s) bloqueante(s): "
+                        + String.join(", ", verificacao.bloqueantes()));
+
+        String justificativaOriginal = "Substituída pelas produções " + IdentificadorFormatter.formatar("PRD", producaoA.getNumero())
+                + " e " + IdentificadorFormatter.formatar("PRD", producaoB.getNumero()) + " por insumo bloqueante";
+        producaoOriginal.setJustificativaNaoRealizada(justificativaOriginal);
+        transicionar(producaoOriginal, EstadoProducao.NAO_REALIZADA, OrigemHistoricoStatus.SISTEMA, justificativaOriginal);
+
+        DivisaoProducaoResponse response = new DivisaoProducaoResponse();
+        response.setProducaoOriginal(montarDetalhe(producaoOriginal, List.of()));
+        response.setProducaoA(montarDetalhe(producaoA, List.of()));
+        response.setProducaoB(montarDetalhe(producaoB, List.of()));
+        return response;
+    }
+
+    /** Cria uma produção filha (DIVISAO/AGRUPAMENTO) copiando dataInicio/dataTerminoPrevista/observacoes
+     *  da origem e gravando os ProducaoProduto informados. Nasce sem histórico — quem chama transiciona
+     *  via registrarNascimento()/transicionar(). */
+    private Producao criarProducaoFilha(Producao origem, List<ProducaoProduto> produtosOrigem, TipoOrigemProducao tipo) {
+        Producao filha = Producao.builder()
+                .usuario(origem.getUsuario())
+                .numero(proximoNumero(origem.getUsuario().getId()))
+                .estado(EstadoProducao.AGUARDANDO_INICIO)
+                .dataInicio(origem.getDataInicio())
+                .dataTerminoPrevista(origem.getDataTerminoPrevista())
+                .observacoes(origem.getObservacoes())
+                .producaoOrigem(origem)
+                .tipoOrigem(tipo)
+                .build();
+        filha = producaoRepository.save(filha);
+
+        for (ProducaoProduto producaoProduto : produtosOrigem) {
+            producaoProdutoRepository.save(ProducaoProduto.builder()
+                    .producao(filha)
+                    .produto(producaoProduto.getProduto())
+                    .quantidade(producaoProduto.getQuantidade())
+                    .build());
+        }
+        return filha;
+    }
+
+    /** Registra o "nascimento" de uma produção filha diretamente em um estado — statusAnterior null,
+     *  mesmo padrão usado em criarProducao() para a produção raiz (nunca houve um estado anterior real). */
+    private void registrarNascimento(Producao producao, EstadoProducao estado, OrigemHistoricoStatus origem, String justificativa) {
+        producao.setEstado(estado);
+        producaoRepository.save(producao);
+        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                .producao(producao)
+                .statusAnterior(null)
+                .statusNovo(estado)
+                .origem(origem)
+                .justificativa(justificativa)
+                .build());
     }
 
     /** RN-070 — finaliza produção: incrementa estoque de cada produto pela quantidade produzida,
@@ -419,6 +546,115 @@ public class ProducaoService {
         return montarDetalhe(producao, List.of());
     }
 
+    /**
+     * RN-074 — agrupa 2+ produções em uma nova. Produções com insumos já baixados (EM_ANDAMENTO/TRAVADA)
+     * exigem declaração de consumo real antes de sair de cena (mesma lógica de cancelar() — RN-072). Os
+     * produtos das originais são consolidados por produto (RN-061). As originais viram NÃO_REALIZADA.
+     */
+    public AgruparProducoesResponse agrupar(AgruparProducoesRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        if (request.getEstadoDestino() != EstadoProducao.AGUARDANDO_INICIO
+                && request.getEstadoDestino() != EstadoProducao.EM_ANDAMENTO
+                && request.getEstadoDestino() != EstadoProducao.TRAVADA) {
+            throw new BusinessException("estadoDestino inválido para agrupamento");
+        }
+
+        List<Producao> originais = new ArrayList<>();
+        for (UUID producaoId : request.getProducaoIds()) {
+            Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+            EstadoProducao estado = producao.getEstado();
+            if (estado == EstadoProducao.FINALIZADA || estado == EstadoProducao.CANCELADA || estado == EstadoProducao.NAO_REALIZADA) {
+                throw new BusinessException("Produção " + IdentificadorFormatter.formatar("PRD", producao.getNumero())
+                        + " não pode ser agrupada (status: " + estado + ")");
+            }
+            originais.add(producao);
+        }
+
+        // Passo 1 — produções com insumos já baixados exigem declaração de consumo real antes de sair de cena.
+        for (Producao producao : originais) {
+            if (producao.getEstado() == EstadoProducao.EM_ANDAMENTO || producao.getEstado() == EstadoProducao.TRAVADA) {
+                List<ConsumoRealRequest> consumoReal = request.getConsumoRealPorProducao() != null
+                        ? request.getConsumoRealPorProducao().get(producao.getId()) : null;
+                aplicarConsumoReal(producao, consumoReal, request.getJustificativa());
+            }
+        }
+
+        // Passo 2 — consolida os produtos de todas as produções, somando quantidades por produto (RN-061).
+        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
+        Map<UUID, BigDecimal> quantidadesPorProduto = new LinkedHashMap<>();
+        for (Producao producao : originais) {
+            for (ProducaoProduto producaoProduto : producaoProdutoRepository.findByProducaoId(producao.getId())) {
+                UUID produtoId = producaoProduto.getProduto().getId();
+                produtosPorId.putIfAbsent(produtoId, producaoProduto.getProduto());
+                quantidadesPorProduto.merge(produtoId, producaoProduto.getQuantidade(), BigDecimal::add);
+            }
+        }
+
+        Producao maisRecente = originais.stream()
+                .max(Comparator.comparing(Producao::getDataInicio, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .orElseThrow();
+        LocalDate dataInicio = request.getDataInicio() != null ? request.getDataInicio() : maisRecente.getDataInicio();
+        LocalDate dataTerminoPrevista = request.getDataTerminoPrevista() != null
+                ? request.getDataTerminoPrevista() : maisRecente.getDataTerminoPrevista();
+
+        Producao primeira = originais.get(0);
+        Producao nova = Producao.builder()
+                .usuario(primeira.getUsuario())
+                .numero(proximoNumero(usuarioId))
+                .estado(EstadoProducao.AGUARDANDO_INICIO)
+                .dataInicio(dataInicio)
+                .dataTerminoPrevista(dataTerminoPrevista)
+                .producaoOrigem(primeira)
+                .tipoOrigem(TipoOrigemProducao.AGRUPAMENTO)
+                .build();
+        nova = producaoRepository.save(nova);
+
+        for (Produto produto : produtosPorId.values()) {
+            producaoProdutoRepository.save(ProducaoProduto.builder()
+                    .producao(nova)
+                    .produto(produto)
+                    .quantidade(quantidadesPorProduto.get(produto.getId()))
+                    .build());
+        }
+
+        // Passo 3 — leva a nova produção até o estado de destino.
+        if (request.getEstadoDestino() == EstadoProducao.AGUARDANDO_INICIO) {
+            registrarNascimento(nova, EstadoProducao.AGUARDANDO_INICIO, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
+        } else if (request.getEstadoDestino() == EstadoProducao.EM_ANDAMENTO) {
+            List<ProducaoProduto> produtosNova = producaoProdutoRepository.findByProducaoId(nova.getId());
+            VerificacaoInsumos verificacao = verificarComponentes(produtosNova);
+            if (!verificacao.bloqueantes().isEmpty()) {
+                registrarNascimento(nova, EstadoProducao.TRAVADA, OrigemHistoricoStatus.SISTEMA,
+                        "Insumo(s) bloqueante(s): " + String.join(", ", verificacao.bloqueantes()));
+            } else {
+                for (ComponenteNecessidade componente : verificacao.componentes()) {
+                    baixarComponente(nova, componente);
+                }
+                registrarNascimento(nova, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
+            }
+        } else {
+            registrarNascimento(nova, EstadoProducao.TRAVADA, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
+        }
+
+        // Passo 4 — as originais viram NÃO_REALIZADA, substituídas pela nova.
+        String identificadorNova = IdentificadorFormatter.formatar("PRD", nova.getNumero());
+        List<ProducaoDetalheResponse> originaisResponse = new ArrayList<>();
+        for (Producao producao : originais) {
+            String justificativaNaoRealizada = "Agrupada na produção " + identificadorNova;
+            producao.setJustificativaNaoRealizada(justificativaNaoRealizada);
+            transicionar(producao, EstadoProducao.NAO_REALIZADA, OrigemHistoricoStatus.SISTEMA, justificativaNaoRealizada);
+            originaisResponse.add(montarDetalhe(producao, List.of()));
+        }
+
+        AgruparProducoesResponse response = new AgruparProducoesResponse();
+        response.setProducaoNova(montarDetalhe(nova, List.of()));
+        response.setProducoesOriginais(originaisResponse);
+        return response;
+    }
+
     private void transicionar(Producao producao, EstadoProducao novoEstado, OrigemHistoricoStatus origem, String justificativa) {
         EstadoProducao estadoAnterior = producao.getEstado();
         producao.setEstado(novoEstado);
@@ -437,7 +673,8 @@ public class ProducaoService {
         List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico);
+        List<Producao> producoesFilhas = producaoRepository.findByProducaoOrigemId(producao.getId());
+        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas);
     }
 
     /** Componente (insumo ou produto-base) com a necessidade já somada entre todos os produtos da produção. */
