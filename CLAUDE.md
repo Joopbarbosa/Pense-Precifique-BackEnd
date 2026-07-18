@@ -141,6 +141,33 @@ RASCUNHO → ENVIADO → APROVADO
 
 ---
 
+## Módulo de Produção (V0.6)
+
+### Enums corretos
+- `MotivoMovimentacaoInsumo`: `COMPRA, BAIXA_MANUAL, PRODUCAO, ORCAMENTO, ESTORNO_PRODUCAO` — **não existe `PERDA` neste enum** (existe só em `MotivoMovimentacaoProduto`, não confundir os dois ao escrever teste/exemplo de baixa manual de insumo)
+- `MotivoMovimentacaoProduto`: `PRODUCAO, ORCAMENTO, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, ESTORNO_PRODUCAO`
+- `EstadoProducao`: `AGUARDANDO_INICIO, EM_ANDAMENTO, TRAVADA, FINALIZADA, CANCELADA, NAO_REALIZADA`
+- `TipoOrigemProducao`: `DIVISAO, AGRUPAMENTO`
+- `OrigemHistoricoStatus`: `SISTEMA, USUARIO`
+
+### Padrões de implementação consolidados
+- `uuid_generate_v4()` — nunca `gen_random_uuid()` (projeto usa extensão `uuid-ossp` desde V1; confirmado ausência de `gen_random_uuid()` em toda `db/migration/`)
+- `BusinessException` só tem `message` — sem campo de tipo. `GlobalExceptionHandler` serializa para `ErrorResponseDTO { message, status, timestamp, fieldErrors }`
+- `calcularAlertasAoVivo()` é tolerante a produto com `rendimento` nulo/≤0 — pula o produto (`continue`) em vez de lançar exceção
+- `retomar()` com `dividir=true`: distingue pela existência prévia de `ProducaoInsumoConsumido` (`jaConsumido`) antes de recalcular bloqueio, para não contar consumo de estoque em duplicidade
+- Lógica de negócio compartilhada entre fluxos vive em método privado desde a primeira implementação (ex.: `aplicarConsumoReal()`, `estornarComponente()`) — evita duplicação quando o mesmo cálculo é chamado por rotas diferentes (finalizar direto vs. consumo real declarado)
+- `ProducaoInsumoConsumido` não tem campo `estornada` — o booleano `estornada` vive em `MovimentacaoInsumo`/`MovimentacaoProduto`
+
+### Coluna `estado` vs `status` em `producoes`
+- `status` (VARCHAR, `ATIVA`/`CANCELADA`): removido na migration V21 (fluxo legado de 1 produto) — não existe mais
+- `estado` (VARCHAR, `EstadoProducao`): coluna do ciclo de vida novo — sempre usar esta
+
+### Justificativas — mínimo uniformizado
+- Todos os campos de justificativa/observação (baixa manual de insumo/produto, avançar status): mínimo **30 caracteres** — uniformizado no #127 (Produção já usava 30 desde RN-078; baixa manual e `AvancaStatusRequest` usavam 50 até então, único ponto fora de linha)
+- Não criar campo novo de justificativa/observação com mínimo diferente de 30 sem decisão explícita
+
+---
+
 ## PdfMapper Pattern (CRÍTICO)
 
 Toda formatação de dados para PDF acontece no Java — templates são "burros".
@@ -174,14 +201,14 @@ ${dados.total}
 | GET/POST | /clientes | Lista paginada e cria |
 | GET/PUT/DELETE | /clientes/{id} | Detalhe, edita, inativa |
 | GET/POST | /insumos | Lista paginada e cria |
-| POST | /insumos/{id}/baixa-manual | Baixa manual (obs mín. 50 chars — RN-035) |
+| POST | /insumos/{id}/baixa-manual | Baixa manual (obs mín. 30 chars — RN-035, uniformizado no #127) |
 | GET | /insumos/{id}/movimentacoes | Histórico paginado |
 | GET | /insumos/{id}/produtos-relacionados | Lista produtos cuja ficha técnica usa o insumo (expõe `produtoId`+`identificador`) |
 | POST | /lotes-compra | Registra compra em lote (RN-036) |
 | GET/POST | /produtos | Lista paginada e cria — `busca` corrigido em 2026-07-09 (commit `222b939`) |
 | GET/PUT | /produtos/{id} | Detalhe e edita — inclui `rendimento`, `custoTotalLote`, `custoUnitario`, `algumInsumoNaoFracionavel` |
 | GET | /produtos/{id}/preco-sugerido?margem=X | **Novo (RN-054)** — preço sugerido de venda avulsa: `{ custoUnitario, margem, precoSugerido }` |
-| POST | /produtos/{id}/baixa-manual | Baixa manual (obs mín. 50 chars — RN-035) |
+| POST | /produtos/{id}/baixa-manual | Baixa manual (obs mín. 30 chars — RN-035, uniformizado no #127) |
 | GET | /produtos/{id}/movimentacoes | Histórico paginado — inclui `catalogoReferencia`/`precoVendido` quando `motivo=ORCAMENTO` |
 | GET/POST | /catalogos | **Novo (EP-09)** — lista e cria catálogo |
 | GET/PUT | /catalogos/{id} | **Novo (EP-09)** — detalhe (com itens) e edita |
