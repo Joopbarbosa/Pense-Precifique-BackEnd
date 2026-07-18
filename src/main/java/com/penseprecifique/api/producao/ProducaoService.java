@@ -21,7 +21,9 @@ import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
@@ -94,9 +96,7 @@ public class ProducaoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
-        List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
-        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, List.of());
+        return montarDetalhe(producao, List.of());
     }
 
     @Transactional(readOnly = true)
@@ -143,7 +143,7 @@ public class ProducaoService {
                 .build());
 
         List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
-        return producaoMapper.toDetalheResponse(producao, List.of(), produtosGravados, alertas);
+        return montarDetalhe(producao, alertas);
     }
 
     /** RN-063 — edição restrita a AGUARDANDO_INICIO; substitui a lista de produtos por completo. */
@@ -179,7 +179,7 @@ public class ProducaoService {
                 .build());
 
         List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
-        return producaoMapper.toDetalheResponse(producao, List.of(), produtosGravados, alertas);
+        return montarDetalhe(producao, alertas);
     }
 
     public ProducaoDetalheResponse cancelar(UUID id, CancelarProducaoRequest request) {
@@ -288,8 +288,214 @@ public class ProducaoService {
         producao.setDataCancelamento(LocalDateTime.now());
         producao = producaoRepository.save(producao);
 
+        return montarDetalhe(producao, List.of());
+    }
+
+    /** RN-065/066/067 — inicia produção: sem bloqueante, baixa insumos e vai para EM_ANDAMENTO;
+     *  com bloqueante, trava automaticamente (SISTEMA) sem baixar nada. */
+    public ProducaoDetalheResponse iniciar(UUID id, IniciarProducaoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Apenas produções aguardando início podem ser iniciadas");
+        }
+
+        List<ProducaoProduto> produtosDaProducao = producaoProdutoRepository.findByProducaoId(producao.getId());
+        VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
+
+        if (!verificacao.bloqueantes().isEmpty()) {
+            transicionar(producao, EstadoProducao.TRAVADA, OrigemHistoricoStatus.SISTEMA,
+                    "Insumo(s) bloqueante(s): " + String.join(", ", verificacao.bloqueantes()));
+            return montarDetalhe(producao, List.of());
+        }
+
+        for (ComponenteNecessidade componente : verificacao.componentes()) {
+            baixarComponente(producao, componente);
+        }
+
+        transicionar(producao, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, null);
+        return montarDetalhe(producao, List.of());
+    }
+
+    /** Trava manual — só a partir de EM_ANDAMENTO, sem tocar estoque (insumos já baixados permanecem). */
+    public ProducaoDetalheResponse travar(UUID id, TravarProducaoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.EM_ANDAMENTO) {
+            throw new BusinessException("Apenas produções em andamento podem ser travadas manualmente");
+        }
+
+        transicionar(producao, EstadoProducao.TRAVADA, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
+        return montarDetalhe(producao, List.of());
+    }
+
+    /**
+     * RN-069 — retoma produção travada. Duas origens possíveis de TRAVADA exigem tratamento diferente:
+     * (a) trava veio do próprio iniciar() bloqueando — nenhum insumo foi baixado ainda, então reverifica
+     *     e, se liberado, baixa pela primeira vez; (b) trava veio de travar() manual após iniciar() já ter
+     *     baixado — não há o que reverificar nem baixar de novo (dobraria o consumo), só volta o estado.
+     */
+    public ProducaoDetalheResponse retomar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.TRAVADA) {
+            throw new BusinessException("Apenas produções travadas podem ser retomadas");
+        }
+
+        List<ProducaoInsumoConsumido> jaConsumido = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
+        if (!jaConsumido.isEmpty()) {
+            transicionar(producao, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, null);
+            return montarDetalhe(producao, List.of());
+        }
+
+        List<ProducaoProduto> produtosDaProducao = producaoProdutoRepository.findByProducaoId(producao.getId());
+        VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
+
+        if (!verificacao.bloqueantes().isEmpty()) {
+            // Permanece TRAVADA — tentativa sem sucesso não é uma transição de estado, sem histórico novo.
+            return montarDetalhe(producao, List.of());
+        }
+
+        for (ComponenteNecessidade componente : verificacao.componentes()) {
+            baixarComponente(producao, componente);
+        }
+
+        transicionar(producao, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, null);
+        return montarDetalhe(producao, List.of());
+    }
+
+    private void transicionar(Producao producao, EstadoProducao novoEstado, OrigemHistoricoStatus origem, String justificativa) {
+        EstadoProducao estadoAnterior = producao.getEstado();
+        producao.setEstado(novoEstado);
+        producaoRepository.save(producao);
+
+        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                .producao(producao)
+                .statusAnterior(estadoAnterior)
+                .statusNovo(novoEstado)
+                .origem(origem)
+                .justificativa(justificativa)
+                .build());
+    }
+
+    private ProducaoDetalheResponse montarDetalhe(Producao producao, List<AlertaInsumoResponse> alertasInsumos) {
+        List<ProducaoInsumoConsumido> consumidos = producaoInsumoConsumidoRepository.findByProducaoId(producao.getId());
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, List.of());
+        List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
+        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico);
+    }
+
+    /** Componente (insumo ou produto-base) com a necessidade já somada entre todos os produtos da produção. */
+    private record ComponenteNecessidade(String nome, BigDecimal necessaria, BigDecimal estoqueAtual,
+                                          Boolean permitirEstoqueNegativo, Insumo insumo, Produto produtoBase) {
+    }
+
+    private record VerificacaoInsumos(List<ComponenteNecessidade> componentes, List<String> bloqueantes) {
+    }
+
+    /**
+     * RN-065 — necessidade de cada componente (insumo ou produto-base) da ficha técnica de cada produto
+     * da produção, somada quando o mesmo componente aparece em mais de um produto. RN-059 — componente
+     * com permitirEstoqueNegativo=false bloqueia incondicionalmente, nunca contornável por confirmação
+     * do request (mesma regra do fluxo antigo removido no P002).
+     */
+    private VerificacaoInsumos verificarComponentes(List<ProducaoProduto> produtosDaProducao) {
+        Map<UUID, BigDecimal> necessidadePorComponente = new LinkedHashMap<>();
+        Map<UUID, Insumo> insumosPorId = new LinkedHashMap<>();
+        Map<UUID, Produto> produtosBasePorId = new LinkedHashMap<>();
+
+        for (ProducaoProduto producaoProduto : produtosDaProducao) {
+            Produto produto = producaoProduto.getProduto();
+            exigirRendimentoValido(produto);
+            BigDecimal ratioLote = producaoProduto.getQuantidade().divide(produto.getRendimento(), 4, RoundingMode.HALF_UP);
+
+            for (FichaTecnicaItem item : fichaTecnicaItemRepository.findByProdutoId(produto.getId())) {
+                BigDecimal necessaria = item.getQuantidade().multiply(ratioLote);
+                if (item.getInsumo() != null) {
+                    necessidadePorComponente.merge(item.getInsumo().getId(), necessaria, BigDecimal::add);
+                    insumosPorId.putIfAbsent(item.getInsumo().getId(), item.getInsumo());
+                } else if (item.getProdutoBase() != null) {
+                    necessidadePorComponente.merge(item.getProdutoBase().getId(), necessaria, BigDecimal::add);
+                    produtosBasePorId.putIfAbsent(item.getProdutoBase().getId(), item.getProdutoBase());
+                }
+            }
+        }
+
+        List<ComponenteNecessidade> componentes = new ArrayList<>();
+        List<String> bloqueantes = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : necessidadePorComponente.entrySet()) {
+            Insumo insumo = insumosPorId.get(entry.getKey());
+            Produto produtoBase = produtosBasePorId.get(entry.getKey());
+
+            String nome = insumo != null ? insumo.getNome() : produtoBase.getNome();
+            BigDecimal estoqueAtual = insumo != null ? insumo.getEstoqueAtual() : produtoBase.getEstoqueAtual();
+            Boolean permitirEstoqueNegativo = insumo != null
+                    ? insumo.getPermitirEstoqueNegativo() : produtoBase.getPermitirEstoqueNegativo();
+            BigDecimal necessaria = entry.getValue();
+
+            componentes.add(new ComponenteNecessidade(nome, necessaria, estoqueAtual, permitirEstoqueNegativo, insumo, produtoBase));
+
+            if (estoqueAtual.subtract(necessaria).compareTo(BigDecimal.ZERO) < 0
+                    && Boolean.FALSE.equals(permitirEstoqueNegativo)) {
+                bloqueantes.add(nome);
+            }
+        }
+
+        return new VerificacaoInsumos(componentes, bloqueantes);
+    }
+
+    /** Baixa efetiva de um componente — mesmo padrão de movimentação usado no fluxo legado (registrarProducao). */
+    private void baixarComponente(Producao producao, ComponenteNecessidade componente) {
+        BigDecimal consumida = componente.necessaria();
+
+        if (componente.insumo() != null) {
+            Insumo insumo = componente.insumo();
+            insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(consumida));
+            insumoRepository.save(insumo);
+
+            movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                    .insumo(insumo)
+                    .tipo(TipoMovimentacaoInsumo.SAIDA)
+                    .motivo(MotivoMovimentacaoInsumo.PRODUCAO)
+                    .quantidade(consumida)
+                    .referenciaId(producao.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO)
+                    .estornada(false)
+                    .build());
+
+            producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
+                    .producao(producao)
+                    .insumo(insumo)
+                    .quantidade(consumida)
+                    .build());
+
+        } else if (componente.produtoBase() != null) {
+            Produto base = componente.produtoBase();
+            base.setEstoqueAtual(base.getEstoqueAtual().subtract(consumida));
+            produtoRepository.save(base);
+
+            movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                    .produto(base)
+                    .tipo(TipoMovimentacaoProduto.SAIDA)
+                    .motivo(MotivoMovimentacaoProduto.PRODUCAO)
+                    .quantidade(consumida)
+                    .referenciaId(producao.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
+                    .estornada(false)
+                    .build());
+
+            producaoInsumoConsumidoRepository.save(ProducaoInsumoConsumido.builder()
+                    .producao(producao)
+                    .produtoBase(base)
+                    .quantidade(consumida)
+                    .build());
+        }
     }
 
     /** Produtos já validados (existem, ativos, com ficha técnica + rendimento) e quantidades agregadas por RN-061. */

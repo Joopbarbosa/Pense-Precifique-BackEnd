@@ -1,9 +1,11 @@
 package com.penseprecifique.api.shared.mapper;
 
+import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
 import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.HistoricoStatusResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoProdutoResponse;
@@ -31,7 +33,8 @@ public class ProducaoMapper {
     public ProducaoDetalheResponse toDetalheResponse(Producao producao,
                                                        List<ProducaoInsumoConsumido> insumosConsumidos,
                                                        List<ProducaoProduto> produtos,
-                                                       List<AlertaInsumoResponse> alertasInsumos) {
+                                                       List<AlertaInsumoResponse> alertasInsumos,
+                                                       List<HistoricoStatusProducao> historicoStatus) {
         ProducaoDetalheResponse response = new ProducaoDetalheResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
@@ -50,6 +53,17 @@ public class ProducaoMapper {
         response.setProdutos(produtos.stream().map(this::toProducaoProdutoResponse).toList());
         response.setAlertasInsumos(alertasInsumos);
         response.setInsumosConsumidos(insumosConsumidos.stream().map(this::toInsumoConsumidoResponse).toList());
+        response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
+        return response;
+    }
+
+    public HistoricoStatusResponse toHistoricoStatusResponse(HistoricoStatusProducao historico) {
+        HistoricoStatusResponse response = new HistoricoStatusResponse();
+        response.setStatusAnterior(historico.getStatusAnterior());
+        response.setStatusNovo(historico.getStatusNovo());
+        response.setDataTransicao(historico.getDataTransicao());
+        response.setJustificativa(historico.getJustificativa());
+        response.setOrigem(historico.getOrigem());
         return response;
     }
 

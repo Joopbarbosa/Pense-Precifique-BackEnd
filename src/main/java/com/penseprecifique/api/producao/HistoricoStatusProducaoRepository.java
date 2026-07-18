@@ -8,5 +8,6 @@ import java.util.UUID;
 
 public interface HistoricoStatusProducaoRepository extends JpaRepository<HistoricoStatusProducao, UUID> {
 
-    List<HistoricoStatusProducao> findByProducaoIdOrderByDataTransicaoDesc(UUID producaoId);
+    // Ordem cronológica (mais antiga primeiro) — exibida como linha do tempo em ProducaoDetalheResponse.
+    List<HistoricoStatusProducao> findByProducaoIdOrderByDataTransicaoAsc(UUID producaoId);
 }
