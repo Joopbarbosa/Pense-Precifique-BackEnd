@@ -34,4 +34,5 @@ public class ProducaoDetalheResponse {
     private List<ProducaoProdutoResponse> produtos;
     private List<AlertaInsumoResponse> alertasInsumos;
     private List<InsumoConsumidoResponse> insumosConsumidos;
+    private List<HistoricoStatusResponse> historicoStatus;
 }
