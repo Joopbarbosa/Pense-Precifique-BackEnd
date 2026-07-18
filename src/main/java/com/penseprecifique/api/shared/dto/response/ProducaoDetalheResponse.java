@@ -30,4 +30,7 @@ public class ProducaoDetalheResponse {
     private List<AlertaInsumoResponse> alertasInsumos;
     private List<InsumoConsumidoResponse> insumosConsumidos;
     private List<HistoricoStatusResponse> historicoStatus;
+
+    // RN-073/UC-036 — produções geradas a partir desta (divisão ou agrupamento) via producaoOrigemId.
+    private List<ProducaoResumoResponse> producoesFilhas;
 }

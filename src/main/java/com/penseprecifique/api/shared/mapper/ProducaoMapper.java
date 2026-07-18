@@ -10,6 +10,7 @@ import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
+import com.penseprecifique.api.shared.dto.response.ProducaoResumoResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
@@ -34,7 +35,8 @@ public class ProducaoMapper {
                                                        List<ProducaoInsumoConsumido> insumosConsumidos,
                                                        List<ProducaoProduto> produtos,
                                                        List<AlertaInsumoResponse> alertasInsumos,
-                                                       List<HistoricoStatusProducao> historicoStatus) {
+                                                       List<HistoricoStatusProducao> historicoStatus,
+                                                       List<Producao> producoesFilhas) {
         ProducaoDetalheResponse response = new ProducaoDetalheResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
@@ -52,6 +54,15 @@ public class ProducaoMapper {
         response.setAlertasInsumos(alertasInsumos);
         response.setInsumosConsumidos(insumosConsumidos.stream().map(this::toInsumoConsumidoResponse).toList());
         response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
+        response.setProducoesFilhas(producoesFilhas.stream().map(this::toResumoResponse).toList());
+        return response;
+    }
+
+    public ProducaoResumoResponse toResumoResponse(Producao producao) {
+        ProducaoResumoResponse response = new ProducaoResumoResponse();
+        response.setId(producao.getId());
+        response.setIdentificador(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
+        response.setEstado(producao.getEstado());
         return response;
     }
 
