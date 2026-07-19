@@ -189,7 +189,7 @@ public class InsumoServiceImpl implements InsumoService {
         MovimentacaoInsumo movimentacao = MovimentacaoInsumo.builder()
                 .insumo(insumo)
                 .tipo(TipoMovimentacaoInsumo.SAIDA)
-                .motivo(MotivoMovimentacaoInsumo.BAIXA_MANUAL)
+                .motivo(request.motivo())
                 .quantidade(request.quantidade())
                 .observacao(request.observacao())
                 .estornada(false)
