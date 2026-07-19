@@ -17,4 +17,5 @@ public class InsumoConsumidoResponse {
     private BigDecimal quantidade;
     private BigDecimal estoqueAntes;
     private boolean estoqueInsuficiente;
+    private Boolean fracionavel;
 }

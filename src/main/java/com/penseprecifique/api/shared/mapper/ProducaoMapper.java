@@ -95,6 +95,7 @@ public class ProducaoMapper {
             response.setNomeInsumo(consumido.getInsumo().getNome());
             response.setMarca(consumido.getInsumo().getMarca());
             response.setUnidadeMedida(consumido.getInsumo().getUnidadeMedida());
+            response.setFracionavel(consumido.getInsumo().getFracionavel());
         } else if (consumido.getProdutoBase() != null) {
             response.setInsumoId(consumido.getProdutoBase().getId());
             response.setNomeInsumo(consumido.getProdutoBase().getNome());
