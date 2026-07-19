@@ -144,7 +144,7 @@ RASCUNHO → ENVIADO → APROVADO
 ## Módulo de Produção (V0.6)
 
 ### Enums corretos
-- `MotivoMovimentacaoInsumo`: `COMPRA, BAIXA_MANUAL, PRODUCAO, ORCAMENTO, ESTORNO_PRODUCAO` — **não existe `PERDA` neste enum** (existe só em `MotivoMovimentacaoProduto`, não confundir os dois ao escrever teste/exemplo de baixa manual de insumo)
+- `MotivoMovimentacaoInsumo`: `COMPRA, BAIXA_MANUAL, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, PRODUCAO, ORCAMENTO, ESTORNO_PRODUCAO` — alinhado com `MotivoMovimentacaoProduto` desde #148 (V0.6); `InsumoServiceImpl.baixaManual()` grava `request.motivo()` (antes hardcoded para `BAIXA_MANUAL`, ignorando o motivo enviado); CHECK constraint `chk_mov_insumo_motivo` atualizado na migration V22
 - `MotivoMovimentacaoProduto`: `PRODUCAO, ORCAMENTO, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, ESTORNO_PRODUCAO`
 - `EstadoProducao`: `AGUARDANDO_INICIO, EM_ANDAMENTO, TRAVADA, FINALIZADA, CANCELADA, NAO_REALIZADA`
 - `TipoOrigemProducao`: `DIVISAO, AGRUPAMENTO`
