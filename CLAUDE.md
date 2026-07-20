@@ -1,9 +1,9 @@
 # Pense & Precifique — Contexto do Back-End
 
-> **V0.5** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
+> **V0.6** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
 > Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Atualizado em: 2026-07-17 — Pocket de fechamento V0.5: refactor completo de pacotes (de estrutura flat `controller/service/repository` para pacotes por módulo — #56 a #67), índices de apoio a FKs/usuario_id (V12–V16, #56), busca por cliente em `GET /orcamentos` + prefixo `ORC-N` (#93), ordenação de `GET /producoes` por `numero DESC` (#99).
+> Atualizado em: 2026-07-20 — Retomada de fechamento V0.6: varredura de resíduos do fluxo antigo de Produção (nenhum encontrado em código, exceto coluna/campo órfão `data_producao`/`dataProducao` — ver Bugs conhecidos), ciclo de vida completo documentado (6 estados, transições, agrupamento/divisão), contrato de `consumoReal`, RN-069, race condition conhecida do número sequencial, RN-037/RN-060 marcadas obsoletas.
 
 ---
 
@@ -143,28 +143,72 @@ RASCUNHO → ENVIADO → APROVADO
 
 ## Módulo de Produção (V0.6)
 
+Modelo novo: uma `Producao` agrupa **N produtos** (`ProducaoProduto`, um por produto do lote — nunca mais 1 produção = 1 produto). Toda transição de estado grava uma linha em `HistoricoStatusProducao` (`estado`, `origem` `USUARIO`/`SISTEMA`, `justificativa`, `dataTransicao`), via `transicionar()` (produção existente) ou `registrarNascimento()` (produção nova, criada já em determinado estado por `dividir()`/`agrupar()`).
+
 ### Enums corretos
 - `MotivoMovimentacaoInsumo`: `COMPRA, BAIXA_MANUAL, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, PRODUCAO, ORCAMENTO, ESTORNO_PRODUCAO` — alinhado com `MotivoMovimentacaoProduto` desde #148 (V0.6); `InsumoServiceImpl.baixaManual()` grava `request.motivo()` (antes hardcoded para `BAIXA_MANUAL`, ignorando o motivo enviado); CHECK constraint `chk_mov_insumo_motivo` atualizado na migration V22
 - `MotivoMovimentacaoProduto`: `PRODUCAO, ORCAMENTO, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, ESTORNO_PRODUCAO`
-- `EstadoProducao`: `AGUARDANDO_INICIO, EM_ANDAMENTO, TRAVADA, FINALIZADA, CANCELADA, NAO_REALIZADA`
+- `EstadoProducao` (6 estados): `AGUARDANDO_INICIO, EM_ANDAMENTO, TRAVADA, FINALIZADA, CANCELADA, NAO_REALIZADA`
 - `TipoOrigemProducao`: `DIVISAO, AGRUPAMENTO`
 - `OrigemHistoricoStatus`: `SISTEMA, USUARIO`
+
+### Ciclo de vida — transições válidas (todas em `ProducaoService`)
+```
+AGUARDANDO_INICIO ──iniciar() sem bloqueante──────────────→ EM_ANDAMENTO   (USUARIO)
+AGUARDANDO_INICIO ──iniciar() com bloqueante, sem dividir─→ TRAVADA        (SISTEMA, RN-067)
+AGUARDANDO_INICIO ──iniciar() com bloqueante, dividir=true→ NAO_REALIZADA  (a original — SISTEMA)
+                                                              + 2 produções filhas nascem já
+                                                              em EM_ANDAMENTO/TRAVADA (dividir(), RN-065)
+AGUARDANDO_INICIO ──cancelar() Fluxo A, sem consumoReal───→ CANCELADA      (USUARIO, RN-071)
+
+EM_ANDAMENTO ──travar() manual──────────────────────────────→ TRAVADA     (USUARIO, RN-068)
+EM_ANDAMENTO ──finalizar()──────────────────────────────────→ FINALIZADA  (USUARIO, RN-070)
+EM_ANDAMENTO ──cancelar() Fluxo B, com consumoReal──────────→ CANCELADA   (USUARIO, RN-072)
+
+TRAVADA ──retomar(), já havia ProducaoInsumoConsumido───────→ EM_ANDAMENTO (USUARIO, RN-069)
+TRAVADA ──retomar(), nada consumido, reverificação libera───→ EM_ANDAMENTO (USUARIO, RN-069)
+TRAVADA ──retomar(), ainda bloqueada, sem dividir────────────→ permanece TRAVADA (sem histórico novo)
+TRAVADA ──retomar(), ainda bloqueada, dividir=true───────────→ NAO_REALIZADA (original) + 2 filhas
+TRAVADA ──cancelar() Fluxo B, com consumoReal────────────────→ CANCELADA   (USUARIO, RN-072)
+
+{AGUARDANDO_INICIO, EM_ANDAMENTO, TRAVADA}* ──agrupar()──────→ NAO_REALIZADA (todas as originais)
+                                                                 + 1 produção nova em AGUARDANDO_INICIO,
+                                                                   EM_ANDAMENTO ou TRAVADA (RN-074, conforme
+                                                                   `estadoDestino` do request)
+
+FINALIZADA, CANCELADA, NAO_REALIZADA — estados terminais, nunca saem (checado em `agrupar()`, ProducaoService.java:576-579)
+```
+`iniciar()`/`retomar()`/`agrupar()` (destino `EM_ANDAMENTO`) replicam o mesmo par de passos — `verificarComponentes()` seguido de bloquear-ou-baixar — como código copiado em vez de método privado compartilhado (débito de extração, ver OP).
+
+### Contrato de `consumoReal` (declaração de consumo real — Fluxo B, `cancelar()`/`agrupar()`)
+- Lista de `ConsumoRealRequest { insumoId ou produtoBaseId, quantidadeConsumida }` — **só os itens cujo consumo real diverge** do que foi baixado originalmente entram na lista.
+- Item **ausente** da lista = consumo total assumido (nenhum estorno) — mesmo comportamento do fluxo antigo, que sempre estornava tudo quando não havia como saber o consumo real (`aplicarConsumoReal()`, ProducaoService.java:256-258).
+- `estornada=true` em `MovimentacaoInsumo`/`MovimentacaoProduto` **só é marcado em estorno total** (`consumidoReal == 0`) — o campo é booleano simples, sem noção de "parcialmente estornada"; estorno parcial gera só a nova movimentação `ESTORNO_PRODUCAO`, sem tocar a movimentação original (`estornarComponente()`, ProducaoService.java:273-276).
+- `ProducaoInsumoConsumido` não tem campo `estornada` — o booleano vive em `MovimentacaoInsumo`/`MovimentacaoProduto`.
+- Em `agrupar()`, `consumoRealPorProducao` é `Map<producaoId, List<ConsumoRealRequest>>` — só é aplicado às produções de origem `EM_ANDAMENTO`/`TRAVADA` (as que já baixaram insumo).
+
+### RN-069 — Retomada de TRAVADA (discriminação de tipo de trava)
+`retomar()` distingue as duas origens possíveis de TRAVADA verificando se **já existe `ProducaoInsumoConsumido` para a produção** (`jaConsumido`, ProducaoService.java:393-397): se existir, a trava veio de `travar()` manual após `iniciar()` já ter baixado insumo — não reverifica bloqueio nem baixa de novo (dobraria o consumo), só volta o estado. Se não existir, a trava veio do próprio `iniciar()` bloqueando antes de baixar qualquer coisa — reverifica e, se liberado, baixa pela primeira vez.
 
 ### Padrões de implementação consolidados
 - `uuid_generate_v4()` — nunca `gen_random_uuid()` (projeto usa extensão `uuid-ossp` desde V1; confirmado ausência de `gen_random_uuid()` em toda `db/migration/`)
 - `BusinessException` só tem `message` — sem campo de tipo. `GlobalExceptionHandler` serializa para `ErrorResponseDTO { message, status, timestamp, fieldErrors }`
 - `calcularAlertasAoVivo()` é tolerante a produto com `rendimento` nulo/≤0 — pula o produto (`continue`) em vez de lançar exceção
-- `retomar()` com `dividir=true`: distingue pela existência prévia de `ProducaoInsumoConsumido` (`jaConsumido`) antes de recalcular bloqueio, para não contar consumo de estoque em duplicidade
-- Lógica de negócio compartilhada entre fluxos vive em método privado desde a primeira implementação (ex.: `aplicarConsumoReal()`, `estornarComponente()`) — evita duplicação quando o mesmo cálculo é chamado por rotas diferentes (finalizar direto vs. consumo real declarado)
-- `ProducaoInsumoConsumido` não tem campo `estornada` — o booleano `estornada` vive em `MovimentacaoInsumo`/`MovimentacaoProduto`
+- Lógica de negócio compartilhada entre fluxos vive em método privado desde a primeira implementação (ex.: `aplicarConsumoReal()`, `estornarComponente()`) — evita duplicação quando o mesmo cálculo é chamado por rotas diferentes (finalizar direto vs. consumo real declarado). Exceção conhecida: ver bloco de duplicação de `verificarComponentes()`/baixa acima.
 
 ### Coluna `estado` vs `status` em `producoes`
 - `status` (VARCHAR, `ATIVA`/`CANCELADA`): removido na migration V21 (fluxo legado de 1 produto) — não existe mais
 - `estado` (VARCHAR, `EstadoProducao`): coluna do ciclo de vida novo — sempre usar esta
 
+### Race condition conhecida — número sequencial de Produção
+`proximoNumero()` (ProducaoService.java:1021-1025) é um `MAX(numero)+1` simples via `findTopByUsuarioIdOrderByNumeroDesc`, sem lock — duas requisições concorrentes do mesmo usuário podem ler o mesmo `numero` antes de qualquer uma salvar. A constraint `UNIQUE(usuario_id, numero)` (`uq_producao_usuario_numero`, migration V8) impede duplicata no banco, mas a segunda requisição falha com erro de constraint em vez de retry automático. **Não criar produções concorrentemente (`Promise.all`/paralelo) em testes** — sempre sequencial, para não colidir com esse comportamento conhecido e não corrigido.
+
 ### Justificativas — mínimo uniformizado
 - Todos os campos de justificativa/observação (baixa manual de insumo/produto, avançar status): mínimo **30 caracteres** — uniformizado no #127 (Produção já usava 30 desde RN-078; baixa manual e `AvancaStatusRequest` usavam 50 até então, único ponto fora de linha)
 - Não criar campo novo de justificativa/observação com mínimo diferente de 30 sem decisão explícita
+
+### `/producoes/lote` removido — RN-037/RN-060 obsoletas
+O endpoint `POST /producoes/lote` (lançamento múltiplo em uma sessão, fluxo antigo de 1 produto por produção) não existe mais — substituído pelo modelo de N produtos por produção (`POST /producoes` já aceita múltiplos itens). `RN-037` (cancelamento incondicional/total do fluxo antigo) e `RN-060` (validação de estoque combinada do lançamento múltiplo) estão marcadas obsoletas desde V0.6 em `docs/BUSINESS_RULES.md` — substituídas por RN-071/RN-072 (cancelamento por estado) e RN-061 (consolidação de N produtos), respectivamente. Não citar RN-037/RN-060 como regra vigente em código ou commit novo.
 
 ---
 
@@ -218,7 +262,7 @@ ${dados.total}
 | GET/POST | /producoes | Lista paginada e lança produção — aceita `quantidade` XOR `lotes` (RN-051); listagem ordenada por `numero DESC` (#99), nunca por campo de data mutável |
 | GET | /producoes/{id} | Detalhe |
 | GET | /producoes/preview | **Novo (bloco Catálogo)** — preview de estoque insuficiente antes de confirmar |
-| POST | /producoes/{id}/cancelar | Cancela + reverte estoque (RN-037) |
+| POST | /producoes/{id}/cancelar | Cancela — Fluxo A (`AGUARDANDO_INICIO`, sem movimentação, RN-071) ou Fluxo B (`EM_ANDAMENTO`/`TRAVADA`, com `consumoReal` e estorno da diferença, RN-072); RN-037 obsoleta, ver Módulo de Produção |
 | GET/POST | /orcamentos | Lista paginada e cria — item aceita `itemCatalogoId` OU `produtoId`+`margemAplicada`+`precoUnitario` (RN-054). `GET` aceita `?busca=` opcional (case-insensitive, filtra por `cliente.nome`), combinável com `?status=` (#93) |
 | GET | /orcamentos/{id} | Detalhe — item de catálogo expõe `catalogoIdentificador` (`CTG-N`) e `catalogoNome`, ambos preenchidos em `OrcamentoMapper` a partir de `item.getItemCatalogo().getCatalogo()` (desde v0.2.1, commits `1ab552d`/`03a68be`) |
 | GET | /orcamentos/itens/busca | Busca de item de catálogo com filtro opcional por catálogo (EP-07, confirmar path exato) |
@@ -288,7 +332,9 @@ ${dados.total}
 
 ## Bugs conhecidos
 
-_Nenhum bug de backend em aberto registrado neste documento no momento (`BUG-BUSCA-PRODUTO` corrigido em 2026-07-09, commit `222b939`; `BUG-BUSCA-ORCAMENTO` corrigido em #93, V0.5 — ver git log para bugs anteriores)._
+_Nenhum bug funcional de backend em aberto registrado neste documento no momento (`BUG-BUSCA-PRODUTO` corrigido em 2026-07-09, commit `222b939`; `BUG-BUSCA-ORCAMENTO` corrigido em #93, V0.5 — ver git log para bugs anteriores)._
+
+**Débito encontrado na retomada V0.6 (2026-07-20):** coluna `data_producao`/campo `Producao.dataProducao` (`shared/domain/entity/Producao.java:32-33`) é órfã — gravada uma vez em `prePersist()` e nunca mais lida (não aparece em nenhum DTO/mapper/response, listagem ordena por `numero DESC` desde #99, não por data). Não foi removida na migration V21 (que limpou as colunas do fluxo legado antigo) porque tecnicamente não pertencia ao fluxo legado — é resíduo à parte. Não corrigido nesta varredura (só documentação/levantamento); ver item no OP.
 
 ---
 
