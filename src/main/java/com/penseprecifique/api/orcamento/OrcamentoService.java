@@ -620,7 +620,9 @@ public class OrcamentoService {
         return response;
     }
 
+    /** #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition. */
     private Integer proximoNumero(UUID usuarioId) {
+        usuarioRepository.lockPorId(usuarioId);
         return orcamentoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId)
                 .map(o -> o.getNumero() != null ? o.getNumero() + 1 : 1)
                 .orElse(1);

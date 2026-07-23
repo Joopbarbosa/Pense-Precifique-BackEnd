@@ -99,6 +99,8 @@ public class ProdutoService {
 
         Usuario usuario = getUsuarioAutenticado();
         Produto produto = produtoMapper.toEntity(request, usuario);
+        // #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition.
+        usuarioRepository.lockPorId(usuarioId);
         produto.setNumero(NumeroSequencialUtil.proximoNumero(
                 produtoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Produto::getNumero)));
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO && produto.getPrecoVenda() == null) {

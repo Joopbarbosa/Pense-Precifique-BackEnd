@@ -208,7 +208,9 @@ public class CatalogoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Catálogo não encontrado"));
     }
 
+    /** #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition. */
     private Integer proximoNumero(UUID usuarioId) {
+        usuarioRepository.lockPorId(usuarioId);
         return catalogoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId)
                 .map(c -> c.getNumero() != null ? c.getNumero() + 1 : 1)
                 .orElse(1);

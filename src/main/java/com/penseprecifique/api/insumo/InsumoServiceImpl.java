@@ -85,6 +85,8 @@ public class InsumoServiceImpl implements InsumoService {
 
         Usuario usuario = getUsuarioAutenticado();
         Insumo insumo = insumoMapper.toEntity(request, usuario);
+        // #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition.
+        usuarioRepository.lockPorId(usuarioId);
         insumo.setNumero(NumeroSequencialUtil.proximoNumero(
                 insumoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Insumo::getNumero)));
         insumo = insumoRepository.save(insumo);

@@ -55,6 +55,8 @@ public class ClienteServiceImpl implements ClienteService {
     public ClienteResponse cadastrar(ClienteRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         Cliente cliente = clienteMapper.toEntity(request, usuario);
+        // #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition.
+        usuarioRepository.lockPorId(usuario.getId());
         cliente.setNumero(NumeroSequencialUtil.proximoNumero(
                 clienteRepository.findTopByUsuarioIdOrderByNumeroDesc(usuario.getId()).map(Cliente::getNumero)));
         return clienteMapper.toResponse(clienteRepository.save(cliente));

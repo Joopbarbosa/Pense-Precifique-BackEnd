@@ -20,7 +20,8 @@ import java.util.List;
 public class ProducaoMapper {
 
     public ProducaoResponse toResponse(Producao producao, List<ProducaoProduto> produtos,
-                                        List<AlertaInsumoResponse> alertasInsumos) {
+                                        List<AlertaInsumoResponse> alertasInsumos,
+                                        List<HistoricoStatusProducao> historicoStatus) {
         ProducaoResponse response = new ProducaoResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
@@ -31,6 +32,7 @@ public class ProducaoMapper {
         response.setObservacoes(producao.getObservacoes());
         response.setProdutos(produtos.stream().map(this::toProducaoProdutoResponse).toList());
         response.setAlertasInsumos(alertasInsumos);
+        response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
         return response;
     }
 

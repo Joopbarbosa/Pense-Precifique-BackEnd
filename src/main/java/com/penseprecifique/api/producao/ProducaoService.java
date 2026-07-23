@@ -45,7 +45,11 @@ import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,7 +62,9 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -77,6 +83,18 @@ public class ProducaoService {
     private final UsuarioRepository usuarioRepository;
     private final ProducaoMapper producaoMapper;
 
+    // #158/RN-NOVA-6 — allowlist explícita dos 4 critérios de ordenação aceitos em GET /producoes.
+    // "produto" e "quantidade" são agregados (MIN/SUM sobre producao_produtos, já que uma Producao
+    // agrupa N produtos — RN-061) — a expressão JPQL correspondente é resolvida aqui, nunca aceita
+    // do cliente. Campo fora da allowlist é rejeitado com BusinessException (nunca ignorado em
+    // silêncio nem repassado cru pro Sort, que exporia coluna interna via parâmetro).
+    private static final Map<String, String> CAMPOS_ORDENACAO_PRODUCAO = Map.of(
+            "dataInicio", "p.dataInicio",
+            "estado", "p.estado",
+            "produto", "MIN(pp.produto.nome)",
+            "quantidade", "SUM(pp.quantidade)"
+    );
+
     @Transactional(readOnly = true)
     public Page<ProducaoResponse> listar(String busca, EstadoProducao estado, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
@@ -93,8 +111,41 @@ public class ProducaoService {
             }
         }
 
-        return producaoRepository.buscar(usuarioId, estado, buscaNumero, buscaNome, pageable)
-                .map(this::montarResponseComAlertas);
+        Pageable pageableOrdenado = resolverPageableOrdenado(pageable);
+        Page<UUID> idsPage = producaoRepository.buscarIdsOrdenados(usuarioId, estado, buscaNumero, buscaNome, pageableOrdenado);
+
+        List<UUID> ids = idsPage.getContent();
+        Map<UUID, Producao> porId = producaoRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Producao::getId, p -> p));
+        List<ProducaoResponse> conteudo = ids.stream()
+                .map(porId::get)
+                .filter(Objects::nonNull)
+                .map(this::montarResponseComAlertas)
+                .toList();
+
+        return new PageImpl<>(conteudo, pageable, idsPage.getTotalElements());
+    }
+
+    /**
+     * Traduz o Sort recebido (nomes de campo voltados pro cliente) na expressão JPQL real, validando
+     * contra a allowlist. Sem Sort informado → default numero DESC (produção mais recente primeiro).
+     */
+    private Pageable resolverPageableOrdenado(Pageable pageable) {
+        if (pageable.getSort().isUnsorted()) {
+            Sort padrao = JpaSort.unsafe(Sort.Direction.DESC, "p.numero");
+            return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), padrao);
+        }
+
+        Sort sortResolvido = Sort.unsorted();
+        for (Sort.Order order : pageable.getSort()) {
+            String expressao = CAMPOS_ORDENACAO_PRODUCAO.get(order.getProperty());
+            if (expressao == null) {
+                throw new BusinessException("Campo de ordenação inválido: '" + order.getProperty()
+                        + "'. Permitidos: dataInicio, estado, produto, quantidade.");
+            }
+            sortResolvido = sortResolvido.and(JpaSort.unsafe(order.getDirection(), expressao));
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortResolvido);
     }
 
     @Transactional(readOnly = true)
@@ -106,10 +157,15 @@ public class ProducaoService {
         return montarDetalhe(producao, calcularAlertasAoVivo(produtos));
     }
 
-    /** #123 — alertasInsumos recalculado ao vivo em GET /producoes e GET /producoes/{id}, mesmo cálculo de RN-064. */
+    /**
+     * #123 — alertasInsumos recalculado ao vivo em GET /producoes e GET /producoes/{id}, mesmo cálculo de RN-064.
+     * #156 — historicoStatus também exposto aqui (mesma fonte de ProducaoDetalheResponse), pro front distinguir
+     * TRAVADA_USUARIO/TRAVADA_SISTEMA sem precisar abrir o detalhe.
+     */
     private ProducaoResponse montarResponseComAlertas(Producao producao) {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
-        return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos));
+        List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
+        return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos), historico);
     }
 
     @Transactional(readOnly = true)
@@ -124,6 +180,20 @@ public class ProducaoService {
             preview.add(montarPreview(item, quantidade));
         }
         return preview;
+    }
+
+    /**
+     * RN-NOVA-7 — simulação de alertas ao adicionar produto na tela de Nova Produção: recalcula o
+     * consumo acumulado (produtos já na lista + o novo) sem persistir nada, reaproveitando as mesmas
+     * validarEResolverProdutos()/calcularAlertas() usadas em criarProducao()/editarProducao(). Situação
+     * SUFICIENTE também é retornada aqui (não filtrada), mesmo comportamento hoje de calcularAlertas()
+     * na confirmação final — quem decide omitir da exibição é o front, não o backend.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertaInsumoResponse> simularAlertas(List<ProducaoProdutoRequest> produtos) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        ProdutosValidados validados = validarEResolverProdutos(produtos, usuarioId);
+        return calcularAlertas(validados);
     }
 
     /** RN-061/062/064/077 — cria produção com N produtos, sem movimentação de estoque. Nasce AGUARDANDO_INICIO. */
@@ -1018,7 +1088,9 @@ public class ProducaoService {
         }
     }
 
+    /** #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition. */
     private Integer proximoNumero(UUID usuarioId) {
+        usuarioRepository.lockPorId(usuarioId);
         return producaoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId)
                 .map(p -> p.getNumero() != null ? p.getNumero() + 1 : 1)
                 .orElse(1);

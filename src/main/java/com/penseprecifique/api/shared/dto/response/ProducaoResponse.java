@@ -21,4 +21,8 @@ public class ProducaoResponse {
     private String observacoes;
     private List<ProducaoProdutoResponse> produtos;
     private List<AlertaInsumoResponse> alertasInsumos;
+
+    // #156 — mesmo formato de ProducaoDetalheResponse.historicoStatus; front usa pra distinguir
+    // TRAVADA_USUARIO de TRAVADA_SISTEMA na listagem sem precisar abrir o detalhe (getBadgeEstado).
+    private List<HistoricoStatusResponse> historicoStatus;
 }
