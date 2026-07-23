@@ -24,6 +24,7 @@ import com.penseprecifique.api.shared.dto.request.OrcamentoItemCustomizacaoReque
 import com.penseprecifique.api.shared.dto.request.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueResponse;
+import com.penseprecifique.api.shared.dto.response.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoItemResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
@@ -99,6 +100,44 @@ public class OrcamentoService {
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
         return montarDetalhe(orcamento);
+    }
+
+    /**
+     * #194/RN-NOVA-5 — itens do orçamento cujo produto não tem estoque suficiente pra cobrir a
+     * quantidade solicitada. Somente leitura: alimenta a condição de exibir o botão "Criar produção"
+     * no Detalhe do Orçamento (UC-NOVA-4) — a criação da produção em si passa pelos endpoints já
+     * existentes de Produção, não por aqui. Reaproveita OrcamentoItem.getProdutoVendido() (já resolve
+     * a origem Catálogo/avulso — RN-054) em vez de duplicar essa lógica.
+     */
+    @Transactional(readOnly = true)
+    public List<ItemSemEstoqueResponse> itensSemEstoque(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        List<ItemSemEstoqueResponse> semEstoque = new ArrayList<>();
+        for (OrcamentoItem item : itens) {
+            Produto produto = item.getProdutoVendido();
+            if (produto == null) {
+                continue;
+            }
+            BigDecimal solicitada = BigDecimal.valueOf(item.getQuantidade());
+            BigDecimal estoqueAtual = produto.getEstoqueAtual();
+            if (estoqueAtual.compareTo(solicitada) >= 0) {
+                continue;
+            }
+
+            ItemSemEstoqueResponse resposta = new ItemSemEstoqueResponse();
+            resposta.setProdutoId(produto.getId());
+            resposta.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
+            resposta.setNomeProduto(produto.getNome());
+            resposta.setQuantidadeSolicitada(solicitada);
+            resposta.setEstoqueAtual(estoqueAtual);
+            resposta.setQuantidadeFaltante(solicitada.subtract(estoqueAtual));
+            semEstoque.add(resposta);
+        }
+        return semEstoque;
     }
 
     public OrcamentoDetalheResponse criar(OrcamentoRequest request) {

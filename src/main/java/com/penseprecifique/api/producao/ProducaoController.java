@@ -4,6 +4,7 @@ import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.dto.request.AgruparProducoesRequest;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
@@ -22,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,8 +38,10 @@ public class ProducaoController {
     public ResponseEntity<Page<ProducaoResponse>> listar(
             @RequestParam(required = false) String busca,
             @RequestParam(required = false) EstadoProducao estado,
+            @RequestParam(required = false) LocalDate dataInicioDe,
+            @RequestParam(required = false) LocalDate dataInicioAte,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(producaoService.listar(busca, estado, pageable));
+        return ResponseEntity.ok(producaoService.listar(busca, estado, dataInicioDe, dataInicioAte, pageable));
     }
 
     @GetMapping("/{id}")
@@ -99,8 +103,10 @@ public class ProducaoController {
     }
 
     @PostMapping("/{id}/finalizar")
-    public ResponseEntity<ProducaoDetalheResponse> finalizar(@PathVariable UUID id) {
-        return ResponseEntity.ok(producaoService.finalizar(id));
+    public ResponseEntity<ProducaoDetalheResponse> finalizar(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) FinalizarProducaoRequest request) {
+        return ResponseEntity.ok(producaoService.finalizar(id, request));
     }
 
     @PostMapping("/agrupar")

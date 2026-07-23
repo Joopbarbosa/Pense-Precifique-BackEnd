@@ -31,6 +31,11 @@ public class ProducaoProduto {
     @Column(name = "quantidade", nullable = false)
     private BigDecimal quantidade;
 
+    /** #188/RN-NOVA-4 — perda declarada ao finalizar (Opção A: desconta do incremento de estoque, não é registro paralelo). */
+    @Column(name = "quantidade_perdida", nullable = false)
+    @Builder.Default
+    private BigDecimal quantidadePerdida = BigDecimal.ZERO;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

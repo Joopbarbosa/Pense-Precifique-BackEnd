@@ -87,6 +87,7 @@ public class ProducaoMapper {
         response.setNomeProduto(producaoProduto.getProduto().getNome());
         response.setTipoProduto(producaoProduto.getProduto().getTipo());
         response.setQuantidade(producaoProduto.getQuantidade());
+        response.setQuantidadePerdida(producaoProduto.getQuantidadePerdida());
         return response;
     }
 

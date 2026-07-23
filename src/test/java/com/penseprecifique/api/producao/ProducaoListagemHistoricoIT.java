@@ -79,7 +79,7 @@ class ProducaoListagemHistoricoIT {
         travar.setJustificativa("Trava manual para teste automatizado do #156");
         producaoService.travar(producaoId, travar);
 
-        Page<ProducaoResponse> pagina = producaoService.listar(null, null, PageRequest.of(0, 20));
+        Page<ProducaoResponse> pagina = producaoService.listar(null, null, null, null, PageRequest.of(0, 20));
         ProducaoResponse resposta = pagina.getContent().stream()
                 .filter(p -> p.getId().equals(producaoId))
                 .findFirst()

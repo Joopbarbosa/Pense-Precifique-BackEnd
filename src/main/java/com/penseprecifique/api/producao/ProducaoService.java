@@ -23,7 +23,9 @@ import com.penseprecifique.api.shared.dto.request.AgruparProducoesRequest;
 import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ConsumoRealRequest;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.PerdaProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
@@ -95,8 +97,15 @@ public class ProducaoService {
             "quantidade", "SUM(pp.quantidade)"
     );
 
+    /**
+     * #184/#192 — RN-NOVA-2: filtro opcional por intervalo de dataInicio, usado tanto pela Listagem
+     * quanto pelo Kanban (o front chama o mesmo GET /producoes pros dois — só muda `estado`/`size`
+     * do request, confirmado em ListaProducaoPage.tsx: `carregarKanban` e `carregar` chamam o mesmo
+     * `producaoService.listar`). Sem os parâmetros, comportamento atual é mantido (sem corte de período).
+     */
     @Transactional(readOnly = true)
-    public Page<ProducaoResponse> listar(String busca, EstadoProducao estado, Pageable pageable) {
+    public Page<ProducaoResponse> listar(String busca, EstadoProducao estado,
+                                          LocalDate dataInicioDe, LocalDate dataInicioAte, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
         Integer buscaNumero = null;
@@ -112,7 +121,8 @@ public class ProducaoService {
         }
 
         Pageable pageableOrdenado = resolverPageableOrdenado(pageable);
-        Page<UUID> idsPage = producaoRepository.buscarIdsOrdenados(usuarioId, estado, buscaNumero, buscaNome, pageableOrdenado);
+        Page<UUID> idsPage = producaoRepository.buscarIdsOrdenados(
+                usuarioId, estado, dataInicioDe, dataInicioAte, buscaNumero, buscaNome, pageableOrdenado);
 
         List<UUID> ids = idsPage.getContent();
         Map<UUID, Producao> porId = producaoRepository.findAllById(ids).stream()
@@ -590,9 +600,14 @@ public class ProducaoService {
                 .build());
     }
 
-    /** RN-070 — finaliza produção: incrementa estoque de cada produto pela quantidade produzida,
-     *  registra a entrada, preenche dataTerminoReal e vai para FINALIZADA (imutável, sem saída). */
-    public ProducaoDetalheResponse finalizar(UUID id) {
+    /**
+     * RN-070/#188/RN-NOVA-4 — finaliza produção: incrementa estoque de cada produto por
+     * (quantidade planejada − perda declarada), registra a entrada com a quantidade real (não a
+     * planejada, quando há perda — Opção A, sem registro paralelo), preenche dataTerminoReal e vai
+     * para FINALIZADA (imutável, sem saída). `request`/`perdas` são opcionais — produto ausente da
+     * lista mantém o comportamento anterior (perda 0, incrementa o total planejado).
+     */
+    public ProducaoDetalheResponse finalizar(UUID id, FinalizarProducaoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
@@ -601,17 +616,40 @@ public class ProducaoService {
             throw new BusinessException("Apenas produções em andamento podem ser finalizadas");
         }
 
+        Map<UUID, BigDecimal> perdasPorProduto = new LinkedHashMap<>();
+        if (request != null && request.getPerdas() != null) {
+            for (PerdaProducaoRequest perda : request.getPerdas()) {
+                perdasPorProduto.put(perda.getProdutoId(), perda.getQuantidadePerdida());
+            }
+        }
+
         List<ProducaoProduto> produtosDaProducao = producaoProdutoRepository.findByProducaoId(producao.getId());
         for (ProducaoProduto producaoProduto : produtosDaProducao) {
             Produto produto = producaoProduto.getProduto();
-            produto.setEstoqueAtual(produto.getEstoqueAtual().add(producaoProduto.getQuantidade()));
+            BigDecimal planejada = producaoProduto.getQuantidade();
+            BigDecimal perda = perdasPorProduto.getOrDefault(produto.getId(), BigDecimal.ZERO);
+
+            if (perda.compareTo(planejada) > 0) {
+                throw new BusinessException("Quantidade perdida de " + produto.getNome() + " (" + perda
+                        + ") não pode ser maior que a quantidade planejada (" + planejada + ")");
+            }
+
+            producaoProduto.setQuantidadePerdida(perda);
+            producaoProdutoRepository.save(producaoProduto);
+
+            BigDecimal quantidadeReal = planejada.subtract(perda);
+            if (quantidadeReal.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            produto.setEstoqueAtual(produto.getEstoqueAtual().add(quantidadeReal));
             produtoRepository.save(produto);
 
             movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
                     .produto(produto)
                     .tipo(TipoMovimentacaoProduto.ENTRADA)
                     .motivo(MotivoMovimentacaoProduto.PRODUCAO)
-                    .quantidade(producaoProduto.getQuantidade())
+                    .quantidade(quantidadeReal)
                     .referenciaId(producao.getId())
                     .referenciaTipo(ReferenciaMovimentacaoTipo.PRODUCAO.name())
                     .estornada(false)

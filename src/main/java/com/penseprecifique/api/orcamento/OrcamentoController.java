@@ -4,6 +4,7 @@ import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
+import com.penseprecifique.api.shared.dto.response.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
@@ -45,6 +46,11 @@ public class OrcamentoController {
     @GetMapping("/{id}")
     public ResponseEntity<OrcamentoDetalheResponse> buscar(@PathVariable UUID id) {
         return ResponseEntity.ok(orcamentoService.buscarPorId(id));
+    }
+
+    @GetMapping("/{id}/itens-sem-estoque")
+    public ResponseEntity<List<ItemSemEstoqueResponse>> itensSemEstoque(@PathVariable UUID id) {
+        return ResponseEntity.ok(orcamentoService.itensSemEstoque(id));
     }
 
     @PostMapping

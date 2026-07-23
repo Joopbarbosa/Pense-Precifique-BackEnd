@@ -15,4 +15,6 @@ public class ProducaoProdutoResponse {
     private String nomeProduto;
     private TipoProduto tipoProduto;
     private BigDecimal quantidade;
+    /** #188/RN-NOVA-4 — perda declarada ao finalizar (0 quando não declarada). */
+    private BigDecimal quantidadePerdida;
 }

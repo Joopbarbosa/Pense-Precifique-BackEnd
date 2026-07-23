@@ -135,7 +135,7 @@ class ProducaoOrdenacaoIT {
     @Test
     void defaultSemSortUsaNumeroDesc() {
         seed();
-        Page<ProducaoResponse> pagina = producaoService.listar(null, null, PageRequest.of(0, 20));
+        Page<ProducaoResponse> pagina = producaoService.listar(null, null, null, null, PageRequest.of(0, 20));
         List<UUID> ids = pagina.getContent().stream().map(ProducaoResponse::getId).toList();
         // numero DESC: última criada (pC, numero=102) primeiro
         assertEquals(List.of(pCId, pBId, pAId), ids);
@@ -145,11 +145,11 @@ class ProducaoOrdenacaoIT {
     void campoForaDaAllowlistLancaBusinessException() {
         seed();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "usuario.email"));
-        assertThrows(BusinessException.class, () -> producaoService.listar(null, null, pageable));
+        assertThrows(BusinessException.class, () -> producaoService.listar(null, null, null, null, pageable));
     }
 
     private List<UUID> idsNaOrdem(Sort sort) {
-        Page<ProducaoResponse> pagina = producaoService.listar(null, null, PageRequest.of(0, 20, sort));
+        Page<ProducaoResponse> pagina = producaoService.listar(null, null, null, null, PageRequest.of(0, 20, sort));
         return pagina.getContent().stream().map(ProducaoResponse::getId).toList();
     }
 }
