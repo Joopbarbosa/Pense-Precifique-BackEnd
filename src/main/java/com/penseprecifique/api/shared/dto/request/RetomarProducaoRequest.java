@@ -8,7 +8,7 @@ import java.util.UUID;
 
 @Getter
 @Setter
-public class RetormarProducaoRequest {
+public class RetomarProducaoRequest {
 
     // RN-065 — mesma semântica de IniciarProducaoRequest.dividir: null ou false mantém o comportamento
     // anterior (permanece TRAVADA se ainda bloqueado); true divide quando a reverificação ainda bloqueia.

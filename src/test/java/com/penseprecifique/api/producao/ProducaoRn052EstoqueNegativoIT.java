@@ -14,7 +14,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
-import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.RetomarProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
 import org.junit.jupiter.api.Test;
@@ -162,7 +162,7 @@ class ProducaoRn052EstoqueNegativoIT {
         corante.setPermitirEstoqueNegativo(true);
         insumoRepository.save(corante);
 
-        Object resultado = producaoService.retomar(producaoId, new RetormarProducaoRequest());
+        Object resultado = producaoService.retomar(producaoId, new RetomarProducaoRequest());
 
         ConfirmacaoEstoqueNegativoResponse aviso = assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, resultado);
         assertEquals(1, aviso.getAvisos().size());
@@ -179,7 +179,7 @@ class ProducaoRn052EstoqueNegativoIT {
         corante.setPermitirEstoqueNegativo(true);
         insumoRepository.save(corante);
 
-        RetormarProducaoRequest request = new RetormarProducaoRequest();
+        RetomarProducaoRequest request = new RetomarProducaoRequest();
         request.setConfirmarEstoqueNegativoInsumoIds(List.of(corante.getId()));
         Object resultado = producaoService.retomar(producaoId, request);
 

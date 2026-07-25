@@ -27,7 +27,7 @@ import com.penseprecifique.api.shared.dto.request.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.PerdaProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
-import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.RetomarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.AgruparProducoesResponse;
 import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
@@ -467,7 +467,7 @@ public class ProducaoService {
      *     e, se liberado, baixa pela primeira vez; (b) trava veio de travar() manual após iniciar() já ter
      *     baixado — não há o que reverificar nem baixar de novo (dobraria o consumo), só volta o estado.
      */
-    public Object retomar(UUID id, RetormarProducaoRequest request) {
+    public Object retomar(UUID id, RetomarProducaoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao producao = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));

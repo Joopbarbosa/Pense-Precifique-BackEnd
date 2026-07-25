@@ -6,7 +6,7 @@ import com.penseprecifique.api.shared.dto.request.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.CriarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
-import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.RetomarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
@@ -97,7 +97,7 @@ public class ProducaoController {
     @PostMapping("/{id}/retomar")
     public ResponseEntity<Object> retomar(
             @PathVariable UUID id,
-            @RequestBody(required = false) RetormarProducaoRequest request) {
+            @RequestBody(required = false) RetomarProducaoRequest request) {
         return ResponseEntity.ok(producaoService.retomar(id, request));
     }
 
