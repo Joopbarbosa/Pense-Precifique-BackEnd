@@ -68,7 +68,7 @@ com/penseprecifique/api/
 ├── cliente/           # ClienteController, ClienteService(+Impl), ClienteRepository
 ├── dashboard/         # DashboardController, DashboardService
 ├── empresa/           # EmpresaController, ConfiguracaoController, services(+Impl), repositories
-├── insumo/            # InsumoController, LoteCompraController, services(+Impl), repositories (inclui MovimentacaoInsumoRepository)
+├── insumo/            # InsumoController, LoteCompraController, InsumoService, LoteCompraService (classe única, migrado no #134/Onda 3), repositories (inclui MovimentacaoInsumoRepository)
 ├── orcamento/         # OrcamentoController, OrcamentoService, OrcamentoRepository + repositories de item/recibo
 ├── producao/          # ProducaoController, ProducaoService, ProducaoRepository, ProducaoInsumoConsumidoRepository
 ├── produto/           # ProdutoController, ProdutoService, FichaTecnicaService, repositories
@@ -90,7 +90,7 @@ com/penseprecifique/api/
 └── util/              # IdentificadorFormatter (RN-053, ORC-N/INS-N/etc.), NumeroSequencialUtil — utilitários globais sem módulo dono
 ```
 
-**Exceção intencional confirmada:** `service/PdfHelper.java` ficou fora do escopo do refactor — segue no pacote flat antigo `service/` (o único arquivo restante lá; `service/impl/`, `controller/` e `repository/` na raiz de `api/` estão vazios, sobra local do refactor, não versionados no git).
+`service/impl/`, `controller/` e `repository/` na raiz de `api/` estão vazios, sobra local do refactor, não versionados no git. `service/PdfHelper.java` (única exceção intencional documentada até então) foi removido no #132 (V0.6.3, Onda 3) — confirmado órfão de uso, sem consumidor no código.
 
 ---
 
@@ -146,7 +146,7 @@ RASCUNHO → ENVIADO → APROVADO
 Modelo novo: uma `Producao` agrupa **N produtos** (`ProducaoProduto`, um por produto do lote — nunca mais 1 produção = 1 produto). Toda transição de estado grava uma linha em `HistoricoStatusProducao` (`estado`, `origem` `USUARIO`/`SISTEMA`, `justificativa`, `dataTransicao`), via `transicionar()` (produção existente) ou `registrarNascimento()` (produção nova, criada já em determinado estado por `dividir()`/`agrupar()`).
 
 ### Enums corretos
-- `MotivoMovimentacaoInsumo`: `COMPRA, BAIXA_MANUAL, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, PRODUCAO, ORCAMENTO, ESTORNO_PRODUCAO` — alinhado com `MotivoMovimentacaoProduto` desde #148 (V0.6); `InsumoServiceImpl.baixaManual()` grava `request.motivo()` (antes hardcoded para `BAIXA_MANUAL`, ignorando o motivo enviado); CHECK constraint `chk_mov_insumo_motivo` atualizado na migration V22
+- `MotivoMovimentacaoInsumo`: `COMPRA, BAIXA_MANUAL, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, PRODUCAO, ORCAMENTO, ESTORNO_PRODUCAO` — alinhado com `MotivoMovimentacaoProduto` desde #148 (V0.6); `InsumoService.baixaManual()` grava `request.motivo()` (antes hardcoded para `BAIXA_MANUAL`, ignorando o motivo enviado); CHECK constraint `chk_mov_insumo_motivo` atualizado na migration V22
 - `MotivoMovimentacaoProduto`: `PRODUCAO, ORCAMENTO, PERDA, AVARIA, USO_EXTRA, CORRECAO, OUTRO, ESTORNO_PRODUCAO`
 - `EstadoProducao` (6 estados): `AGUARDANDO_INICIO, EM_ANDAMENTO, TRAVADA, FINALIZADA, CANCELADA, NAO_REALIZADA`
 - `TipoOrigemProducao`: `DIVISAO, AGRUPAMENTO`
@@ -314,6 +314,9 @@ ${dados.total}
 | V14 | V14__indice_fk_producoes_produto_id.sql | Índice de apoio à FK `producoes.produto_id` (#56) |
 | V15 | V15__indice_fk_itens_catalogo_customizacao_produto_id.sql | Índice de apoio à FK `itens_catalogo_customizacao.produto_id` (#56) |
 | V16 | V16__indices_usuario_id_sem_indice.sql | Índices em colunas `usuario_id` que ainda não tinham índice (#56) |
+| V17–V23 | — | Ciclo de vida novo de Produção (ver seção "Módulo de Produção" acima) — tabela não atualizada por Ondas 1/2, consultar `ls db/migration/` para os nomes exatos |
+| V24 | V24__unique_usuario_id_empresa_configuracao_precificacao.sql | `UNIQUE(usuario_id)` em `empresas` (índice parcial, `WHERE deleted_at IS NULL`) e `configuracoes_precificacao` (constraint direta) — #142 |
+| V25 | V25__remove_coluna_data_producao_producoes.sql | Remove coluna órfã `producoes.data_producao` — #179 |
 
 ---
 
@@ -334,7 +337,7 @@ ${dados.total}
 
 _Nenhum bug funcional de backend em aberto registrado neste documento no momento (`BUG-BUSCA-PRODUTO` corrigido em 2026-07-09, commit `222b939`; `BUG-BUSCA-ORCAMENTO` corrigido em #93, V0.5 — ver git log para bugs anteriores)._
 
-**Débito encontrado na retomada V0.6 (2026-07-20):** coluna `data_producao`/campo `Producao.dataProducao` (`shared/domain/entity/Producao.java:32-33`) é órfã — gravada uma vez em `prePersist()` e nunca mais lida (não aparece em nenhum DTO/mapper/response, listagem ordena por `numero DESC` desde #99, não por data). Não foi removida na migration V21 (que limpou as colunas do fluxo legado antigo) porque tecnicamente não pertencia ao fluxo legado — é resíduo à parte. Não corrigido nesta varredura (só documentação/levantamento); ver item no OP.
+_Débito de `data_producao`/`Producao.dataProducao` (coluna órfã, levantado na retomada V0.6 de 2026-07-20) removido no #179 (V0.6.3, Onda 3) — migration V25, coluna e campo não existem mais._
 
 ---
 

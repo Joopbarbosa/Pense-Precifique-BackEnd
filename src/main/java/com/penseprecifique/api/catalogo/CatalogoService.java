@@ -12,15 +12,22 @@ import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.CatalogoMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -38,45 +45,55 @@ public class CatalogoService {
     // Consultas
     // ---------------------------------------------------------------
 
+    private static final Map<String, String> CAMPOS_ORDENACAO_CATALOGO = Map.of(
+            "numero", "c.numero",
+            "nome", "c.nome",
+            "margem", "c.margem",
+            "quantidadeItens", "COUNT(ic.id)"
+    );
+
     /**
-     * RN-057 — busca por nome (case-insensitive, vazio/nulo retorna tudo — RN-055) e ordenação
-     * clicável por coluna. `quantidadeItens` não é coluna persistida (calculado em toResponse via
-     * count), então a ordenação é feita em memória sobre a lista já mapeada, uniforme pros 4 campos.
+     * #133/RN-057 — busca por nome (case-insensitive, vazio/nulo retorna tudo — RN-055) e ordenação
+     * clicável por coluna via Pageable server-side (mesmo padrão de ProducaoService#listar, #158) —
+     * substitui a ordenação em memória anterior, inclusive para quantidadeItens (agregado via COUNT).
      */
     @Transactional(readOnly = true)
-    public List<CatalogoResponse> listar(String busca, String ordenarPor, String direcao) {
+    public Page<CatalogoResponse> listar(String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
+        String buscaNormalizada = (busca != null && !busca.isBlank()) ? busca.trim() : null;
 
-        List<Catalogo> catalogos = (busca != null && !busca.isBlank())
-                ? catalogoRepository.findByUsuarioIdAndNomeContainingIgnoreCase(usuarioId, busca.trim())
-                : catalogoRepository.findByUsuarioId(usuarioId);
+        Pageable pageableOrdenado = resolverPageableOrdenado(pageable);
+        Page<UUID> idsPage = catalogoRepository.buscarIdsOrdenados(usuarioId, buscaNormalizada, pageableOrdenado);
 
-        List<CatalogoResponse> resultado = new ArrayList<>(catalogos.stream()
+        List<UUID> ids = idsPage.getContent();
+        Map<UUID, Catalogo> porId = catalogoRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Catalogo::getId, c -> c));
+        List<CatalogoResponse> conteudo = ids.stream()
+                .map(porId::get)
+                .filter(Objects::nonNull)
                 .map(this::toResponse)
-                .toList());
+                .toList();
 
-        Comparator<CatalogoResponse> comparador = resolverComparador(ordenarPor);
-        if (comparador != null) {
-            if ("DESC".equalsIgnoreCase(direcao)) {
-                comparador = comparador.reversed();
-            }
-            resultado.sort(comparador);
-        }
-
-        return resultado;
+        return new PageImpl<>(conteudo, pageable, idsPage.getTotalElements());
     }
 
-    private Comparator<CatalogoResponse> resolverComparador(String ordenarPor) {
-        if (ordenarPor == null) {
-            return null;
+    /** Sem Sort informado → default numero DESC (catálogo mais recente primeiro, mesmo padrão de Produção). */
+    private Pageable resolverPageableOrdenado(Pageable pageable) {
+        if (pageable.getSort().isUnsorted()) {
+            Sort padrao = JpaSort.unsafe(Sort.Direction.DESC, "c.numero");
+            return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), padrao);
         }
-        return switch (ordenarPor) {
-            case "numero" -> Comparator.comparing(CatalogoResponse::getNumero, Comparator.nullsLast(Integer::compareTo));
-            case "nome" -> Comparator.comparing(CatalogoResponse::getNome, String.CASE_INSENSITIVE_ORDER);
-            case "margem" -> Comparator.comparing(CatalogoResponse::getMargem, Comparator.nullsLast(BigDecimal::compareTo));
-            case "quantidadeItens" -> Comparator.comparing(CatalogoResponse::getQuantidadeItens, Comparator.nullsLast(Integer::compareTo));
-            default -> null;
-        };
+
+        Sort sortResolvido = Sort.unsorted();
+        for (Sort.Order order : pageable.getSort()) {
+            String expressao = CAMPOS_ORDENACAO_CATALOGO.get(order.getProperty());
+            if (expressao == null) {
+                throw new BusinessException("Campo de ordenação inválido: '" + order.getProperty()
+                        + "'. Permitidos: numero, nome, margem, quantidadeItens.");
+            }
+            sortResolvido = sortResolvido.and(JpaSort.unsafe(order.getDirection(), expressao));
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortResolvido);
     }
 
     @Transactional(readOnly = true)

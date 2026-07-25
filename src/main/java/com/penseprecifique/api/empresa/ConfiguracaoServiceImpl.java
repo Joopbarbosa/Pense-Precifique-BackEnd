@@ -6,6 +6,7 @@ import com.penseprecifique.api.shared.dto.response.ConfiguracaoResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -36,7 +37,12 @@ public class ConfiguracaoServiceImpl implements ConfiguracaoService {
         configuracao.setValorHora(request.valorHora());
         configuracao.setMargemPadrao(request.margemPadrao());
 
-        return toResponse(configuracaoRepository.save(configuracao));
+        try {
+            return toResponse(configuracaoRepository.save(configuracao));
+        } catch (DataIntegrityViolationException e) {
+            // #142 — mesma race condition documentada em EmpresaServiceImpl.upsertEmpresa.
+            throw new BusinessException("Este usuário já possui uma configuração de precificação cadastrada.");
+        }
     }
 
     private UUID getUsuarioIdAutenticado() {

@@ -48,24 +48,37 @@ public class ProdutoService {
     private final ProdutoMapper produtoMapper;
     private final UsuarioRepository usuarioRepository;
 
+    /**
+     * #135/RN-039 — custoUnitario recalculado ao vivo por item da página, mesmo cálculo de buscarPorId
+     * (antes ficava travado em produto.precoCusto, só atualizado em cadastrar/editar — desatualizava se
+     * o preço de um insumo da ficha técnica mudasse depois). Custo aceito: N+1 (ficha técnica + valor-hora
+     * por item), mesmo critério já usado em GET /producoes (página limitada a 20 itens por padrão).
+     */
     @Transactional(readOnly = true)
     public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
+        Page<Produto> pagina;
         if (tipo != null && temBusca) {
-            return produtoRepository.findByUsuarioIdAndTipoAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, tipo, busca, pageable)
-                    .map(produtoMapper::toResponse);
+            pagina = produtoRepository.findByUsuarioIdAndTipoAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, tipo, busca, pageable);
+        } else if (tipo != null) {
+            pagina = produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo, pageable);
+        } else if (temBusca) {
+            pagina = produtoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, busca, pageable);
+        } else {
+            pagina = produtoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable);
         }
-        if (tipo != null) {
-            return produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo, pageable)
-                    .map(produtoMapper::toResponse);
-        }
-        if (temBusca) {
-            return produtoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, busca, pageable)
-                    .map(produtoMapper::toResponse);
-        }
-        return produtoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable)
-                .map(produtoMapper::toResponse);
+
+        BigDecimal valorHora = buscarValorHora(usuarioId);
+        return pagina.map(produto -> montarResponseComCustoAoVivo(produto, valorHora));
+    }
+
+    private ProdutoResponse montarResponseComCustoAoVivo(Produto produto, BigDecimal valorHora) {
+        ProdutoResponse response = produtoMapper.toResponse(produto);
+        BigDecimal somaComponentes = fichaTecnicaService.recalcularPrecoCusto(produto.getId());
+        BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
+        response.setCustoUnitario(calcularCustoUnitario(custoTotalLote, produto.getRendimento()));
+        return response;
     }
 
     @Transactional(readOnly = true)

@@ -7,8 +7,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+// #142 — uma configuração por usuária (sem soft delete nesta tabela, constraint direta — migration V24).
 @Entity
-@Table(name = "configuracoes_precificacao")
+@Table(
+    name = "configuracoes_precificacao",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"usuario_id"})
+)
 @Getter
 @Setter
 @NoArgsConstructor

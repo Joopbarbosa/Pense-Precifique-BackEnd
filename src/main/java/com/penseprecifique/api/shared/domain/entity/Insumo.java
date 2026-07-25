@@ -7,11 +7,15 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * #141 — unicidade real de nome+marca por usuário é um índice parcial com COALESCE, não representável
+ * em {@code @UniqueConstraint} (que não suporta COALESCE nem WHERE): {@code CREATE UNIQUE INDEX
+ * idx_insumos_nome_marca_usuario ON insumos (usuario_id, nome, COALESCE(marca, '')) WHERE deleted_at
+ * IS NULL} (migration V1). Sem efeito em runtime de qualquer forma — {@code ddl-auto: validate} nunca
+ * gera schema a partir de anotação JPA; a constraint real é a da migration.
+ */
 @Entity
-@Table(
-    name = "insumos",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"nome", "marca", "usuario_id"})
-)
+@Table(name = "insumos")
 @Getter
 @Setter
 @NoArgsConstructor

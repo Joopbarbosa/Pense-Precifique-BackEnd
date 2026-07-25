@@ -5,10 +5,12 @@ import com.penseprecifique.api.shared.dto.request.DuplicarCatalogoRequest;
 import com.penseprecifique.api.shared.dto.response.CatalogoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -19,11 +21,10 @@ public class CatalogoController {
     private final CatalogoService catalogoService;
 
     @GetMapping
-    public ResponseEntity<List<CatalogoResponse>> listar(
+    public ResponseEntity<Page<CatalogoResponse>> listar(
             @RequestParam(required = false) String busca,
-            @RequestParam(required = false) String ordenarPor,
-            @RequestParam(required = false, defaultValue = "ASC") String direcao) {
-        return ResponseEntity.ok(catalogoService.listar(busca, ordenarPor, direcao));
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(catalogoService.listar(busca, pageable));
     }
 
     @GetMapping("/{id}")

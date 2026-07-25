@@ -7,6 +7,7 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -39,7 +40,14 @@ public class EmpresaServiceImpl implements EmpresaService {
         empresa.setEndereco(request.endereco());
         empresa.setLogoUrl(request.logoUrl());
 
-        return toResponse(empresaRepository.save(empresa));
+        try {
+            return toResponse(empresaRepository.save(empresa));
+        } catch (DataIntegrityViolationException e) {
+            // #142 — race condition entre duas chamadas concorrentes de upsert pro mesmo usuário
+            // (nenhuma via encontrou a empresa existente antes de inserir); constraint real é a rede de
+            // segurança, mensagem aqui evita vazar exception genérica de banco pro cliente.
+            throw new BusinessException("Este usuário já possui uma empresa cadastrada.");
+        }
     }
 
     private UUID getUsuarioIdAutenticado() {

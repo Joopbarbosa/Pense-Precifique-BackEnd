@@ -29,9 +29,6 @@ public class Producao {
     @Column(name = "numero", updatable = false)
     private Integer numero;
 
-    @Column(name = "data_producao", nullable = false)
-    private LocalDateTime dataProducao;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "estado", nullable = false)
     @Builder.Default
@@ -75,7 +72,6 @@ public class Producao {
     @PrePersist
     void prePersist() {
         LocalDateTime now = LocalDateTime.now();
-        if (dataProducao == null) dataProducao = now;
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
     }

@@ -6,6 +6,11 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * #142 — uma empresa por usuária, reforçada por índice parcial (empresas tem soft delete, JPA
+ * {@code @UniqueConstraint} não suporta WHERE): {@code CREATE UNIQUE INDEX uq_empresas_usuario_id ON
+ * empresas (usuario_id) WHERE deleted_at IS NULL} (migration V24) — mesmo padrão de {@link Insumo}.
+ */
 @Entity
 @Table(name = "empresas")
 @Getter
