@@ -60,7 +60,7 @@ public class OrcamentoController {
     }
 
     @PostMapping("/{id}/avancar-status")
-    public ResponseEntity<OrcamentoDetalheResponse> avancarStatus(
+    public ResponseEntity<Object> avancarStatus(
             @PathVariable UUID id,
             @Valid @RequestBody(required = false) AvancaStatusRequest request) {
         return ResponseEntity.ok(orcamentoService.avancarStatus(id,

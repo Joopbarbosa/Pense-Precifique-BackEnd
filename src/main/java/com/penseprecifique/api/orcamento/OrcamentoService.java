@@ -23,7 +23,9 @@ import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueResponse;
+import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoItemResponse;
@@ -350,7 +352,7 @@ public class OrcamentoService {
         return subtotal;
     }
 
-    public OrcamentoDetalheResponse avancarStatus(UUID id, AvancaStatusRequest request) {
+    public Object avancarStatus(UUID id, AvancaStatusRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
@@ -398,7 +400,16 @@ public class OrcamentoService {
 
             case EM_PRODUCAO:
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
-                validarEstoqueParaFinalizar(itensParaBaixa);
+                List<UUID> confirmados = request.getConfirmarEstoqueNegativoProdutoIds() != null
+                        ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
+                List<AvisoEstoqueNegativoResponse> avisos = validarEstoqueParaFinalizar(itensParaBaixa, confirmados);
+                // RN-052 — algum produto ficaria negativo e ainda não foi confirmado: nada foi baixado,
+                // devolve o aviso para o usuário confirmar antes de reenviar.
+                if (!avisos.isEmpty()) {
+                    ConfirmacaoEstoqueNegativoResponse resposta = new ConfirmacaoEstoqueNegativoResponse();
+                    resposta.setAvisos(avisos);
+                    return resposta;
+                }
                 for (OrcamentoItem item : itensParaBaixa) {
                     Produto produto = item.getProdutoVendido();
                     BigDecimal quantidadeBaixa = calcularQuantidadeMovimentacao(item);
@@ -543,9 +554,11 @@ public class OrcamentoService {
      * RN-059 — produto com permitirEstoqueNegativo=false bloqueia o avanço para FINALIZADO
      * incondicionalmente (tudo ou nada, antes de qualquer baixa), sem opção de forçar. Quantidade é
      * acumulada por produto caso o mesmo produto apareça em mais de um item do orçamento, para refletir
-     * o efeito real da baixa sequencial.
+     * o efeito real da baixa sequencial. RN-052 — produto com permitirEstoqueNegativo=true cujo resultado
+     * ficaria negativo e cujo id não está em idsConfirmados vira aviso pendente na lista retornada, sem
+     * bloquear (chamador decide: se a lista vier não-vazia, nada foi baixado ainda).
      */
-    private void validarEstoqueParaFinalizar(List<OrcamentoItem> itens) {
+    private List<AvisoEstoqueNegativoResponse> validarEstoqueParaFinalizar(List<OrcamentoItem> itens, List<UUID> idsConfirmados) {
         Map<UUID, BigDecimal> quantidadeAcumulada = new LinkedHashMap<>();
         Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
         for (OrcamentoItem item : itens) {
@@ -555,11 +568,26 @@ public class OrcamentoService {
         }
 
         List<String> bloqueados = new ArrayList<>();
+        List<AvisoEstoqueNegativoResponse> avisos = new ArrayList<>();
         for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumulada.entrySet()) {
             Produto produto = produtosPorId.get(entry.getKey());
-            BigDecimal resultante = produto.getEstoqueAtual().subtract(entry.getValue());
-            if (resultante.compareTo(BigDecimal.ZERO) < 0 && !produto.getPermitirEstoqueNegativo()) {
+            BigDecimal necessaria = entry.getValue();
+            BigDecimal resultante = produto.getEstoqueAtual().subtract(necessaria);
+            if (resultante.compareTo(BigDecimal.ZERO) >= 0) {
+                continue;
+            }
+            if (!produto.getPermitirEstoqueNegativo()) {
                 bloqueados.add(produto.getNome());
+            } else if (!idsConfirmados.contains(produto.getId())) {
+                AvisoEstoqueNegativoResponse aviso = new AvisoEstoqueNegativoResponse();
+                aviso.setComponenteId(produto.getId());
+                aviso.setNome(produto.getNome());
+                aviso.setEstoqueAtual(produto.getEstoqueAtual());
+                aviso.setQuantidadeNecessaria(necessaria);
+                aviso.setMensagem("A baixa de " + necessaria.stripTrailingZeros().toPlainString()
+                        + " de " + produto.getNome() + " deixará o estoque negativo (atual: "
+                        + produto.getEstoqueAtual().stripTrailingZeros().toPlainString() + "). Confirme para prosseguir.");
+                avisos.add(aviso);
             }
         }
         if (!bloqueados.isEmpty()) {
@@ -567,6 +595,7 @@ public class OrcamentoService {
                     "Estoque insuficiente para " + String.join(", ", bloqueados)
                             + ". Este(s) produto(s) não permite(m) estoque negativo.");
         }
+        return avisos;
     }
 
     /**

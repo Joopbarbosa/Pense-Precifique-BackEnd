@@ -31,6 +31,8 @@ import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.AgruparProducoesResponse;
 import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
+import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.DivisaoProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
@@ -422,19 +424,23 @@ public class ProducaoService {
         }
 
         List<ProducaoProduto> produtosDaProducao = producaoProdutoRepository.findByProducaoId(producao.getId());
-        VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
+        List<UUID> confirmados = request.getConfirmarEstoqueNegativoInsumoIds() != null
+                ? request.getConfirmarEstoqueNegativoInsumoIds() : List.of();
+        VerificacaoInsumos verificacao = verificarEBaixarSeLiberado(producao, produtosDaProducao, confirmados);
 
         if (!verificacao.bloqueantes().isEmpty()) {
             if (Boolean.TRUE.equals(request.getDividir())) {
-                return dividir(producao, produtosDaProducao, verificacao);
+                return dividir(producao, produtosDaProducao, verificacao, confirmados);
             }
             transicionar(producao, EstadoProducao.TRAVADA, OrigemHistoricoStatus.SISTEMA,
                     "Insumo(s) bloqueante(s): " + String.join(", ", verificacao.bloqueantes()));
             return montarDetalhe(producao, List.of());
         }
 
-        for (ComponenteNecessidade componente : verificacao.componentes()) {
-            baixarComponente(producao, componente);
+        // RN-052 — componente com estoque negativo permitido e ainda não confirmado: nada foi baixado,
+        // devolve o aviso para o usuário confirmar antes de reenviar.
+        if (!verificacao.avisosPendentes().isEmpty()) {
+            return montarConfirmacaoEstoqueNegativo(verificacao);
         }
 
         transicionar(producao, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, null);
@@ -477,18 +483,22 @@ public class ProducaoService {
         }
 
         List<ProducaoProduto> produtosDaProducao = producaoProdutoRepository.findByProducaoId(producao.getId());
-        VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
+        List<UUID> confirmados = (request != null && request.getConfirmarEstoqueNegativoInsumoIds() != null)
+                ? request.getConfirmarEstoqueNegativoInsumoIds() : List.of();
+        VerificacaoInsumos verificacao = verificarEBaixarSeLiberado(producao, produtosDaProducao, confirmados);
 
         if (!verificacao.bloqueantes().isEmpty()) {
             if (request != null && Boolean.TRUE.equals(request.getDividir())) {
-                return dividir(producao, produtosDaProducao, verificacao);
+                return dividir(producao, produtosDaProducao, verificacao, confirmados);
             }
             // Permanece TRAVADA — tentativa sem sucesso não é uma transição de estado, sem histórico novo.
             return montarDetalhe(producao, List.of());
         }
 
-        for (ComponenteNecessidade componente : verificacao.componentes()) {
-            baixarComponente(producao, componente);
+        // RN-052 — componente com estoque negativo permitido e ainda não confirmado: nada foi baixado,
+        // devolve o aviso para o usuário confirmar antes de reenviar.
+        if (!verificacao.avisosPendentes().isEmpty()) {
+            return montarConfirmacaoEstoqueNegativo(verificacao);
         }
 
         transicionar(producao, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, null);
@@ -521,10 +531,12 @@ public class ProducaoService {
      * RN-065 — divide a produção quando iniciar()/retomar() encontram bloqueante e o usuário optou por
      * dividir em vez de travar tudo. Produtos sem bloqueio formam uma nova produção que já baixa insumos
      * e vai para EM_ANDAMENTO; produtos com bloqueio formam outra, TRAVADA, sem baixar nada; a produção
-     * original vira NÃO_REALIZADA, substituída pelas duas novas.
+     * original vira NÃO_REALIZADA, substituída pelas duas novas. RN-052 — componente de producaoA com
+     * estoque negativo permitido e ainda não confirmado interrompe a divisão inteira antes de qualquer
+     * gravação (nenhuma produção nova é criada, original não transiciona) até o usuário confirmar.
      */
-    private DivisaoProducaoResponse dividir(Producao producaoOriginal, List<ProducaoProduto> produtosDaProducao,
-                                              VerificacaoInsumos verificacao) {
+    private Object dividir(Producao producaoOriginal, List<ProducaoProduto> produtosDaProducao,
+                            VerificacaoInsumos verificacao, List<UUID> idsConfirmados) {
         ProdutosDivididos divididos = classificarPorBloqueio(produtosDaProducao, verificacao.bloqueantes());
 
         if (divididos.semBloqueio().isEmpty()) {
@@ -532,11 +544,16 @@ public class ProducaoService {
                     + "Opções: resolver o estoque ou cancelar a produção.");
         }
 
+        VerificacaoInsumos verificacaoA = verificarComponentes(divididos.semBloqueio());
+        List<AvisoEstoqueNegativoResponse> avisosA = avisosNaoConfirmados(verificacaoA.componentes(), idsConfirmados);
+        if (!avisosA.isEmpty()) {
+            return montarConfirmacaoEstoqueNegativo(
+                    new VerificacaoInsumos(verificacaoA.componentes(), verificacaoA.bloqueantes(), avisosA));
+        }
+
         String identificadorOriginal = IdentificadorFormatter.formatar("PRD", producaoOriginal.getNumero());
 
         Producao producaoA = criarProducaoFilha(producaoOriginal, divididos.semBloqueio(), TipoOrigemProducao.DIVISAO);
-        List<ProducaoProduto> produtosA = producaoProdutoRepository.findByProducaoId(producaoA.getId());
-        VerificacaoInsumos verificacaoA = verificarComponentes(produtosA);
         for (ComponenteNecessidade componente : verificacaoA.componentes()) {
             baixarComponente(producaoA, componente);
         }
@@ -665,8 +682,11 @@ public class ProducaoService {
      * RN-074 — agrupa 2+ produções em uma nova. Produções com insumos já baixados (EM_ANDAMENTO/TRAVADA)
      * exigem declaração de consumo real antes de sair de cena (mesma lógica de cancelar() — RN-072). Os
      * produtos das originais são consolidados por produto (RN-061). As originais viram NÃO_REALIZADA.
+     * RN-052 — componente da nova produção com estoque negativo permitido e ainda não confirmado
+     * interrompe o agrupamento inteiro antes de qualquer gravação (nenhum estorno de consumo real,
+     * nenhuma produção nova, nenhuma original transicionada) até o usuário confirmar.
      */
-    public AgruparProducoesResponse agrupar(AgruparProducoesRequest request) {
+    public Object agrupar(AgruparProducoesRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
         if (request.getEstadoDestino() != EstadoProducao.AGUARDANDO_INICIO
@@ -688,23 +708,29 @@ public class ProducaoService {
             originais.add(producao);
         }
 
+        // Consolida os produtos de todas as produções, somando quantidades por produto (RN-061) — calculado
+        // antes do Passo 1 para permitir o pré-check de RN-052 sem efeito colateral algum ainda gravado.
+        List<ProducaoProduto> produtosConsolidados = consolidarProdutos(originais);
+
+        if (request.getEstadoDestino() == EstadoProducao.EM_ANDAMENTO) {
+            List<UUID> confirmados = request.getConfirmarEstoqueNegativoInsumoIds() != null
+                    ? request.getConfirmarEstoqueNegativoInsumoIds() : List.of();
+            VerificacaoInsumos preCheck = verificarComponentes(produtosConsolidados);
+            if (preCheck.bloqueantes().isEmpty()) {
+                List<AvisoEstoqueNegativoResponse> avisos = avisosNaoConfirmados(preCheck.componentes(), confirmados);
+                if (!avisos.isEmpty()) {
+                    return montarConfirmacaoEstoqueNegativo(
+                            new VerificacaoInsumos(preCheck.componentes(), preCheck.bloqueantes(), avisos));
+                }
+            }
+        }
+
         // Passo 1 — produções com insumos já baixados exigem declaração de consumo real antes de sair de cena.
         for (Producao producao : originais) {
             if (producao.getEstado() == EstadoProducao.EM_ANDAMENTO || producao.getEstado() == EstadoProducao.TRAVADA) {
                 List<ConsumoRealRequest> consumoReal = request.getConsumoRealPorProducao() != null
                         ? request.getConsumoRealPorProducao().get(producao.getId()) : null;
                 aplicarConsumoReal(producao, consumoReal, request.getJustificativa());
-            }
-        }
-
-        // Passo 2 — consolida os produtos de todas as produções, somando quantidades por produto (RN-061).
-        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
-        Map<UUID, BigDecimal> quantidadesPorProduto = new LinkedHashMap<>();
-        for (Producao producao : originais) {
-            for (ProducaoProduto producaoProduto : producaoProdutoRepository.findByProducaoId(producao.getId())) {
-                UUID produtoId = producaoProduto.getProduto().getId();
-                produtosPorId.putIfAbsent(produtoId, producaoProduto.getProduto());
-                quantidadesPorProduto.merge(produtoId, producaoProduto.getQuantidade(), BigDecimal::add);
             }
         }
 
@@ -727,11 +753,11 @@ public class ProducaoService {
                 .build();
         nova = producaoRepository.save(nova);
 
-        for (Produto produto : produtosPorId.values()) {
+        for (ProducaoProduto consolidado : produtosConsolidados) {
             producaoProdutoRepository.save(ProducaoProduto.builder()
                     .producao(nova)
-                    .produto(produto)
-                    .quantidade(quantidadesPorProduto.get(produto.getId()))
+                    .produto(consolidado.getProduto())
+                    .quantidade(consolidado.getQuantidade())
                     .build());
         }
 
@@ -740,14 +766,11 @@ public class ProducaoService {
             registrarNascimento(nova, EstadoProducao.AGUARDANDO_INICIO, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
         } else if (request.getEstadoDestino() == EstadoProducao.EM_ANDAMENTO) {
             List<ProducaoProduto> produtosNova = producaoProdutoRepository.findByProducaoId(nova.getId());
-            VerificacaoInsumos verificacao = verificarComponentes(produtosNova);
+            VerificacaoInsumos verificacao = verificarEBaixarSeLiberado(nova, produtosNova);
             if (!verificacao.bloqueantes().isEmpty()) {
                 registrarNascimento(nova, EstadoProducao.TRAVADA, OrigemHistoricoStatus.SISTEMA,
                         "Insumo(s) bloqueante(s): " + String.join(", ", verificacao.bloqueantes()));
             } else {
-                for (ComponenteNecessidade componente : verificacao.componentes()) {
-                    baixarComponente(nova, componente);
-                }
                 registrarNascimento(nova, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
             }
         } else {
@@ -768,6 +791,27 @@ public class ProducaoService {
         response.setProducaoNova(montarDetalhe(nova, List.of()));
         response.setProducoesOriginais(originaisResponse);
         return response;
+    }
+
+    /** RN-061 — soma as quantidades do mesmo produto entre todas as produções de origem. Retorna
+     *  ProducaoProduto transientes (produto+quantidade, sem id/producao) — usados tanto para o pré-check
+     *  de RN-052 quanto para gravar os ProducaoProduto reais da nova produção. */
+    private List<ProducaoProduto> consolidarProdutos(List<Producao> originais) {
+        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
+        Map<UUID, BigDecimal> quantidadesPorProduto = new LinkedHashMap<>();
+        for (Producao producao : originais) {
+            for (ProducaoProduto producaoProduto : producaoProdutoRepository.findByProducaoId(producao.getId())) {
+                UUID produtoId = producaoProduto.getProduto().getId();
+                produtosPorId.putIfAbsent(produtoId, producaoProduto.getProduto());
+                quantidadesPorProduto.merge(produtoId, producaoProduto.getQuantidade(), BigDecimal::add);
+            }
+        }
+        return produtosPorId.values().stream()
+                .map(produto -> ProducaoProduto.builder()
+                        .produto(produto)
+                        .quantidade(quantidadesPorProduto.get(produto.getId()))
+                        .build())
+                .toList();
     }
 
     private void transicionar(Producao producao, EstadoProducao novoEstado, OrigemHistoricoStatus origem, String justificativa) {
@@ -797,7 +841,10 @@ public class ProducaoService {
                                           Boolean permitirEstoqueNegativo, Insumo insumo, Produto produtoBase) {
     }
 
-    private record VerificacaoInsumos(List<ComponenteNecessidade> componentes, List<String> bloqueantes) {
+    /** avisosPendentes (RN-052) só é preenchido por verificarEBaixarSeLiberado(...,idsConfirmados) — vazio
+     *  nos demais casos (verificarComponentes puro, ou gate não aplicável ao chamador). */
+    private record VerificacaoInsumos(List<ComponenteNecessidade> componentes, List<String> bloqueantes,
+                                       List<AvisoEstoqueNegativoResponse> avisosPendentes) {
     }
 
     /**
@@ -848,7 +895,73 @@ public class ProducaoService {
             }
         }
 
-        return new VerificacaoInsumos(componentes, bloqueantes);
+        return new VerificacaoInsumos(componentes, bloqueantes, List.of());
+    }
+
+    /** #178 — ponto único usado por iniciar()/retomar()/dividir()/agrupar(): verifica os componentes e,
+     *  se nada bloquear, baixa todos direto. Usada por dividir()/agrupar(), onde não há um usuário decidindo
+     *  a confirmação de estoque negativo na hora — RN-052 não se aplica, mesmo comportamento de sempre. */
+    private VerificacaoInsumos verificarEBaixarSeLiberado(Producao producao, List<ProducaoProduto> produtosDaProducao) {
+        VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
+        if (verificacao.bloqueantes().isEmpty()) {
+            for (ComponenteNecessidade componente : verificacao.componentes()) {
+                baixarComponente(producao, componente);
+            }
+        }
+        return verificacao;
+    }
+
+    /** RN-052 — variante usada por iniciar()/retomar(), onde a baixa é uma ação direta do usuário: componente
+     *  com estoque negativo permitido (permitirEstoqueNegativo=true) e id fora de idsConfirmados vira aviso
+     *  pendente em vez de ser baixado — nada é baixado enquanto houver algum aviso pendente. */
+    private VerificacaoInsumos verificarEBaixarSeLiberado(Producao producao, List<ProducaoProduto> produtosDaProducao,
+                                                            List<UUID> idsConfirmados) {
+        VerificacaoInsumos verificacao = verificarComponentes(produtosDaProducao);
+        if (!verificacao.bloqueantes().isEmpty()) {
+            return verificacao;
+        }
+
+        List<AvisoEstoqueNegativoResponse> avisos = avisosNaoConfirmados(verificacao.componentes(), idsConfirmados);
+        if (!avisos.isEmpty()) {
+            return new VerificacaoInsumos(verificacao.componentes(), verificacao.bloqueantes(), avisos);
+        }
+
+        for (ComponenteNecessidade componente : verificacao.componentes()) {
+            baixarComponente(producao, componente);
+        }
+        return verificacao;
+    }
+
+    private List<AvisoEstoqueNegativoResponse> avisosNaoConfirmados(List<ComponenteNecessidade> componentes,
+                                                                       List<UUID> idsConfirmados) {
+        List<AvisoEstoqueNegativoResponse> avisos = new ArrayList<>();
+        for (ComponenteNecessidade componente : componentes) {
+            boolean ficariaNegativo = componente.estoqueAtual().subtract(componente.necessaria())
+                    .compareTo(BigDecimal.ZERO) < 0;
+            if (!ficariaNegativo || !Boolean.TRUE.equals(componente.permitirEstoqueNegativo())) {
+                continue;
+            }
+            UUID componenteId = componente.insumo() != null ? componente.insumo().getId() : componente.produtoBase().getId();
+            if (idsConfirmados.contains(componenteId)) {
+                continue;
+            }
+            AvisoEstoqueNegativoResponse aviso = new AvisoEstoqueNegativoResponse();
+            aviso.setComponenteId(componenteId);
+            aviso.setNome(componente.nome());
+            aviso.setEstoqueAtual(componente.estoqueAtual());
+            aviso.setQuantidadeNecessaria(componente.necessaria());
+            aviso.setMensagem("A baixa de " + componente.necessaria().stripTrailingZeros().toPlainString()
+                    + " de " + componente.nome() + " deixará o estoque negativo (atual: "
+                    + componente.estoqueAtual().stripTrailingZeros().toPlainString() + "). Confirme para prosseguir.");
+            avisos.add(aviso);
+        }
+        return avisos;
+    }
+
+    private ConfirmacaoEstoqueNegativoResponse montarConfirmacaoEstoqueNegativo(VerificacaoInsumos verificacao) {
+        ConfirmacaoEstoqueNegativoResponse resposta = new ConfirmacaoEstoqueNegativoResponse();
+        resposta.setAvisos(verificacao.avisosPendentes());
+        return resposta;
     }
 
     /** Baixa efetiva de um componente — mesmo padrão de movimentação usado no fluxo legado (registrarProducao). */

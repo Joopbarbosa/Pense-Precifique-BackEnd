@@ -10,8 +10,10 @@ import java.util.UUID;
 @Setter
 public class IniciarProducaoRequest {
 
-    // Reservado para uso futuro — hoje sem efeito: permitirEstoqueNegativo=false do cadastro
-    // bloqueia incondicionalmente (RN-059), não é contornável por confirmação do request.
+    // RN-052 — ids dos insumos/produtos-base cujo estoque resultaria negativo (permitirEstoqueNegativo=true)
+    // e cuja baixa o usuário já confirmou. Componente com esse resultado fora desta lista gera aviso em vez
+    // de baixar (ver ConfirmacaoEstoqueNegativoResponse). Sem efeito sobre RN-059 (permitirEstoqueNegativo=false
+    // continua bloqueando incondicionalmente, não contornável por confirmação).
     private List<UUID> confirmarEstoqueNegativoInsumoIds;
 
     // RN-065 — null ou false: comportamento anterior (bloqueante trava tudo). true: divide a produção

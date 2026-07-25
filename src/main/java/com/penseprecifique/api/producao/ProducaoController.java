@@ -9,7 +9,6 @@ import com.penseprecifique.api.shared.dto.request.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.RetormarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.ProducaoProdutoRequest;
-import com.penseprecifique.api.shared.dto.response.AgruparProducoesResponse;
 import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.ProducaoDetalheResponse;
@@ -110,7 +109,7 @@ public class ProducaoController {
     }
 
     @PostMapping("/agrupar")
-    public ResponseEntity<AgruparProducoesResponse> agrupar(@Valid @RequestBody AgruparProducoesRequest request) {
+    public ResponseEntity<Object> agrupar(@Valid @RequestBody AgruparProducoesRequest request) {
         return ResponseEntity.ok(producaoService.agrupar(request));
     }
 }

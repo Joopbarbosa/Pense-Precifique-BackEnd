@@ -39,4 +39,8 @@ public class AgruparProducoesRequest {
     @NotBlank(message = "A justificativa é obrigatória")
     @Size(min = 30, message = "Justificativa deve ter no mínimo 30 caracteres")
     private String justificativa;
+
+    // RN-052 — mesma semântica de IniciarProducaoRequest.confirmarEstoqueNegativoInsumoIds, usada quando
+    // estadoDestino=EM_ANDAMENTO baixa insumo dos produtos consolidados da nova produção.
+    private List<UUID> confirmarEstoqueNegativoInsumoIds;
 }
