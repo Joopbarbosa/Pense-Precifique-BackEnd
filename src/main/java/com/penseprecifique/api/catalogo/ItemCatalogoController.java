@@ -1,6 +1,8 @@
 package com.penseprecifique.api.catalogo;
 
+import com.penseprecifique.api.shared.dto.request.ItemCatalogoPreviewRequest;
 import com.penseprecifique.api.shared.dto.request.ItemCatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.ItemCatalogoPrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,5 +45,12 @@ public class ItemCatalogoController {
             @PathVariable UUID itemId) {
         itemCatalogoService.remover(itemId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/preview-preco")
+    public ResponseEntity<ItemCatalogoPrecoSugeridoResponse> previewPreco(
+            @PathVariable UUID catalogoId,
+            @Valid @RequestBody ItemCatalogoPreviewRequest request) {
+        return ResponseEntity.ok(itemCatalogoService.previewPreco(catalogoId, request));
     }
 }

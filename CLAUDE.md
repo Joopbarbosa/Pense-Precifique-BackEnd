@@ -36,6 +36,31 @@ docker compose up --build
 
 ---
 
+## Como rodar os testes
+
+Testes sempre rodam dentro de container Docker, nunca no host direto — `SPRING_DATASOURCE_URL`/`SPRING_DATASOURCE_USERNAME`/`SPRING_DATASOURCE_PASSWORD` só existem como env var dentro dos containers do `docker-compose.yml`, então `./mvnw test` no host falha ao subir o `ApplicationContext` com `Driver org.postgresql.Driver claims to not accept jdbcUrl, ${SPRING_DATASOURCE_URL}`.
+
+O container `backend` em execução (`docker compose up`) é a imagem final de produção do Dockerfile multi-stage (`FROM eclipse-temurin:21-jre`, só tem `app.jar`) — não tem Maven nem código-fonte, então `docker compose exec backend ./mvnw test` **não funciona**. É preciso buildar o estágio `build` (`FROM eclipse-temurin:21-jdk AS build`) à parte e rodar os testes num container temporário, na mesma rede do `db`:
+
+```bash
+cd "/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend"
+docker build --target build -t pense-backend-build .
+
+# garantir que o serviço "db" do docker-compose está de pé antes (docker compose up -d db)
+source "/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/.env"
+docker run --rm --network penseprecifique_default \
+  -e SPRING_DATASOURCE_URL="jdbc:postgresql://db:5432/pense_precifique_db" \
+  -e SPRING_DATASOURCE_USERNAME="$DB_USER" \
+  -e SPRING_DATASOURCE_PASSWORD="$DB_PASSWORD" \
+  -e JWT_SECRET="$JWT_SECRET" \
+  -e JWT_EXPIRATION_MS="$JWT_EXPIRATION_MS" \
+  pense-backend-build ./mvnw test
+```
+
+Rede confirmada via `docker network ls` (`penseprecifique_default`, nome derivado do diretório raiz do `docker-compose.yml`). Suíte usa `**/*IT.java` (convenção do projeto, Surefire configurado para isso desde #132/Onda 3) — nunca rodar por classe isolada (`-Dtest=Nome`) como validação final, sempre `./mvnw test` completo.
+
+---
+
 ## Convenções obrigatórias
 
 - **PKs:** UUID
@@ -259,6 +284,7 @@ ${dados.total}
 | POST | /catalogos/{id}/duplicar | **Novo (EP-09)** — duplica com overrides preservados (confirmar path exato) |
 | PUT | /catalogos/{id}/ativar-desativar | **Novo (EP-09)** — toggle `ativo` (confirmar path exato) |
 | POST/PUT/DELETE | /catalogos/{id}/itens | **Novo (EP-09)** — CRUD de ItemCatalogo (confirmar path exato) |
+| POST | /catalogos/{catalogoId}/itens/preview-preco | **Novo (V0.6.1 Onda 4, RN-NOVA-8)** — preview ao vivo do preço sugerido, sem persistir |
 | GET/POST | /producoes | Lista paginada e lança produção — aceita `quantidade` XOR `lotes` (RN-051); listagem ordenada por `numero DESC` (#99), nunca por campo de data mutável |
 | GET | /producoes/{id} | Detalhe |
 | GET | /producoes/preview | **Novo (bloco Catálogo)** — preview de estoque insuficiente antes de confirmar |

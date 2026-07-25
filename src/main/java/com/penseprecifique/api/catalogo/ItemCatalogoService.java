@@ -7,8 +7,10 @@ import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.CustomizacaoAnexadaRequest;
+import com.penseprecifique.api.shared.dto.request.ItemCatalogoPreviewRequest;
 import com.penseprecifique.api.shared.dto.request.ItemCatalogoRequest;
 import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
+import com.penseprecifique.api.shared.dto.response.ItemCatalogoPrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
@@ -55,12 +57,6 @@ public class ItemCatalogoService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public ItemCatalogoResponse buscarPorId(UUID itemId) {
-        ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
-        return montarResponse(item);
-    }
-
     /**
      * RN-044/045/046 — busca de itens de catálogo para a Seção Itens do orçamento.
      * Diferente de {@code buscarItemCatalogoParaVenda} (validação ao adicionar um item específico),
@@ -72,6 +68,40 @@ public class ItemCatalogoService {
         return itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId).stream()
                 .map(itemCatalogoMapper::toBuscaResponse)
                 .toList();
+    }
+
+    /**
+     * RN-NOVA-8 — preview ao vivo do preço sugerido de um item de catálogo (produto + quantidade de pacote +
+     * customizações anexadas), sem persistir nada. Mesmo cálculo de {@link #calcularPrecoSugerido}, já usado em
+     * adicionar/editar — aqui exposto isoladamente para a tela de Novo/Editar Item recalcular a cada mudança.
+     */
+    @Transactional(readOnly = true)
+    public ItemCatalogoPrecoSugeridoResponse previewPreco(UUID catalogoId, ItemCatalogoPreviewRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Catalogo catalogo = catalogoRepository.findByIdAndUsuarioId(catalogoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Catálogo não encontrado"));
+
+        Produto produto = buscarProduto(request.getProdutoId(), usuarioId);
+        validarProdutoTemCusto(produto); // RN-044
+
+        List<ItemCatalogoCustomizacao> customizacoes = new ArrayList<>();
+        BigDecimal custoCustomizacoes = BigDecimal.ZERO;
+        if (request.getCustomizacoesAnexadas() != null) {
+            for (CustomizacaoAnexadaRequest req : request.getCustomizacoesAnexadas()) {
+                Produto produtoCustomizacao = buscarProduto(req.getProdutoId(), usuarioId);
+                validarTipoCustomizacao(produtoCustomizacao);
+                customizacoes.add(ItemCatalogoCustomizacao.builder()
+                        .produto(produtoCustomizacao)
+                        .quantidade(req.getQuantidade())
+                        .build());
+                custoCustomizacoes = custoCustomizacoes.add(
+                        produtoCustomizacao.getPrecoCusto().multiply(req.getQuantidade()));
+            }
+        }
+
+        BigDecimal precoSugerido = calcularPrecoSugerido(produto, request.getQuantidadePacote(), customizacoes, catalogo.getMargem());
+        return new ItemCatalogoPrecoSugeridoResponse(
+                produto.getPrecoCusto(), request.getQuantidadePacote(), custoCustomizacoes, catalogo.getMargem(), precoSugerido);
     }
 
     // ---------------------------------------------------------------
@@ -179,13 +209,17 @@ public class ItemCatalogoService {
         }
         for (CustomizacaoAnexadaRequest req : requests) {
             Produto produtoCustomizacao = buscarProduto(req.getProdutoId(), usuarioId);
-            if (produtoCustomizacao.getTipo() != TipoProduto.CUSTOMIZACAO) {
-                throw new BusinessException("O produto anexado como customização deve ser do tipo Customização.");
-            }
+            validarTipoCustomizacao(produtoCustomizacao);
             salvas.add(customizacaoRepository.save(
                     itemCatalogoMapper.toCustomizacaoEntity(req, item, produtoCustomizacao)));
         }
         return salvas;
+    }
+
+    private void validarTipoCustomizacao(Produto produto) {
+        if (produto.getTipo() != TipoProduto.CUSTOMIZACAO) {
+            throw new BusinessException("O produto anexado como customização deve ser do tipo Customização.");
+        }
     }
 
     private ItemCatalogoResponse montarResponse(ItemCatalogo item) {
