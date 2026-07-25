@@ -193,9 +193,11 @@ class CatalogoServiceValidationIT {
     }
 
     // ---- helpers ----
+    private int proximoNumeroProduto = 1;
+
     private Produto novoProduto(Usuario u, String nome, TipoProduto tipo, BigDecimal custo, BigDecimal precoVenda) {
         return produtoRepository.save(Produto.builder()
-                .usuario(u).nome(nome).tipo(tipo).tempoProducao(60)
+                .usuario(u).numero(proximoNumeroProduto++).nome(nome).tipo(tipo).tempoProducao(60)
                 .precoCusto(custo).precoVenda(precoVenda).build());
     }
 

@@ -157,6 +157,24 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Onda 3 (#136 relato) — includes padrão do Surefire (**/*Test.java etc.) nunca
+                         pegavam os testes deste projeto, todos nomeados *IT.java (convenção de
+                         integration test). "mvn test" sempre rodou 0 testes silenciosamente, sem essa
+                         config; ninguém tinha notado porque a suíte completa nunca tinha sido rodada de
+                         uma vez (sempre por classe, via -Dtest=NomeDaClasse). -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*TestCase.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <source>${java.version}</source>

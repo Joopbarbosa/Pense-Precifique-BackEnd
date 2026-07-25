@@ -35,14 +35,22 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
      * (MIN/SUM sobre producao_produtos) — não dá pra usar DISTINCT com ORDER BY em coluna agregada
      * não presente no SELECT. Passo 2 (buscar as entidades completas na mesma ordem dos IDs) fica no
      * Service, via findAllById + reordenação manual (findAllById não preserva ordem).
+     *
+     * Bug pré-existente corrigido na Onda 3 (achado ao rodar a suíte completa pela primeira vez, ver
+     * fix de pom.xml/Surefire): CAST em **ambas** as ocorrências de dataInicioDe/dataInicioAte (a
+     * checagem "IS NULL" e a comparação) quebrava com "cannot cast type bytea to date"; removendo o
+     * CAST de **ambas** quebrava a comparação com "could not determine data type of parameter $N" (o
+     * Postgres não consegue inferir o tipo de um parâmetro usado só numa checagem "? IS NULL" sem
+     * contexto de coluna). Fix: CAST **só** na checagem IS NULL (que não tem contexto pra inferir
+     * sozinha); a comparação (`p.dataInicio >= :dataInicioDe`) já resolve o tipo pela coluna, sem CAST.
      */
     @Query(value = """
             SELECT p.id FROM Producao p
             LEFT JOIN ProducaoProduto pp ON pp.producao = p
             WHERE p.usuario.id = :usuarioId
             AND (:estado IS NULL OR p.estado = :estado)
-            AND (CAST(:dataInicioDe AS date) IS NULL OR p.dataInicio >= CAST(:dataInicioDe AS date))
-            AND (CAST(:dataInicioAte AS date) IS NULL OR p.dataInicio <= CAST(:dataInicioAte AS date))
+            AND (CAST(:dataInicioDe AS date) IS NULL OR p.dataInicio >= :dataInicioDe)
+            AND (CAST(:dataInicioAte AS date) IS NULL OR p.dataInicio <= :dataInicioAte)
             AND (
                 (:buscaNumero IS NULL AND :buscaNome IS NULL)
                 OR (:buscaNumero IS NOT NULL AND p.numero = :buscaNumero)
@@ -55,8 +63,8 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
             LEFT JOIN ProducaoProduto pp ON pp.producao = p
             WHERE p.usuario.id = :usuarioId
             AND (:estado IS NULL OR p.estado = :estado)
-            AND (CAST(:dataInicioDe AS date) IS NULL OR p.dataInicio >= CAST(:dataInicioDe AS date))
-            AND (CAST(:dataInicioAte AS date) IS NULL OR p.dataInicio <= CAST(:dataInicioAte AS date))
+            AND (CAST(:dataInicioDe AS date) IS NULL OR p.dataInicio >= :dataInicioDe)
+            AND (CAST(:dataInicioAte AS date) IS NULL OR p.dataInicio <= :dataInicioAte)
             AND (
                 (:buscaNumero IS NULL AND :buscaNome IS NULL)
                 OR (:buscaNumero IS NOT NULL AND p.numero = :buscaNumero)
