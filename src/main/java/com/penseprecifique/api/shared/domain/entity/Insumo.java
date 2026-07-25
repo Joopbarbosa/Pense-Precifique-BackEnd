@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.domain.entity;
 
+import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -57,6 +58,11 @@ public class Insumo {
     @Column(nullable = false)
     @Builder.Default
     private Boolean fracionavel = true;
+
+    // RN-NOVA-1 — só tem sentido quando fracionavel = true; null quando fracionavel = false.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo_exibicao_quantidade")
+    private TipoExibicaoQuantidade tipoExibicaoQuantidade;
 
     @Column(name = "permitir_estoque_negativo", nullable = false)
     @Builder.Default

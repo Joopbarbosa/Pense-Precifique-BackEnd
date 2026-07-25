@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.response;
 
+import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -12,6 +14,7 @@ public record InsumoResponseDTO(
         String marca,
         String unidadeMedida,
         boolean fracionavel,
+        TipoExibicaoQuantidade tipoExibicaoQuantidade,
         boolean permitirEstoqueNegativo,
         BigDecimal custoUnitario,
         BigDecimal estoqueAtual,

@@ -141,7 +141,7 @@ class NumeroSequencialConcorrenciaIT {
         List<Integer> numeros = executarConcorrente(usuario.getEmail(), () -> {
             InsumoCreateRequestDTO req = new InsumoCreateRequestDTO(
                     "Insumo Concorrente " + contador.incrementAndGet() + "-" + UUID.randomUUID(),
-                    "Marca", "un", true, true, null,
+                    "Marca", "un", true, null, true, null,
                     new BigDecimal("10.00"), new BigDecimal("1"));
             return insumoService.cadastrar(req).numero();
         });

@@ -4,6 +4,7 @@ import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import com.penseprecifique.api.shared.dto.request.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.request.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.InsumoResponseDTO;
@@ -27,6 +28,7 @@ public class InsumoMapper {
                 insumo.getMarca(),
                 insumo.getUnidadeMedida(),
                 insumo.getFracionavel(),
+                insumo.getTipoExibicaoQuantidade(),
                 insumo.getPermitirEstoqueNegativo(),
                 insumo.getCustoUnitario(),
                 insumo.getEstoqueAtual(),
@@ -38,12 +40,14 @@ public class InsumoMapper {
     }
 
     public Insumo toEntity(InsumoCreateRequestDTO request, Usuario usuario) {
+        boolean fracionavel = request.fracionavel() != null ? request.fracionavel() : true;
         return Insumo.builder()
                 .usuario(usuario)
                 .nome(request.nome())
                 .marca(request.marca())
                 .unidadeMedida(request.unidadeMedida())
-                .fracionavel(request.fracionavel() != null ? request.fracionavel() : true)
+                .fracionavel(fracionavel)
+                .tipoExibicaoQuantidade(tipoExibicaoQuantidadeParaSalvar(fracionavel, request.tipoExibicaoQuantidade()))
                 .permitirEstoqueNegativo(request.permitirEstoqueNegativo() != null ? request.permitirEstoqueNegativo() : true)
                 .custoUnitario(BigDecimal.ZERO)
                 .estoqueAtual(BigDecimal.ZERO)
@@ -59,11 +63,22 @@ public class InsumoMapper {
         if (request.fracionavel() != null) {
             insumo.setFracionavel(request.fracionavel());
         }
+        insumo.setTipoExibicaoQuantidade(
+                tipoExibicaoQuantidadeParaSalvar(insumo.getFracionavel(), request.tipoExibicaoQuantidade()));
         if (request.permitirEstoqueNegativo() != null) {
             insumo.setPermitirEstoqueNegativo(request.permitirEstoqueNegativo());
         }
         insumo.setEstoqueMinimo(request.estoqueMinimo());
         // custoUnitario e estoqueAtual só mudam via movimentação
+    }
+
+    // RN-NOVA-1 — tipo de exibição só faz sentido quando fracionavel = true; nulo quando não-fracionável,
+    // e default DECIMAL (comportamento atual do sistema) quando fracionável mas não informado.
+    private TipoExibicaoQuantidade tipoExibicaoQuantidadeParaSalvar(boolean fracionavel, TipoExibicaoQuantidade informado) {
+        if (!fracionavel) {
+            return null;
+        }
+        return informado != null ? informado : TipoExibicaoQuantidade.DECIMAL;
     }
 
     public MovimentacaoInsumoResponseDTO toMovimentacaoResponse(MovimentacaoInsumo mov, String referencia) {

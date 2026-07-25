@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.request;
 
+import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -17,6 +18,8 @@ public record InsumoCreateRequestDTO(
         String unidadeMedida,
 
         Boolean fracionavel,
+
+        TipoExibicaoQuantidade tipoExibicaoQuantidade,
 
         Boolean permitirEstoqueNegativo,
 
