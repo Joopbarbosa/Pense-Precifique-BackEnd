@@ -31,8 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * #158/RN-NOVA-6 — GET /producoes ignorava o Sort do Pageable (JPQL de buscar() tinha ORDER BY fixo,
- * appendado depois do Sort do cliente — nunca tinha efeito real). Cobre os 4 campos ordenáveis
- * (dataInicio, estado, produto, quantidade), asc/desc, e o default (numero DESC sem sort informado).
+ * appendado depois do Sort do cliente — nunca tinha efeito real). Cobre os 5 campos ordenáveis
+ * (dataInicio, estado, produto, quantidade, numero — este último adicionado no item avulso
+ * P-BE-NUMERO-SORT), asc/desc, e o default (numero DESC sem sort informado).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ProducaoOrdenacaoIT {
@@ -96,6 +97,17 @@ class ProducaoOrdenacaoIT {
 
         List<UUID> desc = idsNaOrdem(Sort.by(Sort.Direction.DESC, "dataInicio"));
         assertEquals(List.of(pBId, pAId, pCId), desc);
+    }
+
+    @Test
+    void ordenaPorNumeroAscEDesc() {
+        seed();
+        // seed() cria pA, pB, pC em ordem, numeroProducao incrementando a partir de 100 (pA=100, pB=101, pC=102)
+        List<UUID> asc = idsNaOrdem(Sort.by(Sort.Direction.ASC, "numero"));
+        assertEquals(List.of(pAId, pBId, pCId), asc);
+
+        List<UUID> desc = idsNaOrdem(Sort.by(Sort.Direction.DESC, "numero"));
+        assertEquals(List.of(pCId, pBId, pAId), desc);
     }
 
     @Test

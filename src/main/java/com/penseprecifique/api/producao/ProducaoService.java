@@ -87,16 +87,21 @@ public class ProducaoService {
     private final UsuarioRepository usuarioRepository;
     private final ProducaoMapper producaoMapper;
 
-    // #158/RN-NOVA-6 — allowlist explícita dos 4 critérios de ordenação aceitos em GET /producoes.
-    // "produto" e "quantidade" são agregados (MIN/SUM sobre producao_produtos, já que uma Producao
-    // agrupa N produtos — RN-061) — a expressão JPQL correspondente é resolvida aqui, nunca aceita
-    // do cliente. Campo fora da allowlist é rejeitado com BusinessException (nunca ignorado em
-    // silêncio nem repassado cru pro Sort, que exporia coluna interna via parâmetro).
+    // #158/RN-NOVA-6 (+ item avulso P-BE-NUMERO-SORT) — allowlist explícita dos 5 critérios de
+    // ordenação aceitos em GET /producoes. "produto" e "quantidade" são agregados (MIN/SUM sobre
+    // producao_produtos, já que uma Producao agrupa N produtos — RN-061) — a expressão JPQL
+    // correspondente é resolvida aqui, nunca aceita do cliente. "numero" é campo direto da entidade
+    // (mesmo padrão de dataInicio/estado, sem agregação) — já era o default sem sort explícito
+    // (buscarIdsOrdenados agrupa por p.id, que é a PK; Postgres permite referenciar outras colunas
+    // da mesma tabela por dependência funcional, sem exigir p.numero no GROUP BY). Campo fora da
+    // allowlist é rejeitado com BusinessException (nunca ignorado em silêncio nem repassado cru pro
+    // Sort, que exporia coluna interna via parâmetro).
     private static final Map<String, String> CAMPOS_ORDENACAO_PRODUCAO = Map.of(
             "dataInicio", "p.dataInicio",
             "estado", "p.estado",
             "produto", "MIN(pp.produto.nome)",
-            "quantidade", "SUM(pp.quantidade)"
+            "quantidade", "SUM(pp.quantidade)",
+            "numero", "p.numero"
     );
 
     /**
@@ -153,7 +158,7 @@ public class ProducaoService {
             String expressao = CAMPOS_ORDENACAO_PRODUCAO.get(order.getProperty());
             if (expressao == null) {
                 throw new BusinessException("Campo de ordenação inválido: '" + order.getProperty()
-                        + "'. Permitidos: dataInicio, estado, produto, quantidade.");
+                        + "'. Permitidos: dataInicio, estado, produto, quantidade, numero.");
             }
             sortResolvido = sortResolvido.and(JpaSort.unsafe(order.getDirection(), expressao));
         }
