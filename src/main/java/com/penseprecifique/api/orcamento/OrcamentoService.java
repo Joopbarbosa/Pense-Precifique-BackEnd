@@ -19,10 +19,13 @@ import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.SimularAlertasOrcamentoItemRequest;
+import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
@@ -49,7 +52,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -77,22 +82,23 @@ public class OrcamentoService {
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
 
+    /**
+     * Frente 3/P-BE-CONSOLIDADO-001 — filtro opcional de intervalo de data de criação
+     * (dataCriacaoDe/dataCriacaoAte), combinável com status/busca já existentes (critério AND).
+     * createdAt é LocalDateTime; dataCriacaoDe/dataCriacaoAte chegam como LocalDate (yyyy-MM-dd, mesmo
+     * formato de dataInicioDe/dataInicioAte em GET /producoes) e são convertidos aqui pro início/fim
+     * do dia antes de ir pro repositório, pra intervalo inclusive nos dois extremos.
+     */
     @Transactional(readOnly = true)
-    public Page<OrcamentoResponse> listar(StatusOrcamento status, String busca, Pageable pageable) {
+    public Page<OrcamentoResponse> listar(StatusOrcamento status, String busca,
+                                           LocalDate dataCriacaoDe, LocalDate dataCriacaoAte, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        boolean temBusca = busca != null && !busca.isBlank();
-        Page<Orcamento> page;
-        if (status != null && temBusca) {
-            page = orcamentoRepository.findByUsuarioIdAndStatusAndClienteNomeContainingIgnoreCaseAndDeletedAtIsNull(
-                    usuarioId, status, busca, pageable);
-        } else if (status != null) {
-            page = orcamentoRepository.findByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, status, pageable);
-        } else if (temBusca) {
-            page = orcamentoRepository.findByUsuarioIdAndClienteNomeContainingIgnoreCaseAndDeletedAtIsNull(
-                    usuarioId, busca, pageable);
-        } else {
-            page = orcamentoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable);
-        }
+        String buscaNormalizada = busca != null && !busca.isBlank() ? busca : null;
+        LocalDateTime dataCriacaoDeInicio = dataCriacaoDe != null ? dataCriacaoDe.atStartOfDay() : null;
+        LocalDateTime dataCriacaoAteFim = dataCriacaoAte != null ? dataCriacaoAte.atTime(LocalTime.MAX) : null;
+
+        Page<Orcamento> page = orcamentoRepository.buscar(
+                usuarioId, status, buscaNormalizada, dataCriacaoDeInicio, dataCriacaoAteFim, pageable);
         return page.map(orcamentoMapper::toResponse);
     }
 
@@ -256,6 +262,77 @@ public class OrcamentoService {
         List<OrcamentoItem> itensGravados = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         response.setAvisosEstoque(calcularAvisosEstoque(itensGravados));
         return response;
+    }
+
+    /**
+     * Frente 2/P-BE-CONSOLIDADO-001 (Cenário 207) — simulação de alertas de estoque ao montar o
+     * orçamento, sem persistir nada, mesmo espírito de {@code ProducaoService.simularAlertas()}
+     * (RN-NOVA-7). Diferença de modelo: Orçamento vende Produto já pronto (estoque do próprio
+     * Produto), não consumo de insumo via ficha técnica — por isso a resolução usa
+     * {@code Produto.estoqueAtual}/{@code permitirEstoqueNegativo} (mesmo critério de
+     * {@link #calcularAvisosEstoque}/{@link #validarEstoqueParaFinalizar}), não
+     * {@code calcularAlertas} de Produção. Reaproveita {@link AlertaInsumoResponse}/
+     * {@link SituacaoAlertaInsumo} (campo "nomeInsumo" já é genérico em Produção — cobre também
+     * produtoBase de ficha técnica — aqui recebe o nome do Produto vendido) para manter o mesmo
+     * contrato de "situação estruturada" no frontend. SUFICIENTE não é filtrado aqui, mesmo
+     * comportamento não-filtrado do simularAlertas de Produção — quem decide omitir da exibição é
+     * o front.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertaInsumoResponse> simularAlertas(List<SimularAlertasOrcamentoItemRequest> itens) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        Map<UUID, BigDecimal> necessidadePorProduto = new LinkedHashMap<>();
+        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
+
+        for (SimularAlertasOrcamentoItemRequest item : itens) {
+            boolean temCatalogo = item.getItemCatalogoId() != null;
+            boolean temProduto = item.getProdutoId() != null;
+            if (temCatalogo == temProduto) {
+                throw new BusinessException(
+                        "Cada item deve ter exatamente uma origem: itemCatalogoId (Catálogo) ou produtoId (avulso).");
+            }
+
+            Produto produto;
+            BigDecimal necessaria;
+            if (temCatalogo) {
+                ItemCatalogo itemCatalogo = itemCatalogoRepository.findByIdAndDeletedAtIsNull(item.getItemCatalogoId())
+                        .filter(i -> i.getCatalogo().getUsuario().getId().equals(usuarioId))
+                        .orElseThrow(() -> new BusinessException("Item de catálogo não encontrado"));
+                produto = itemCatalogo.getProduto();
+                necessaria = BigDecimal.valueOf((long) item.getQuantidade() * itemCatalogo.getQuantidadePacote());
+            } else {
+                produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(item.getProdutoId(), usuarioId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+                necessaria = BigDecimal.valueOf(item.getQuantidade());
+            }
+
+            necessidadePorProduto.merge(produto.getId(), necessaria, BigDecimal::add);
+            produtosPorId.putIfAbsent(produto.getId(), produto);
+        }
+
+        List<AlertaInsumoResponse> alertas = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : necessidadePorProduto.entrySet()) {
+            Produto produto = produtosPorId.get(entry.getKey());
+            BigDecimal necessaria = entry.getValue();
+
+            SituacaoAlertaInsumo situacao;
+            if (produto.getEstoqueAtual().compareTo(necessaria) >= 0) {
+                situacao = SituacaoAlertaInsumo.SUFICIENTE;
+            } else if (Boolean.FALSE.equals(produto.getPermitirEstoqueNegativo())) {
+                situacao = SituacaoAlertaInsumo.BLOQUEIO_FUTURO;
+            } else {
+                situacao = SituacaoAlertaInsumo.AVISO;
+            }
+
+            AlertaInsumoResponse alerta = new AlertaInsumoResponse();
+            alerta.setNomeInsumo(produto.getNome());
+            alerta.setEstoqueAtual(produto.getEstoqueAtual());
+            alerta.setQuantidadeNecessaria(necessaria);
+            alerta.setSituacao(situacao);
+            alertas.add(alerta);
+        }
+        return alertas;
     }
 
     /**

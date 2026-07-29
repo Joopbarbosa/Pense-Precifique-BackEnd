@@ -3,6 +3,8 @@ package com.penseprecifique.api.orcamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.SimularAlertasOrcamentoItemRequest;
+import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.shared.dto.response.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
@@ -17,6 +19,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,8 +36,10 @@ public class OrcamentoController {
     public ResponseEntity<Page<OrcamentoResponse>> listar(
             @RequestParam(required = false) StatusOrcamento status,
             @RequestParam(required = false) String busca,
+            @RequestParam(required = false) LocalDate dataCriacaoDe,
+            @RequestParam(required = false) LocalDate dataCriacaoAte,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(orcamentoService.listar(status, busca, pageable));
+        return ResponseEntity.ok(orcamentoService.listar(status, busca, dataCriacaoDe, dataCriacaoAte, pageable));
     }
 
     @GetMapping("/itens-catalogo")
@@ -57,6 +62,12 @@ public class OrcamentoController {
     public ResponseEntity<OrcamentoDetalheResponse> criar(
             @Valid @RequestBody OrcamentoRequest request) {
         return ResponseEntity.status(201).body(orcamentoService.criar(request));
+    }
+
+    @PostMapping("/simular-alertas")
+    public ResponseEntity<List<AlertaInsumoResponse>> simularAlertas(
+            @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {
+        return ResponseEntity.ok(orcamentoService.simularAlertas(itens));
     }
 
     @PostMapping("/{id}/avancar-status")
