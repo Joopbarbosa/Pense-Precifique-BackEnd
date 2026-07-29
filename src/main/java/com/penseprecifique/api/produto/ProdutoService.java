@@ -11,6 +11,7 @@ import com.penseprecifique.api.shared.dto.request.BaixaManualProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.ProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.PrecoSugeridoResponse;
+import com.penseprecifique.api.shared.dto.response.ProdutoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.ProdutoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProdutoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -71,6 +72,32 @@ public class ProdutoService {
 
         BigDecimal valorHora = buscarValorHora(usuarioId);
         return pagina.map(produto -> montarResponseComCustoAoVivo(produto, valorHora));
+    }
+
+    /**
+     * Frente 4/P-BE-CONSOLIDADO-001 — badges de filtro de ListaProdutosPage.tsx (ProductCard/categoria
+     * mostravam sempre 0 pras categorias fora do filtro ativo, porque o dado não existia na API).
+     * Ignora o filtro de `busca` da tela (decisão do prompt de origem: badges de categoria são
+     * navegação global) — conta todos os produtos do usuário (deletedAt IS NULL), sem paginação.
+     */
+    @Transactional(readOnly = true)
+    public ProdutoContagensResponse contagens() {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        ProdutoContagensResponse response = new ProdutoContagensResponse();
+        response.setTotal(produtoRepository.countByUsuarioIdAndDeletedAtIsNull(usuarioId));
+        response.setInativos(produtoRepository.countByUsuarioIdAndAtivoFalseAndDeletedAtIsNull(usuarioId));
+
+        ProdutoContagensResponse.PorTipo porTipo = new ProdutoContagensResponse.PorTipo();
+        for (ProdutoRepository.ContagemPorTipo contagem : produtoRepository.contarPorTipo(usuarioId)) {
+            switch (contagem.getTipo()) {
+                case PRODUTO -> porTipo.setProduto(contagem.getQuantidade());
+                case PRODUTO_BASE -> porTipo.setProdutoBase(contagem.getQuantidade());
+                case CUSTOMIZACAO -> porTipo.setCustomizacao(contagem.getQuantidade());
+            }
+        }
+        response.setPorTipo(porTipo);
+        return response;
     }
 
     private ProdutoResponse montarResponseComCustoAoVivo(Produto produto, BigDecimal valorHora) {
@@ -189,11 +216,48 @@ public class ProdutoService {
         return response;
     }
 
-    public void inativar(UUID id) {
+    /**
+     * Frente 5/P-BE-CONSOLIDADO-001 (Opção A confirmada em 2026-07-29) — renomeado de {@code inativar()}
+     * pra {@code excluir()} pra desambiguar do toggle reversível novo ({@link #inativar(UUID)}/
+     * {@link #reativar(UUID)}): DELETE /produtos/{id} sempre foi remoção lógica total (deletedAt), o
+     * produto some da listagem inteira — não é "marcar como inativo". O nome antigo do método
+     * confundia as duas operações; comportamento inalterado, só o nome mudou.
+     */
+    public void excluir(UUID id) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
         produto.setDeletedAt(LocalDateTime.now());
+        produtoRepository.save(produto);
+    }
+
+    /**
+     * Frente 5/P-BE-CONSOLIDADO-001 — inativação reversível (Opção A): {@code ativo=false}, produto
+     * continua existindo (deletedAt permanece null) e continua aparecendo em GET /produtos, mas fica
+     * bloqueado pra novo uso — RN-045 (venda via Catálogo em orçamento) já checava
+     * {@code produto.getAtivo()} antes deste prompt, então o bloqueio de venda já funcionava; só
+     * faltava um jeito de setar {@code ativo=false} de verdade. Idempotente: inativar produto já
+     * inativo não lança erro.
+     */
+    public void inativar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        produto.setAtivo(false);
+        produtoRepository.save(produto);
+    }
+
+    /**
+     * Frente 5/P-BE-CONSOLIDADO-001 — reverte a inativação: {@code ativo=true}. Só atua sobre produto
+     * não excluído (deletedAt null) — reativar produto excluído não é suportado, exclusão é permanente
+     * (RN não permite "desexcluir"; é preciso recriar o produto). Idempotente: reativar produto já
+     * ativo não lança erro.
+     */
+    public void reativar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        produto.setAtivo(true);
         produtoRepository.save(produto);
     }
 

@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.request.BaixaManualProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.ProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.PrecoSugeridoResponse;
+import com.penseprecifique.api.shared.dto.response.ProdutoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.ProdutoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.ProdutoResponse;
 import jakarta.validation.Valid;
@@ -33,6 +34,11 @@ public class ProdutoController {
         return ResponseEntity.ok(produtoService.listar(tipo, busca, pageable));
     }
 
+    @GetMapping("/contagens")
+    public ResponseEntity<ProdutoContagensResponse> contagens() {
+        return ResponseEntity.ok(produtoService.contagens());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ProdutoDetalheResponse> buscar(@PathVariable UUID id) {
         return ResponseEntity.ok(produtoService.buscarPorId(id));
@@ -51,8 +57,20 @@ public class ProdutoController {
     }
 
     @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable UUID id) {
+        produtoService.excluir(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/inativar")
     public ResponseEntity<Void> inativar(@PathVariable UUID id) {
         produtoService.inativar(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/reativar")
+    public ResponseEntity<Void> reativar(@PathVariable UUID id) {
+        produtoService.reativar(id);
         return ResponseEntity.noContent().build();
     }
 
