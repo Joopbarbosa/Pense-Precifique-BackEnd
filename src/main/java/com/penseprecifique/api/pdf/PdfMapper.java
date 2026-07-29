@@ -23,7 +23,7 @@ public class PdfMapper {
 
     public OrcamentoPdfData toOrcamentoPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens) {
         return OrcamentoPdfData.builder()
-            .numeroFormatado(String.format("%04d", orc.getNumero()))
+            .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
@@ -47,7 +47,7 @@ public class PdfMapper {
 
     public ReciboPdfData toReciboPdfData(Orcamento orc, Empresa empresa) {
         return ReciboPdfData.builder()
-            .numeroFormatado(String.format("%04d", orc.getNumero()))
+            .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
@@ -63,7 +63,7 @@ public class PdfMapper {
 
     public ReciboPagamentoPdfData toReciboPagamentoPdfData(Orcamento orc, ReciboPagamento recibo, Empresa empresa) {
         return ReciboPagamentoPdfData.builder()
-            .numeroFormatado(String.format("%04d", orc.getNumero()))
+            .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
@@ -83,7 +83,7 @@ public class PdfMapper {
     public ReciboPdfData toReciboPdfDataMulta(Orcamento orc, Empresa empresa) {
         BigDecimal valorMulta = calcularValorMulta(orc);
         return ReciboPdfData.builder()
-            .numeroFormatado(String.format("%04d", orc.getNumero()))
+            .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
@@ -99,7 +99,7 @@ public class PdfMapper {
 
     public ReciboPdfData toReciboPdfDataEstorno(Orcamento orc, Empresa empresa) {
         return ReciboPdfData.builder()
-            .numeroFormatado(String.format("%04d", orc.getNumero()))
+            .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
