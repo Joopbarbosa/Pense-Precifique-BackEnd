@@ -1051,6 +1051,14 @@ public class ProducaoService {
                         + " não tem ficha técnica completa ou rendimento válido — complete o cadastro antes de incluir em uma produção");
             }
 
+            boolean algumInsumoNaoFracionavel = ficha.stream()
+                    .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel()));
+            if (algumInsumoNaoFracionavel && quantidades.get(produtoId).compareTo(produto.getRendimento()) != 0) {
+                throw new BusinessException("Produto " + produto.getNome()
+                        + " não permite quantidade fracionada — a produção deve ser de exatamente "
+                        + produto.getRendimento() + " unidades");
+            }
+
             produtos.add(produto);
             fichas.put(produtoId, ficha);
         }

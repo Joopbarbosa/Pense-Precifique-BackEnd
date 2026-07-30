@@ -32,6 +32,7 @@ public class ProdutoResponse {
     private BigDecimal estoqueMinimo;
     private boolean permitirEstoqueNegativo;
     private boolean ativo;
+    private boolean algumInsumoNaoFracionavel;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

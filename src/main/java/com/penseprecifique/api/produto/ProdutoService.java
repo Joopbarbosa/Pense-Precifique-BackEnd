@@ -101,7 +101,8 @@ public class ProdutoService {
     }
 
     private ProdutoResponse montarResponseComCustoAoVivo(Produto produto, BigDecimal valorHora) {
-        ProdutoResponse response = produtoMapper.toResponse(produto);
+        List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+        ProdutoResponse response = produtoMapper.toResponse(produto, itens);
         BigDecimal somaComponentes = fichaTecnicaService.recalcularPrecoCusto(produto.getId());
         BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
         response.setCustoUnitario(calcularCustoUnitario(custoTotalLote, produto.getRendimento()));

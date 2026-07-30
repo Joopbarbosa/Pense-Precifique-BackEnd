@@ -18,7 +18,7 @@ import java.util.List;
 @Component
 public class ProdutoMapper {
 
-    public ProdutoResponse toResponse(Produto produto) {
+    public ProdutoResponse toResponse(Produto produto, List<FichaTecnicaItem> itens) {
         ProdutoResponse response = new ProdutoResponse();
         response.setId(produto.getId());
         response.setNumero(produto.getNumero());
@@ -35,6 +35,9 @@ public class ProdutoMapper {
         response.setEstoqueMinimo(produto.getEstoqueMinimo());
         response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
         response.setAtivo(produto.getAtivo());
+        // RN-051 — mesmo cálculo de toDetalheResponse, para a listagem não precisar de dois nomes de campo.
+        response.setAlgumInsumoNaoFracionavel(itens.stream()
+                .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel())));
         response.setCreatedAt(produto.getCreatedAt());
         response.setUpdatedAt(produto.getUpdatedAt());
         return response;
