@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.response;
 
+import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -16,6 +17,7 @@ public class FichaTecnicaItemResponse {
     private String marcaInsumo;
     private String unidadeMedida;
     private Boolean fracionavelInsumo;
+    private TipoExibicaoQuantidade tipoExibicaoQuantidade;
     private UUID produtoBaseId;
     private String nomeProdutoBase;
     private BigDecimal quantidade;

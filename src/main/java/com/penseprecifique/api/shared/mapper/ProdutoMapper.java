@@ -118,6 +118,7 @@ public class ProdutoMapper {
             response.setMarcaInsumo(item.getInsumo().getMarca());
             response.setUnidadeMedida(item.getInsumo().getUnidadeMedida());
             response.setFracionavelInsumo(item.getInsumo().getFracionavel());
+            response.setTipoExibicaoQuantidade(item.getInsumo().getTipoExibicaoQuantidade());
         } else {
             custoUnitario = item.getProdutoBase().getPrecoCusto();
             response.setProdutoBaseId(item.getProdutoBase().getId());

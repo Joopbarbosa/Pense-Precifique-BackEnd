@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.response;
 
+import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -18,4 +19,5 @@ public class InsumoConsumidoResponse {
     private BigDecimal estoqueAntes;
     private boolean estoqueInsuficiente;
     private Boolean fracionavel;
+    private TipoExibicaoQuantidade tipoExibicaoQuantidade;
 }
