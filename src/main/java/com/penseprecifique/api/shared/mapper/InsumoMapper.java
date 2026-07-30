@@ -87,6 +87,7 @@ public class InsumoMapper {
                 mov.getTipo(),
                 mov.getMotivo(),
                 mov.getQuantidade(),
+                mov.getCustoUnitario(),
                 mov.getObservacao(),
                 mov.getReferenciaId(),
                 mov.getReferenciaTipo(),

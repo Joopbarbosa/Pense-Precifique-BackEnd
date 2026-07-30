@@ -38,6 +38,11 @@ public class MovimentacaoInsumo {
     @Column(nullable = false, precision = 15, scale = 4)
     private BigDecimal quantidade;
 
+    /** Snapshot do custo unitário do insumo no momento desta movimentação — nunca recalculado
+     * depois. NULL para registros anteriores à V27 (dado não existia antes dessa migration). */
+    @Column(name = "custo_unitario", precision = 15, scale = 4)
+    private BigDecimal custoUnitario;
+
     @Column(columnDefinition = "TEXT")
     private String observacao;
 

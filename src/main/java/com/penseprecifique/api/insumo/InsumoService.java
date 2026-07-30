@@ -186,6 +186,7 @@ public class InsumoService {
                 .tipo(TipoMovimentacaoInsumo.SAIDA)
                 .motivo(request.motivo())
                 .quantidade(request.quantidade())
+                .custoUnitario(insumo.getCustoUnitario())
                 .observacao(request.observacao())
                 .estornada(false)
                 .build();

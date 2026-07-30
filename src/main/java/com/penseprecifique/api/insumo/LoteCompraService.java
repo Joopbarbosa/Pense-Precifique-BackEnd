@@ -86,6 +86,7 @@ public class LoteCompraService {
                 .tipo(TipoMovimentacaoInsumo.ENTRADA)
                 .motivo(MotivoMovimentacaoInsumo.COMPRA)
                 .quantidade(quantidade)
+                .custoUnitario(novoCusto)
                 .observacao(null)
                 .referenciaId(loteCompraId)
                 .referenciaTipo(ReferenciaMovimentacaoTipo.LOTE_COMPRA)

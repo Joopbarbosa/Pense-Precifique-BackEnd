@@ -13,6 +13,7 @@ public record MovimentacaoInsumoResponseDTO(
         TipoMovimentacaoInsumo tipo,
         MotivoMovimentacaoInsumo motivo,
         BigDecimal quantidade,
+        BigDecimal custoUnitario,
         String observacao,
         UUID referenciaId,
         ReferenciaMovimentacaoTipo referenciaTipo,
