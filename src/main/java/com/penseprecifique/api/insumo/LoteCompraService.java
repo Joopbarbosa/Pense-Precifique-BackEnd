@@ -74,11 +74,15 @@ public class LoteCompraService {
     public InsumoImpactoResponseDTO registrarCompraIndividual(
             Insumo insumo, BigDecimal quantidade, BigDecimal precoTotal, UUID loteCompraId) {
         BigDecimal custoUnitarioAnterior = insumo.getCustoUnitario();
+        BigDecimal estoqueAnterior = insumo.getEstoqueAtual();
 
-        BigDecimal novoCusto = precoTotal.divide(quantidade, 6, RoundingMode.HALF_UP);
+        BigDecimal valorEstoqueAnterior = estoqueAnterior.multiply(custoUnitarioAnterior);
+        BigDecimal novoEstoque = estoqueAnterior.add(quantidade);
+        BigDecimal novoCusto = valorEstoqueAnterior.add(precoTotal)
+                .divide(novoEstoque, 6, RoundingMode.HALF_UP);
 
         insumo.setCustoUnitario(novoCusto);
-        insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(quantidade));
+        insumo.setEstoqueAtual(novoEstoque);
         insumoRepository.save(insumo);
 
         MovimentacaoInsumo movimentacao = MovimentacaoInsumo.builder()
