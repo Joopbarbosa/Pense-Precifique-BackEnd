@@ -4,6 +4,7 @@
 > Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
 > Atualizado em: 2026-07-20 — Retomada de fechamento V0.6: varredura de resíduos do fluxo antigo de Produção (nenhum encontrado em código, exceto coluna/campo órfão `data_producao`/`dataProducao` — ver Bugs conhecidos), ciclo de vida completo documentado (6 estados, transições, agrupamento/divisão), contrato de `consumoReal`, RN-069, race condition conhecida do número sequencial, RN-037/RN-060 marcadas obsoletas.
+> Atualizado em: 2026-07-31 — Retomada de fechamento V0.6.1.1 (pocket de limpeza): endpoints novos/alterados documentados (`simular-alertas` de Produção e Orçamento, `contagens`/`inativar`/`reativar` de Produto, filtro de data em Orçamento), RN-051 corrigida no endpoint de Produção (conceito de `lotes` removido), decisão de fluxo sem branch por tarefa, aprendizado sobre confirmar payload real antes de confiar em nota de backlog "decisão registrada".
 
 ---
 
@@ -77,6 +78,7 @@ Rede confirmada via `docker network ls` (`penseprecifique_default`, nome derivad
 - **XOR entre duas origens/campos:** modelar como CHECK constraint no banco + validação explícita no Service com `BusinessException` clara distinguindo "os dois preenchidos" de "nenhum preenchido" — nunca uma mensagem genérica única pros dois casos. Usado em: `LancarProducaoRequest` (quantidade XOR lotes, RN-051), `OrcamentoItem` (item_catalogo_id XOR produto_id, RN-054).
 - **Exceção:** `BusinessException` genérica com mensagem — não criar tipos novos.
 - Toda correção de bug ou tarefa de tech debt termina com commit + push antes de considerar o chat encerrado — mesmo sem fechamento de épico. Branch sempre `main`: `git push origin main`. Nunca deixar mudança sem commit entre chats.
+- **Decisão de fluxo (2026-07-29):** esta leva (V0.6.1.1) não usa branch por tarefa — todo trabalho vai direto em `main`, sem staging separado. Branches de feature seguem existindo para trabalho maior (ex. módulos novos da V0.7), mas correções/débitos técnicos pontuais não abrem branch própria.
 - **Rastreamento migrou de ClickUp para OpenProject.** Se a tarefa tem número no OpenProject (ex. `#93`), a mensagem de commit começa com o número. Padrão real confirmado em `git log --oneline -15`: `#N tipo(escopo): descrição` (ex. `#93 feat: adicionar busca por cliente em GET /orcamentos e prefixo ORC-N no mapper`) — número como **prefixo**, sem a palavra "OpenProject" no corpo. Commits antigos com `ClickUp <código> / <task-id>` são histórico, não o padrão atual.
 - **Todo prompt segue a estrutura fixa de `PADRAO_PROMPTS.md`** (ambiente, comando de commit pronto, conta de teste, checklist de validação) — decidido em 2026-07-09. Arquivo confirmado em `/home/joaobarbosa/Documentos/Projetos/Pense Software/Skills/PADRAO_PROMPTS.md` (fora deste projeto, pasta irmã "Pense Software").
 
@@ -274,10 +276,12 @@ ${dados.total}
 | GET | /insumos/{id}/movimentacoes | Histórico paginado |
 | GET | /insumos/{id}/produtos-relacionados | Lista produtos cuja ficha técnica usa o insumo (expõe `produtoId`+`identificador`) |
 | POST | /lotes-compra | Registra compra em lote (RN-036) |
-| GET/POST | /produtos | Lista paginada e cria — `busca` corrigido em 2026-07-09 (commit `222b939`) |
+| GET/POST | /produtos | Lista paginada e cria — `busca` corrigido em 2026-07-09 (commit `222b939`); listagem também expõe `algumInsumoNaoFracionavel` e custo recalculado ao vivo desde V0.6.1.1 (#187/#135, mesma semântica do detalhe) |
+| GET | /produtos/contagens | **Novo (V0.6.1.1)** — `{ total, inativos, porTipo: { produto, produtoBase, customizacao } }`, ignora `busca` (badges de categoria são navegação global) |
 | GET/PUT | /produtos/{id} | Detalhe e edita — inclui `rendimento`, `custoTotalLote`, `custoUnitario`, `algumInsumoNaoFracionavel` |
 | GET | /produtos/{id}/preco-sugerido?margem=X | **Novo (RN-054)** — preço sugerido de venda avulsa: `{ custoUnitario, margem, precoSugerido }` |
 | POST | /produtos/{id}/baixa-manual | Baixa manual (obs mín. 30 chars — RN-035, uniformizado no #127) |
+| POST | /produtos/{id}/inativar , /produtos/{id}/reativar | **Novo (V0.6.1.1)** — inativação reversível de verdade, distinta do soft-delete (`DELETE`, `ProdutoService.excluir()`, comportamento inalterado); idempotente, 204, 404 se já excluído |
 | GET | /produtos/{id}/movimentacoes | Histórico paginado — inclui `catalogoReferencia`/`precoVendido` quando `motivo=ORCAMENTO` |
 | GET/POST | /catalogos | **Novo (EP-09)** — lista e cria catálogo |
 | GET/PUT | /catalogos/{id} | **Novo (EP-09)** — detalhe (com itens) e edita |
@@ -285,11 +289,13 @@ ${dados.total}
 | PUT | /catalogos/{id}/ativar-desativar | **Novo (EP-09)** — toggle `ativo` (confirmar path exato) |
 | POST/PUT/DELETE | /catalogos/{id}/itens | **Novo (EP-09)** — CRUD de ItemCatalogo (confirmar path exato) |
 | POST | /catalogos/{catalogoId}/itens/preview-preco | **Novo (V0.6.1 Onda 4, RN-NOVA-8)** — preview ao vivo do preço sugerido, sem persistir |
-| GET/POST | /producoes | Lista paginada e lança produção — aceita `quantidade` XOR `lotes` (RN-051); listagem ordenada por `numero DESC` (#99), nunca por campo de data mutável |
+| GET/POST | /producoes | Lista paginada e lança produção — aceita só `quantidade` (RN-051 Atualizada, V0.6.1.1: conceito de `lotes`/XOR removido, produto com insumo não-fracionável trava `quantidade` em exatamente 1× o rendimento, bloqueio 400 se divergir); listagem ordenada por `numero DESC` por padrão, 4 colunas ordenáveis por clique (#158) |
+| POST | /producoes/simular-alertas | **Novo (V0.6.1.1, #153, RN-NOVA-7)** — simula alertas de insumo para um array de produtos sem persistir, reaproveita `validarEResolverProdutos`+`calcularAlertas` |
 | GET | /producoes/{id} | Detalhe |
 | GET | /producoes/preview | **Novo (bloco Catálogo)** — preview de estoque insuficiente antes de confirmar |
 | POST | /producoes/{id}/cancelar | Cancela — Fluxo A (`AGUARDANDO_INICIO`, sem movimentação, RN-071) ou Fluxo B (`EM_ANDAMENTO`/`TRAVADA`, com `consumoReal` e estorno da diferença, RN-072); RN-037 obsoleta, ver Módulo de Produção |
-| GET/POST | /orcamentos | Lista paginada e cria — item aceita `itemCatalogoId` OU `produtoId`+`margemAplicada`+`precoUnitario` (RN-054). `GET` aceita `?busca=` opcional (case-insensitive, filtra por `cliente.nome`), combinável com `?status=` (#93) |
+| GET/POST | /orcamentos | Lista paginada e cria — item aceita `itemCatalogoId` OU `produtoId`+`margemAplicada`+`precoUnitario` (RN-054). `GET` aceita `?busca=` opcional (case-insensitive, filtra por `cliente.nome`), combinável com `?status=` (#93) e, desde V0.6.1.1, com `?dataCriacaoDe=`/`?dataCriacaoAte=` (RN-082) |
+| POST | /orcamentos/simular-alertas | **Novo (V0.6.1.1, RN-081)** — simula `avisosEstoque` de Produto (não Insumo) sem persistir, mesmo padrão do endpoint equivalente de Produção |
 | GET | /orcamentos/{id} | Detalhe — item de catálogo expõe `catalogoIdentificador` (`CTG-N`) e `catalogoNome`, ambos preenchidos em `OrcamentoMapper` a partir de `item.getItemCatalogo().getCatalogo()` (desde v0.2.1, commits `1ab552d`/`03a68be`) |
 | GET | /orcamentos/itens/busca | Busca de item de catálogo com filtro opcional por catálogo (EP-07, confirmar path exato) |
 | POST | /orcamentos/{id}/avancar-status | Transição de status |
@@ -356,6 +362,7 @@ ${dados.total}
 | "Compila limpo" nunca é validação suficiente para Service | Todo bloco Catálogo foi validado via curl com números reais que descartam coincidência (não valores redondos), inclusive casos de rejeição (XOR duplo/vazio). Regra fixa a partir daqui. |
 | Campo calculado exposto em DTO pode ficar "esquecido" se o dev assumir que existe sem checar | `precoSugerido`/`custoUnitario` só têm valor real se o Service que os calcula for de fato chamado no fluxo certo — confirmar sempre via curl, não assumir pela leitura do código. |
 | **A API não tem prefixo `/api`** — base é `http://localhost:8080/auth/login`, nunca `http://localhost:8080/api/auth/login` | Armadilha de validação via curl: o backend não libera `/error` no `SecurityConfig`, então uma rota inexistente como `/api/auth/login` retorna **401** em vez de 404 — parece erro de autenticação mas é só rota errada. Confirmado: `/api/...` → 401 (mascarado); `/auth/login` → 400 (rota real, corpo inválido). Sempre conferir a rota sem `/api` antes de investigar autenticação. |
+| **Nota de backlog "decisão registrada"/"implementado" não é o mesmo que confirmado no código** — sempre conferir o payload real (curl) ou o código-fonte antes de escrever prompt/implementação em cima de uma anotação assim | Furou 3 vezes na V0.6.1.1: `identificador` ausente em `OrcamentoDetalheResponse` apesar de "registrado"; `algumInsumoNaoFracionavel` ausente na listagem de Produtos apesar de "expor... registrado 2026-07-20"; RN-051 nunca implementada de verdade no backend apesar de o item aparecer marcado como backend fechado. Todos os 3 só foram pegos porque alguém validou ao vivo antes de seguir em frente. |
 
 ---
 
