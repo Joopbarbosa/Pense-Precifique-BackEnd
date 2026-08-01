@@ -76,10 +76,21 @@ public class LoteCompraService {
         BigDecimal custoUnitarioAnterior = insumo.getCustoUnitario();
         BigDecimal estoqueAnterior = insumo.getEstoqueAtual();
 
-        BigDecimal valorEstoqueAnterior = estoqueAnterior.multiply(custoUnitarioAnterior);
+        // RN-084 (blindagem) — estoqueAtual pode estar negativo aqui (RN-059 permite negativo
+        // com aviso). Usar o valor negativo real na média ponderada faz `valorEstoqueAnterior` ficar
+        // negativo e o denominador (estoqueAnterior + quantidade) ficar perto de zero, zero ou
+        // negativo — produz custoUnitario negativo ou ArithmeticException (divisão por zero) quando a
+        // compra atual compensa exatamente o déficit. Estoque negativo não representa valor de
+        // inventário real (não existe "estoque com valor negativo" contabilmente) — só o déficit de
+        // unidades. Por isso, para fins DESTE cálculo, estoque negativo é tratado como 0 (sem valor
+        // herdado do período anterior); o novoCusto passa a refletir só o custo da compra atual nesse
+        // caso. O valor real de `estoqueAtual` (negativo) continua sendo gravado normalmente logo
+        // abaixo, sem alteração — a blindagem afeta só a fórmula de custo, não a contagem de estoque.
+        BigDecimal estoqueParaCalculo = estoqueAnterior.max(BigDecimal.ZERO);
+        BigDecimal valorEstoqueAnterior = estoqueParaCalculo.multiply(custoUnitarioAnterior);
         BigDecimal novoEstoque = estoqueAnterior.add(quantidade);
         BigDecimal novoCusto = valorEstoqueAnterior.add(precoTotal)
-                .divide(novoEstoque, 6, RoundingMode.HALF_UP);
+                .divide(estoqueParaCalculo.add(quantidade), 6, RoundingMode.HALF_UP);
 
         insumo.setCustoUnitario(novoCusto);
         insumo.setEstoqueAtual(novoEstoque);
