@@ -1,13 +1,13 @@
 package com.penseprecifique.api.produto;
 
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
-import com.penseprecifique.api.shared.dto.request.BaixaManualProdutoRequest;
-import com.penseprecifique.api.shared.dto.request.ProdutoRequest;
-import com.penseprecifique.api.shared.dto.response.MovimentacaoProdutoResponse;
-import com.penseprecifique.api.shared.dto.response.PrecoSugeridoResponse;
-import com.penseprecifique.api.shared.dto.response.ProdutoContagensResponse;
-import com.penseprecifique.api.shared.dto.response.ProdutoDetalheResponse;
-import com.penseprecifique.api.shared.dto.response.ProdutoResponse;
+import com.penseprecifique.api.shared.dto.request.produto.BaixaManualProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
+import com.penseprecifique.api.shared.dto.response.produto.PrecoSugeridoResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ProdutoContagensResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ProdutoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ProdutoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

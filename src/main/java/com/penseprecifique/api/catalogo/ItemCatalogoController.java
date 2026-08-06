@@ -1,9 +1,9 @@
 package com.penseprecifique.api.catalogo;
 
-import com.penseprecifique.api.shared.dto.request.ItemCatalogoPreviewRequest;
-import com.penseprecifique.api.shared.dto.request.ItemCatalogoRequest;
-import com.penseprecifique.api.shared.dto.response.ItemCatalogoPrecoSugeridoResponse;
-import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
+import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoPreviewRequest;
+import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoPrecoSugeridoResponse;
+import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

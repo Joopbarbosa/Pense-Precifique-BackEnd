@@ -4,11 +4,11 @@ import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.dto.request.ProdutoRequest;
-import com.penseprecifique.api.shared.dto.response.FichaTecnicaItemResponse;
-import com.penseprecifique.api.shared.dto.response.MovimentacaoProdutoResponse;
-import com.penseprecifique.api.shared.dto.response.ProdutoDetalheResponse;
-import com.penseprecifique.api.shared.dto.response.ProdutoResponse;
+import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.produto.FichaTecnicaItemResponse;
+import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ProdutoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ProdutoResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 

@@ -5,6 +5,7 @@
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
 > Atualizado em: 2026-07-20 — Retomada de fechamento V0.6: varredura de resíduos do fluxo antigo de Produção (nenhum encontrado em código, exceto coluna/campo órfão `data_producao`/`dataProducao` — ver Bugs conhecidos), ciclo de vida completo documentado (6 estados, transições, agrupamento/divisão), contrato de `consumoReal`, RN-069, race condition conhecida do número sequencial, RN-037/RN-060 marcadas obsoletas.
 > Atualizado em: 2026-07-31 — Retomada de fechamento V0.6.1.1 (pocket de limpeza): endpoints novos/alterados documentados (`simular-alertas` de Produção e Orçamento, `contagens`/`inativar`/`reativar` de Produto, filtro de data em Orçamento), RN-051 corrigida no endpoint de Produção (conceito de `lotes` removido), decisão de fluxo sem branch por tarefa, aprendizado sobre confirmar payload real antes de confiar em nota de backlog "decisão registrada".
+> Atualizado em: 2026-08-05 — Reorganização estrutural pura de `shared/dto/request/` e `shared/dto/response/` por módulo de domínio (achado do usuário: 30+ arquivos numa pasta linear só alfabética). Sem mudança de payload/endpoint/comportamento — ver seção "Estrutura de pacotes".
 
 ---
 
@@ -106,8 +107,15 @@ com/penseprecifique/api/
 │   │   ├── enums/        # TipoProduto, StatusOrcamento, MetodoPagamento, etc.
 │   │   └── converter/
 │   ├── dto/
-│   │   ├── request/      # DTOs de entrada
-│   │   ├── response/     # DTOs de saída
+│   │   ├── request/      # DTOs de entrada, por módulo de domínio (reorg 2026-08-05)
+│   │   │   ├── auth/         # login, cadastro, alterar senha
+│   │   │   ├── config/       # empresa, configuração de precificação (nome de pasta não espelha o pacote `empresa/`)
+│   │   │   ├── catalogo/ cliente/ insumo/ orcamento/ producao/ produto/  # espelham os módulos de domínio abaixo
+│   │   ├── response/     # DTOs de saída, mesma divisão por módulo de domínio, mais:
+│   │   │   └── (raiz, sem subpasta)  # ErrorResponseDTO, AvisoEstoqueNegativoResponse, ConfirmacaoEstoqueNegativoResponse
+│   │   │                             # — cross-cutting: ErrorResponseDTO é infra de exceção (GlobalExceptionHandler);
+│   │   │                             # os outros dois são usados de forma simétrica por orcamento/ e producao/ (RN-059),
+│   │   │                             # sem mapper "dono" que justifique escolher um módulo
 │   │   └── pdf/          # OrcamentoPdfData, ItemPdfData, ReciboPdfData, ReciboPagamentoPdfData
 │   ├── mapper/           # @Component manual (NÃO MapStruct, apesar do nome do pacote)
 │   └── exception/        # GlobalExceptionHandler, ResourceNotFoundException, BusinessException, UnauthorizedException

@@ -2,8 +2,8 @@ package com.penseprecifique.api.shared.mapper;
 
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.dto.request.ClienteRequest;
-import com.penseprecifique.api.shared.dto.response.ClienteResponse;
+import com.penseprecifique.api.shared.dto.request.cliente.ClienteRequest;
+import com.penseprecifique.api.shared.dto.response.cliente.ClienteResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 

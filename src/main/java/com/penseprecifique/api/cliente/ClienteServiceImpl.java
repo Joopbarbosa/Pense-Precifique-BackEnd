@@ -2,8 +2,8 @@ package com.penseprecifique.api.cliente;
 
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.dto.request.ClienteRequest;
-import com.penseprecifique.api.shared.dto.response.ClienteResponse;
+import com.penseprecifique.api.shared.dto.request.cliente.ClienteRequest;
+import com.penseprecifique.api.shared.dto.response.cliente.ClienteResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ClienteMapper;

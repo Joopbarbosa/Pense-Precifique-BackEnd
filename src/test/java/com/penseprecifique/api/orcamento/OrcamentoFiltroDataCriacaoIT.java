@@ -6,7 +6,7 @@ import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
-import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

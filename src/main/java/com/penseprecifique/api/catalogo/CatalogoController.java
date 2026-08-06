@@ -1,8 +1,8 @@
 package com.penseprecifique.api.catalogo;
 
-import com.penseprecifique.api.shared.dto.request.CatalogoRequest;
-import com.penseprecifique.api.shared.dto.request.DuplicarCatalogoRequest;
-import com.penseprecifique.api.shared.dto.response.CatalogoResponse;
+import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
+import com.penseprecifique.api.shared.dto.request.catalogo.DuplicarCatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.catalogo.CatalogoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

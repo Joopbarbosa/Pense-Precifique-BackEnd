@@ -8,7 +8,7 @@ import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
-import com.penseprecifique.api.shared.dto.response.ProducaoResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducaoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

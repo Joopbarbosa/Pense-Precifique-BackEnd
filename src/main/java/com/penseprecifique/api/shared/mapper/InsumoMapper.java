@@ -5,11 +5,11 @@ import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
-import com.penseprecifique.api.shared.dto.request.InsumoCreateRequestDTO;
-import com.penseprecifique.api.shared.dto.request.InsumoRequestDTO;
-import com.penseprecifique.api.shared.dto.response.InsumoResponseDTO;
-import com.penseprecifique.api.shared.dto.response.MovimentacaoInsumoResponseDTO;
-import com.penseprecifique.api.shared.dto.response.ProdutoRelacionadoResponse;
+import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
+import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
+import com.penseprecifique.api.shared.dto.response.insumo.MovimentacaoInsumoResponseDTO;
+import com.penseprecifique.api.shared.dto.response.insumo.ProdutoRelacionadoResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 

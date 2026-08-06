@@ -2,8 +2,8 @@ package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.dto.request.CatalogoRequest;
-import com.penseprecifique.api.shared.dto.response.CatalogoResponse;
+import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.catalogo.CatalogoResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

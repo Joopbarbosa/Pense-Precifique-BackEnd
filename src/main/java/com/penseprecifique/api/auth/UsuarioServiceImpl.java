@@ -1,8 +1,8 @@
 package com.penseprecifique.api.auth;
 
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.dto.request.AlterarSenhaRequestDTO;
-import com.penseprecifique.api.shared.dto.response.UsuarioResponseDTO;
+import com.penseprecifique.api.shared.dto.request.auth.AlterarSenhaRequestDTO;
+import com.penseprecifique.api.shared.dto.response.auth.UsuarioResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;

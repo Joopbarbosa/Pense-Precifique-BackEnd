@@ -4,7 +4,7 @@ import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
-import com.penseprecifique.api.shared.dto.response.ProdutoContagensResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ProdutoContagensResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

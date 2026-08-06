@@ -4,11 +4,11 @@ import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
-import com.penseprecifique.api.shared.dto.request.CustomizacaoAnexadaRequest;
-import com.penseprecifique.api.shared.dto.request.ItemCatalogoRequest;
-import com.penseprecifique.api.shared.dto.response.CustomizacaoAnexadaResponse;
-import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
-import com.penseprecifique.api.shared.dto.response.ItemCatalogoResponse;
+import com.penseprecifique.api.shared.dto.request.catalogo.CustomizacaoAnexadaRequest;
+import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoRequest;
+import com.penseprecifique.api.shared.dto.response.catalogo.CustomizacaoAnexadaResponse;
+import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
+import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoResponse;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

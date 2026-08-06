@@ -5,11 +5,11 @@ import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
-import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
-import com.penseprecifique.api.shared.dto.response.OrcamentoItemCustomizacaoResponse;
-import com.penseprecifique.api.shared.dto.response.OrcamentoItemResponse;
-import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
-import com.penseprecifique.api.shared.dto.response.ReciboPagamentoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemCustomizacaoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.ReciboPagamentoResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 

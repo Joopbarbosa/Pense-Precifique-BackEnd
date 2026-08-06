@@ -1,8 +1,8 @@
 package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.shared.domain.entity.Empresa;
-import com.penseprecifique.api.shared.dto.request.EmpresaRequestDTO;
-import com.penseprecifique.api.shared.dto.response.EmpresaResponseDTO;
+import com.penseprecifique.api.shared.dto.request.config.EmpresaRequestDTO;
+import com.penseprecifique.api.shared.dto.response.config.EmpresaResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.auth.UsuarioRepository;

@@ -1,7 +1,7 @@
 package com.penseprecifique.api.cliente;
 
-import com.penseprecifique.api.shared.dto.request.ClienteRequest;
-import com.penseprecifique.api.shared.dto.response.ClienteResponse;
+import com.penseprecifique.api.shared.dto.request.cliente.ClienteRequest;
+import com.penseprecifique.api.shared.dto.response.cliente.ClienteResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 

@@ -2,8 +2,8 @@ package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.dto.request.ConfiguracaoRequestDTO;
-import com.penseprecifique.api.shared.dto.request.EmpresaRequestDTO;
+import com.penseprecifique.api.shared.dto.request.config.ConfiguracaoRequestDTO;
+import com.penseprecifique.api.shared.dto.request.config.EmpresaRequestDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

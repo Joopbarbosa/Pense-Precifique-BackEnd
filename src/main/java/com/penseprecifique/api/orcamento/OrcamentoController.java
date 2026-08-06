@@ -1,14 +1,14 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
-import com.penseprecifique.api.shared.dto.request.AvancaStatusRequest;
-import com.penseprecifique.api.shared.dto.request.OrcamentoRequest;
-import com.penseprecifique.api.shared.dto.request.SimularAlertasOrcamentoItemRequest;
-import com.penseprecifique.api.shared.dto.response.AlertaInsumoResponse;
-import com.penseprecifique.api.shared.dto.response.ItemCatalogoBuscaResponse;
-import com.penseprecifique.api.shared.dto.response.ItemSemEstoqueResponse;
-import com.penseprecifique.api.shared.dto.response.OrcamentoDetalheResponse;
-import com.penseprecifique.api.shared.dto.response.OrcamentoResponse;
+import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
+import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;

@@ -1,7 +1,7 @@
 package com.penseprecifique.api.auth;
 
-import com.penseprecifique.api.shared.dto.request.AlterarSenhaRequestDTO;
-import com.penseprecifique.api.shared.dto.response.UsuarioResponseDTO;
+import com.penseprecifique.api.shared.dto.request.auth.AlterarSenhaRequestDTO;
+import com.penseprecifique.api.shared.dto.response.auth.UsuarioResponseDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;

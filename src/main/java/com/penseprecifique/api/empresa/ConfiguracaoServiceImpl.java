@@ -1,8 +1,8 @@
 package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.shared.domain.entity.ConfiguracaoPrecificacao;
-import com.penseprecifique.api.shared.dto.request.ConfiguracaoRequestDTO;
-import com.penseprecifique.api.shared.dto.response.ConfiguracaoResponseDTO;
+import com.penseprecifique.api.shared.dto.request.config.ConfiguracaoRequestDTO;
+import com.penseprecifique.api.shared.dto.response.config.ConfiguracaoResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
