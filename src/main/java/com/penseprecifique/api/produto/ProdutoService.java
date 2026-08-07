@@ -92,7 +92,6 @@ public class ProdutoService {
         for (ProdutoRepository.ContagemPorTipo contagem : produtoRepository.contarPorTipo(usuarioId)) {
             switch (contagem.getTipo()) {
                 case PRODUTO -> porTipo.setProduto(contagem.getQuantidade());
-                case PRODUTO_BASE -> porTipo.setProdutoBase(contagem.getQuantidade());
                 case CUSTOMIZACAO -> porTipo.setCustomizacao(contagem.getQuantidade());
             }
         }
@@ -127,15 +126,12 @@ public class ProdutoService {
         BigDecimal custoUnitario = calcularCustoUnitario(custoTotalLote, produto.getRendimento());
         response.setCustoUnitario(custoUnitario);
 
-        if (produto.getTipo() == TipoProduto.CUSTOMIZACAO) {
-            response.setPrecoSugerido(calcularPrecoSugerido(custoUnitario, produto.getMargemLucro()));
-        }
+        response.setPrecoSugerido(calcularPrecoSugerido(custoUnitario, produto.getMargemLucro()));
         return response;
     }
 
     public ProdutoDetalheResponse cadastrar(ProdutoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        validarCamposPorTipo(request);
         validarRendimento(request);
 
         Usuario usuario = getUsuarioAutenticado();
@@ -144,7 +140,7 @@ public class ProdutoService {
         usuarioRepository.lockPorId(usuarioId);
         produto.setNumero(NumeroSequencialUtil.proximoNumero(
                 produtoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Produto::getNumero)));
-        if (produto.getTipo() == TipoProduto.CUSTOMIZACAO && produto.getPrecoVenda() == null) {
+        if (produto.getPrecoVenda() == null) {
             // placeholder só para satisfazer chk_preco_venda_tipo no INSERT inicial (precisa do id do
             // produto para persistir a ficha técnica antes de calcular o precoSugerido real) — sobrescrito abaixo
             produto.setPrecoVenda(BigDecimal.ZERO);
@@ -157,13 +153,12 @@ public class ProdutoService {
         BigDecimal custoUnitario = calcularCustoUnitario(custoTotalLote, produto.getRendimento());
         produto.setPrecoCusto(custoUnitario);
 
-        BigDecimal precoSugerido = null;
+        if (produto.getMargemLucro() == null) {
+            produto.setMargemLucro(buscarMargemPadrao(usuarioId));
+        }
+        BigDecimal precoSugerido = calcularPrecoSugerido(custoUnitario, produto.getMargemLucro());
+        aplicarPrecoVendaCriacao(produto, request.getPrecoVenda(), precoSugerido);
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO) {
-            if (produto.getMargemLucro() == null) {
-                produto.setMargemLucro(buscarMargemPadrao(usuarioId));
-            }
-            precoSugerido = calcularPrecoSugerido(custoUnitario, produto.getMargemLucro());
-            aplicarPrecoVendaCriacao(produto, request.getPrecoVenda(), precoSugerido);
             validarPrecoVendaObrigatorio(produto);
         }
 
@@ -181,7 +176,6 @@ public class ProdutoService {
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
 
-        validarCamposPorTipo(request);
         validarRendimento(request);
 
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
@@ -189,7 +183,7 @@ public class ProdutoService {
         boolean overrideAntigo = Boolean.TRUE.equals(produto.getOverride());
 
         produtoMapper.updateEntity(request, produto);
-        if (produto.getTipo() == TipoProduto.CUSTOMIZACAO && produto.getMargemLucro() == null) {
+        if (produto.getMargemLucro() == null) {
             // margemLucro não veio no request: preserva o valor anterior (não tem conceito de override próprio)
             produto.setMargemLucro(margemLucroAntigo);
         }
@@ -200,11 +194,10 @@ public class ProdutoService {
         BigDecimal custoUnitario = calcularCustoUnitario(custoTotalLote, produto.getRendimento());
         produto.setPrecoCusto(custoUnitario);
 
-        BigDecimal precoSugerido = null;
+        BigDecimal precoSugerido = calcularPrecoSugerido(custoUnitario, produto.getMargemLucro());
+        boolean margemMudou = !valoresIguais(margemLucroAntigo, produto.getMargemLucro());
+        aplicarPrecoVendaEdicao(produto, request.getPrecoVenda(), precoSugerido, precoVendaAntigo, overrideAntigo, margemMudou);
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO) {
-            precoSugerido = calcularPrecoSugerido(custoUnitario, produto.getMargemLucro());
-            boolean margemMudou = !valoresIguais(margemLucroAntigo, produto.getMargemLucro());
-            aplicarPrecoVendaEdicao(produto, request.getPrecoVenda(), precoSugerido, precoVendaAntigo, overrideAntigo, margemMudou);
             validarPrecoVendaObrigatorio(produto);
         }
 
@@ -348,7 +341,7 @@ public class ProdutoService {
     }
 
     // ---------------------------------------------------------------
-    // RN-038a — Preço de venda com override (só CUSTOMIZACAO)
+    // RN-038a — Preço de venda com override (PRODUTO e CUSTOMIZACAO, #210+231+234)
     // ---------------------------------------------------------------
 
     private BigDecimal calcularPrecoSugerido(BigDecimal custoUnitario, BigDecimal margemLucro) {
@@ -404,19 +397,6 @@ public class ProdutoService {
             return a == b;
         }
         return a.compareTo(b) == 0;
-    }
-
-    // ---------------------------------------------------------------
-    // Validação de campos por tipo
-    // ---------------------------------------------------------------
-
-    private void validarCamposPorTipo(ProdutoRequest request) {
-        if (request.getTipo() == TipoProduto.CUSTOMIZACAO) {
-            return;
-        }
-        if (request.getPrecoVenda() != null || request.getMargemLucro() != null) {
-            throw new BusinessException("Preço de venda e margem de lucro só se aplicam a produtos do tipo Customização.");
-        }
     }
 
     private UUID getUsuarioIdAutenticado() {

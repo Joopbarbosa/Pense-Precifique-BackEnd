@@ -49,8 +49,8 @@ public class FichaTecnicaService {
             } else {
                 Produto produtoBase = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getProdutoBaseId(), usuarioId)
                         .orElseThrow(() -> new ResourceNotFoundException("Produto base não encontrado: " + req.getProdutoBaseId()));
-                if (produtoBase.getTipo() != TipoProduto.PRODUTO_BASE) {
-                    throw new BusinessException("O produto referenciado na ficha técnica deve ser do tipo PRODUTO_BASE.");
+                if (produtoBase.getTipo() != TipoProduto.PRODUTO || !Boolean.TRUE.equals(produtoBase.getAtivo())) {
+                    throw new BusinessException("Apenas produtos ativos do tipo Produto podem ser usados como componente de ficha técnica.");
                 }
                 builder.produtoBase(produtoBase).insumo(null);
             }

@@ -60,7 +60,7 @@ class OrcamentoSimularAlertasIT {
         return produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(estoqueAtual).permitirEstoqueNegativo(permitirEstoqueNegativo)
-                .build());
+                .precoVenda(new BigDecimal("10.00")).build());
     }
 
     private ItemCatalogo novoItemCatalogo(Produto produto, int numeroCatalogo, int quantidadePacote) {

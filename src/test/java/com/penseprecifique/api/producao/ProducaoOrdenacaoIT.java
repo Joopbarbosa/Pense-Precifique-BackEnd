@@ -66,7 +66,7 @@ class ProducaoOrdenacaoIT {
     private Produto novoProduto(String nome, int numero) {
         return produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
-                .tempoProducao(60).rendimento(BigDecimal.ONE).build());
+                .tempoProducao(60).rendimento(BigDecimal.ONE).precoVenda(new BigDecimal("10.00")).build());
     }
 
     /** Cria a Producao + ProducaoProduto direto via repository — só o necessário pra testar ordenação. */

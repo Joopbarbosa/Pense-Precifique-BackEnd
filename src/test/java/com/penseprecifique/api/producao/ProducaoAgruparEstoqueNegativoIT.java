@@ -63,7 +63,7 @@ class ProducaoAgruparEstoqueNegativoIT {
 
         Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(1).nome("Bolo Colorido").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(60).rendimento(new BigDecimal("10")).build());
+                .tempoProducao(60).rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
                 .produto(produto).insumo(insumoAviso).quantidade(new BigDecimal("1")).build());
 

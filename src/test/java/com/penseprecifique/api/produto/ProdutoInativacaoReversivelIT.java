@@ -11,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,7 +45,10 @@ class ProdutoInativacaoReversivelIT {
     private Produto novoProduto(String nome, int numero) {
         return produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
-                .tempoProducao(30).ativo(true).build());
+                .tempoProducao(30).ativo(true)
+                // chk_preco_venda_tipo — preco_venda obrigatório pra todo tipo desde #210+231+234
+                .precoVenda(new BigDecimal("10.00"))
+                .build());
     }
 
     @Test

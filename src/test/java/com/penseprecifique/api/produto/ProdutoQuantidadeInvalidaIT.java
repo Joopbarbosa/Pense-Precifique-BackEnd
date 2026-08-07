@@ -43,7 +43,7 @@ class ProdutoQuantidadeInvalidaIT {
         String body = """
                 {
                   "nome": "Teste Bug 208",
-                  "tipo": "PRODUTO_BASE",
+                  "tipo": "PRODUTO",
                   "tempoProducao": 10,
                   "fichaTecnica": [
                     {"insumoId": "11111111-1111-1111-1111-111111111111", "quantidade": "1/2"}

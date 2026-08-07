@@ -67,13 +67,13 @@ class ProducaoDividirEstoqueNegativoIT {
 
         Produto produtoBloqueado = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(1).nome("Bolo Chocolate").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(60).rendimento(new BigDecimal("10")).build());
+                .tempoProducao(60).rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
                 .produto(produtoBloqueado).insumo(insumoBloqueante).quantidade(new BigDecimal("1")).build());
 
         Produto produtoLiberado = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(2).nome("Bolo Colorido").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(60).rendimento(new BigDecimal("10")).build());
+                .tempoProducao(60).rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
                 .produto(produtoLiberado).insumo(insumoAviso).quantidade(new BigDecimal("1")).build());
 

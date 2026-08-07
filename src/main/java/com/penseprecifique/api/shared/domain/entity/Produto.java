@@ -48,7 +48,7 @@ public class Produto {
     @Column(name = "rendimento", precision = 10, scale = 4)
     private BigDecimal rendimento;
 
-    /** Relevante apenas para tipo CUSTOMIZACAO — RN-038a */
+    /** RN-038a — modelo de preço unificado (PRODUTO e CUSTOMIZACAO) desde #210+231+234 */
     @Column(name = "margem_lucro", precision = 5, scale = 2)
     private BigDecimal margemLucro;
 

@@ -64,7 +64,7 @@ class ProducaoFiltroDataIT {
     private Produto novoProduto(String nome, int numero) {
         return produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
-                .tempoProducao(60).rendimento(BigDecimal.ONE).build());
+                .tempoProducao(60).rendimento(BigDecimal.ONE).precoVenda(new BigDecimal("10.00")).build());
     }
 
     private UUID novaProducaoDireta(Produto produto, LocalDate dataInicio, BigDecimal quantidade) {
