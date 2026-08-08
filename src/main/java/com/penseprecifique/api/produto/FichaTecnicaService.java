@@ -44,6 +44,10 @@ public class FichaTecnicaService {
             if (temInsumo) {
                 Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getInsumoId(), usuarioId)
                         .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + req.getInsumoId()));
+                // INS-011 — insumo inativo não pode ser adicionado a nova ficha técnica.
+                if (!Boolean.TRUE.equals(insumo.getAtivo())) {
+                    throw new BusinessException("Este insumo está inativo e não pode ser adicionado. Reative-o para continuar.");
+                }
                 validarQuantidadeInsumo(insumo, req.getQuantidade());
                 builder.insumo(insumo).produtoBase(null);
             } else {

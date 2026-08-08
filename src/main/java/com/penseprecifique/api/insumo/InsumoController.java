@@ -49,8 +49,20 @@ public class InsumoController {
     }
 
     @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable UUID id) {
+        insumoService.excluir(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/inativar")
     public ResponseEntity<Void> inativar(@PathVariable UUID id) {
         insumoService.inativar(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/reativar")
+    public ResponseEntity<Void> reativar(@PathVariable UUID id) {
+        insumoService.reativar(id);
         return ResponseEntity.noContent().build();
     }
 

@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.domain.entity.LoteCompra;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Producao;
+import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
@@ -110,11 +111,43 @@ public class InsumoService {
         return insumoMapper.toResponse(insumoRepository.save(insumo));
     }
 
-    public void inativar(UUID id) {
+    public void excluir(UUID id) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
         insumo.setDeletedAt(LocalDateTime.now());
+        insumoRepository.save(insumo);
+    }
+
+    /**
+     * INS-010 — inativação reversível: {@code ativo=false}, insumo continua existindo (deletedAt
+     * permanece null). INS-011 — só é permitida se o insumo não estiver em ficha técnica de nenhum
+     * produto não excluído — produto inativado ainda pode voltar a vender, então continua contando
+     * como uso.
+     */
+    public void inativar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
+
+        List<Produto> produtosVinculados = fichaTecnicaItemRepository.findProdutosByInsumoId(id);
+        if (!produtosVinculados.isEmpty()) {
+            String nomes = produtosVinculados.stream().map(Produto::getNome).collect(Collectors.joining(", "));
+            throw new BusinessException("Insumo " + insumo.getNome()
+                    + " está vinculado à ficha técnica de: " + nomes
+                    + ". Remova o insumo dessas fichas técnicas antes de inativá-lo.");
+        }
+
+        insumo.setAtivo(false);
+        insumoRepository.save(insumo);
+    }
+
+    /** INS-010 — reverte a inativação: {@code ativo=true}. Idempotente, sem validação adicional. */
+    public void reativar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
+        insumo.setAtivo(true);
         insumoRepository.save(insumo);
     }
 

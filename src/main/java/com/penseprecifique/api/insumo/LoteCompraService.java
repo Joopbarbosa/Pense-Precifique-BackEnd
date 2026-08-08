@@ -50,6 +50,10 @@ public class LoteCompraService {
             Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(item.insumoId(), usuarioId)
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Insumo não encontrado: " + item.insumoId()));
+            // INS-011 — insumo inativo não pode ser adicionado a novo registro de compra.
+            if (!Boolean.TRUE.equals(insumo.getAtivo())) {
+                throw new BusinessException("Este insumo está inativo e não pode ser adicionado. Reative-o para continuar.");
+            }
 
             insumosAtualizados.add(registrarCompraIndividual(
                     insumo, item.quantidadeComprada(), item.precoTotalPago(), loteCompra.getId()));
