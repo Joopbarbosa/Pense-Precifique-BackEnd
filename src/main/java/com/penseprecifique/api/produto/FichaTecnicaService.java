@@ -71,6 +71,27 @@ public class FichaTecnicaService {
         return calcularPrecoCusto(itens);
     }
 
+    /**
+     * #228 — resolução de vínculo por substituição: troca o insumo usado em todas as linhas da ficha
+     * técnica de {@code produtoId} que referenciam {@code insumoAntigoId}, preservando a quantidade já
+     * configurada em cada linha. Não recalcula {@code produto.precoCusto} — quem chama é responsável por
+     * disparar o recálculo persistido (ver {@code ProdutoService.recalcularPrecoCustoPersistido}).
+     */
+    public void substituirInsumoEmProduto(UUID produtoId, UUID insumoAntigoId, UUID novoInsumoId, UUID usuarioId) {
+        Insumo novoInsumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(novoInsumoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + novoInsumoId));
+        if (!Boolean.TRUE.equals(novoInsumo.getAtivo())) {
+            throw new BusinessException("O insumo substituto está inativo e não pode ser usado. Reative-o para continuar.");
+        }
+
+        List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoIdAndInsumoId(produtoId, insumoAntigoId);
+        for (FichaTecnicaItem item : itens) {
+            validarQuantidadeInsumo(novoInsumo, item.getQuantidade());
+            item.setInsumo(novoInsumo);
+            fichaTecnicaItemRepository.save(item);
+        }
+    }
+
     private void validarQuantidadeInsumo(Insumo insumo, BigDecimal quantidade) {
         if (!insumo.getFracionavel()) {
             if (quantidade.remainder(BigDecimal.ONE).compareTo(BigDecimal.ZERO) != 0) {

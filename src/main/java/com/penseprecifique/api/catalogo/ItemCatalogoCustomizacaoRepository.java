@@ -17,4 +17,9 @@ public interface ItemCatalogoCustomizacaoRepository extends JpaRepository<ItemCa
     @Query("SELECT DISTINCT icc.itemCatalogo FROM ItemCatalogoCustomizacao icc " +
             "WHERE icc.produto.id = :produtoId AND icc.itemCatalogo.deletedAt IS NULL")
     List<ItemCatalogo> findItensCatalogoPorProdutoComoCustomizacao(@Param("produtoId") UUID produtoId);
+
+    /** #237/PDT-0XX — linhas de customização anexada que referenciam o produto, para resolução de vínculos. */
+    @Query("SELECT icc FROM ItemCatalogoCustomizacao icc " +
+            "WHERE icc.produto.id = :produtoId AND icc.itemCatalogo.deletedAt IS NULL")
+    List<ItemCatalogoCustomizacao> findByProdutoId(@Param("produtoId") UUID produtoId);
 }

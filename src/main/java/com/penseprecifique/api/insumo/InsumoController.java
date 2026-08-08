@@ -3,6 +3,7 @@ package com.penseprecifique.api.insumo;
 import com.penseprecifique.api.shared.dto.request.insumo.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.ProdutoRelacionadoResponse;
@@ -83,5 +84,13 @@ public class InsumoController {
     @GetMapping("/{id}/produtos-relacionados")
     public ResponseEntity<List<ProdutoRelacionadoResponse>> listarProdutosRelacionados(@PathVariable UUID id) {
         return ResponseEntity.ok(insumoService.listarProdutosRelacionados(id));
+    }
+
+    @PostMapping("/{id}/resolver-vinculos")
+    public ResponseEntity<Void> resolverVinculos(
+            @PathVariable UUID id,
+            @Valid @RequestBody ResolverVinculosInsumoRequestDTO request) {
+        insumoService.resolverVinculos(id, request);
+        return ResponseEntity.noContent().build();
     }
 }

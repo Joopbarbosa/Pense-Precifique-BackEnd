@@ -3,6 +3,7 @@ package com.penseprecifique.api.produto;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.produto.BaixaManualProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.produto.ResolverVinculosProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.PrecoSugeridoResponse;
@@ -79,6 +80,14 @@ public class ProdutoController {
     @GetMapping("/{id}/catalogos-vinculados")
     public ResponseEntity<List<CatalogoVinculadoResponse>> catalogosVinculados(@PathVariable UUID id) {
         return ResponseEntity.ok(produtoService.catalogosVinculados(id));
+    }
+
+    @PostMapping("/{id}/resolver-vinculos")
+    public ResponseEntity<Void> resolverVinculos(
+            @PathVariable UUID id,
+            @Valid @RequestBody ResolverVinculosProdutoRequest request) {
+        produtoService.resolverVinculos(id, request);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/movimentacoes")
