@@ -17,6 +17,7 @@ import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.produto.ResolverVinculosProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.produto.SubstituicaoVinculoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ComponenteVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.PrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoContagensResponse;
@@ -298,6 +299,21 @@ public class ProdutoService {
         produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
         return listarCatalogosVinculados(id).stream().map(produtoMapper::toCatalogoVinculadoResponse).toList();
+    }
+
+    /**
+     * PDT-0XX — produtos (não excluídos) cuja ficha técnica usa este produto como {@code produtoBase}
+     * (componente), com o {@code vinculoId} (id de {@code FichaTecnicaItem}) exigido por
+     * {@link #resolverVinculos(UUID, ResolverVinculosProdutoRequest)} na ação SUBSTITUIR.
+     */
+    @Transactional(readOnly = true)
+    public List<ComponenteVinculadoResponse> componentesVinculados(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        return fichaTecnicaItemRepository.findByProdutoBaseId(id).stream()
+                .map(produtoMapper::toComponenteVinculadoResponse)
+                .toList();
     }
 
     private List<Catalogo> listarCatalogosVinculados(UUID produtoId) {

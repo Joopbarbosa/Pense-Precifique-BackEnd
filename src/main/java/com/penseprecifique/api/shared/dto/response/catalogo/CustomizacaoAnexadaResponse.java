@@ -10,6 +10,7 @@ import java.util.UUID;
 @Setter
 public class CustomizacaoAnexadaResponse {
 
+    private UUID id;
     private UUID produtoId;
     private String produtoNome;
     private BigDecimal quantidade;

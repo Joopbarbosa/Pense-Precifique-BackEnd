@@ -40,6 +40,7 @@ public class ItemCatalogoMapper {
 
     public CustomizacaoAnexadaResponse toCustomizacaoAnexadaResponse(ItemCatalogoCustomizacao entidade) {
         CustomizacaoAnexadaResponse response = new CustomizacaoAnexadaResponse();
+        response.setId(entidade.getId());
         response.setProdutoId(entidade.getProduto().getId());
         response.setProdutoNome(entidade.getProduto().getNome());
         response.setQuantidade(entidade.getQuantidade());

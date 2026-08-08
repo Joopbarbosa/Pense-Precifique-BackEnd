@@ -7,6 +7,7 @@ import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ComponenteVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.FichaTecnicaItemResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoDetalheResponse;
@@ -137,6 +138,15 @@ public class ProdutoMapper {
         response.setId(catalogo.getId());
         response.setIdentificador(IdentificadorFormatter.formatar("CTG", catalogo.getNumero()));
         response.setNome(catalogo.getNome());
+        return response;
+    }
+
+    public ComponenteVinculadoResponse toComponenteVinculadoResponse(FichaTecnicaItem item) {
+        ComponenteVinculadoResponse response = new ComponenteVinculadoResponse();
+        response.setVinculoId(item.getId());
+        response.setProdutoId(item.getProduto().getId());
+        response.setProdutoIdentificador(IdentificadorFormatter.formatar("PRO", item.getProduto().getNumero()));
+        response.setProdutoNome(item.getProduto().getNome());
         return response;
     }
 
