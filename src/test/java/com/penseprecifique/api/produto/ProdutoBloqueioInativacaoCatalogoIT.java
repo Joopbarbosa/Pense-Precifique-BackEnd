@@ -63,7 +63,6 @@ class ProdutoBloqueioInativacaoCatalogoIT {
     private UUID novoCatalogo(String nome) {
         CatalogoRequest request = new CatalogoRequest();
         request.setNome(nome);
-        request.setMargem(new BigDecimal("50"));
         CatalogoResponse response = catalogoService.cadastrar(request);
         return response.getId();
     }

@@ -22,7 +22,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,7 +37,6 @@ public class CatalogoService {
     private final ItemCatalogoRepository itemCatalogoRepository;
     private final ItemCatalogoCustomizacaoRepository customizacaoRepository;
     private final CatalogoMapper catalogoMapper;
-    private final ItemCatalogoService itemCatalogoService;
     private final UsuarioRepository usuarioRepository;
 
     // ---------------------------------------------------------------
@@ -48,7 +46,6 @@ public class CatalogoService {
     private static final Map<String, String> CAMPOS_ORDENACAO_CATALOGO = Map.of(
             "numero", "c.numero",
             "nome", "c.nome",
-            "margem", "c.margem",
             "quantidadeItens", "COUNT(ic.id)"
     );
 
@@ -89,7 +86,7 @@ public class CatalogoService {
             String expressao = CAMPOS_ORDENACAO_CATALOGO.get(order.getProperty());
             if (expressao == null) {
                 throw new BusinessException("Campo de ordenação inválido: '" + order.getProperty()
-                        + "'. Permitidos: numero, nome, margem, quantidadeItens.");
+                        + "'. Permitidos: numero, nome, quantidadeItens.");
             }
             sortResolvido = sortResolvido.and(JpaSort.unsafe(order.getDirection(), expressao));
         }
@@ -107,7 +104,6 @@ public class CatalogoService {
 
     public CatalogoResponse cadastrar(CatalogoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        validarMargem(request.getMargem()); // RN-041
         validarNomeUnico(usuarioId, request.getNome(), null); // RN-040
 
         Catalogo catalogo = catalogoMapper.toEntity(request, getUsuarioAutenticado());
@@ -122,21 +118,10 @@ public class CatalogoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Catalogo catalogo = buscarCatalogo(id, usuarioId);
 
-        validarMargem(request.getMargem()); // RN-041
         validarNomeUnico(usuarioId, request.getNome(), catalogo); // RN-040
 
-        BigDecimal margemAntiga = catalogo.getMargem();
         catalogoMapper.updateEntity(request, catalogo);
         catalogo = catalogoRepository.save(catalogo);
-
-        // RN-042 — mudar a margem recalcula preco_venda de todo item sem override
-        if (margemAntiga.compareTo(catalogo.getMargem()) != 0) {
-            for (ItemCatalogo item : itemCatalogoRepository.findByCatalogoIdAndDeletedAtIsNull(catalogo.getId())) {
-                if (!Boolean.TRUE.equals(item.getOverride())) {
-                    itemCatalogoService.recalcularPrecoVendaPorMargem(item, catalogo.getMargem());
-                }
-            }
-        }
 
         return toResponse(catalogo);
     }
@@ -150,7 +135,7 @@ public class CatalogoService {
         return alterarAtivo(id, true);
     }
 
-    /** RN-047 — duplica nome, margem e todos os itens preservando overrides e preços exatos; gera número novo (RN-053). */
+    /** RN-047 — duplica nome e todos os itens preservando overrides e preços exatos; gera número novo (RN-053). */
     public CatalogoResponse duplicar(UUID id, DuplicarCatalogoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Catalogo original = buscarCatalogo(id, usuarioId);
@@ -164,7 +149,6 @@ public class CatalogoService {
                 .usuario(original.getUsuario())
                 .numero(proximoNumero(usuarioId))
                 .nome(novoNome)
-                .margem(original.getMargem())
                 .ativo(true)
                 .build();
         copia = catalogoRepository.save(copia);
@@ -205,12 +189,6 @@ public class CatalogoService {
     private CatalogoResponse toResponse(Catalogo catalogo) {
         long quantidadeItens = itemCatalogoRepository.countByCatalogoIdAndDeletedAtIsNull(catalogo.getId());
         return catalogoMapper.toResponse(catalogo, (int) quantidadeItens);
-    }
-
-    private void validarMargem(BigDecimal margem) {
-        if (margem == null || margem.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException("A margem deve ser maior que zero.");
-        }
     }
 
     private void validarNomeUnico(UUID usuarioId, String nome, Catalogo atual) {

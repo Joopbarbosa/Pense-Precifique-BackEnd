@@ -13,7 +13,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * #133/RN-057 — GET /catalogos migrou de ordenação em memória (List) para Pageable server-side,
- * mesmo padrão de ProducaoService#listar (#158). Cobre paginação e ordenação por numero/nome/margem.
+ * mesmo padrão de ProducaoService#listar (#158). Cobre paginação e ordenação por numero/nome.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class CatalogoListagemPaginadaIT {
@@ -40,19 +39,18 @@ class CatalogoListagemPaginadaIT {
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
     }
 
-    private void novoCatalogo(String nome, String margem) {
+    private void novoCatalogo(String nome) {
         CatalogoRequest request = new CatalogoRequest();
         request.setNome(nome);
-        request.setMargem(new BigDecimal(margem));
         catalogoService.cadastrar(request);
     }
 
     @Test
     void paginacaoRespeitaSizeETotalElements() {
         seedUsuario();
-        novoCatalogo("Catálogo A", "50");
-        novoCatalogo("Catálogo B", "60");
-        novoCatalogo("Catálogo C", "70");
+        novoCatalogo("Catálogo A");
+        novoCatalogo("Catálogo B");
+        novoCatalogo("Catálogo C");
 
         Page<CatalogoResponse> pagina = catalogoService.listar(null, PageRequest.of(0, 2));
 
@@ -64,9 +62,9 @@ class CatalogoListagemPaginadaIT {
     @Test
     void ordenacaoPorNomeAscendente() {
         seedUsuario();
-        novoCatalogo("Zebra", "50");
-        novoCatalogo("Abelha", "60");
-        novoCatalogo("Mandacaru", "70");
+        novoCatalogo("Zebra");
+        novoCatalogo("Abelha");
+        novoCatalogo("Mandacaru");
 
         Page<CatalogoResponse> pagina = catalogoService.listar(null, PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "nome")));
 
@@ -75,24 +73,11 @@ class CatalogoListagemPaginadaIT {
     }
 
     @Test
-    void ordenacaoPorMargemDescendente() {
-        seedUsuario();
-        novoCatalogo("Catálogo A", "10");
-        novoCatalogo("Catálogo B", "90");
-        novoCatalogo("Catálogo C", "50");
-
-        Page<CatalogoResponse> pagina = catalogoService.listar(null, PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "margem")));
-
-        assertEquals(List.of("Catálogo B", "Catálogo C", "Catálogo A"),
-                pagina.getContent().stream().map(CatalogoResponse::getNome).toList());
-    }
-
-    @Test
     void semSortDefaultENumeroDesc() {
         seedUsuario();
-        novoCatalogo("Primeiro", "10");
-        novoCatalogo("Segundo", "20");
-        novoCatalogo("Terceiro", "30");
+        novoCatalogo("Primeiro");
+        novoCatalogo("Segundo");
+        novoCatalogo("Terceiro");
 
         Page<CatalogoResponse> pagina = catalogoService.listar(null, PageRequest.of(0, 10));
 
@@ -103,7 +88,7 @@ class CatalogoListagemPaginadaIT {
     @Test
     void campoDeOrdenacaoInvalidoLancaExcecao() {
         seedUsuario();
-        novoCatalogo("Catálogo A", "10");
+        novoCatalogo("Catálogo A");
 
         assertThrows(RuntimeException.class,
                 () -> catalogoService.listar(null, PageRequest.of(0, 10, Sort.by("campoInexistente"))));
@@ -112,8 +97,8 @@ class CatalogoListagemPaginadaIT {
     @Test
     void buscaPorNomeFiltraCaseInsensitive() {
         seedUsuario();
-        novoCatalogo("Bolos Especiais", "10");
-        novoCatalogo("Docinhos", "20");
+        novoCatalogo("Bolos Especiais");
+        novoCatalogo("Docinhos");
 
         Page<CatalogoResponse> pagina = catalogoService.listar("bolos", PageRequest.of(0, 10));
 

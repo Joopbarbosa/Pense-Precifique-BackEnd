@@ -479,7 +479,7 @@ public class ProdutoService {
         List<ItemCatalogoCustomizacao> customizacoesDoItem = itemCatalogoCustomizacaoRepository.findByItemCatalogoId(item.getId());
         item.setProduto(novoProduto);
         BigDecimal precoSugerido = itemCatalogoService.calcularPrecoSugerido(
-                novoProduto, item.getQuantidadePacote(), customizacoesDoItem, item.getCatalogo().getMargem());
+                novoProduto, item.getQuantidadePacote(), customizacoesDoItem);
         if (!Boolean.TRUE.equals(item.getOverride())) {
             item.setPrecoVenda(precoSugerido);
         }
@@ -493,7 +493,7 @@ public class ProdutoService {
         ItemCatalogo item = customizacao.getItemCatalogo();
         List<ItemCatalogoCustomizacao> todasCustomizacoes = itemCatalogoCustomizacaoRepository.findByItemCatalogoId(item.getId());
         BigDecimal precoSugerido = itemCatalogoService.calcularPrecoSugerido(
-                item.getProduto(), item.getQuantidadePacote(), todasCustomizacoes, item.getCatalogo().getMargem());
+                item.getProduto(), item.getQuantidadePacote(), todasCustomizacoes);
         if (!Boolean.TRUE.equals(item.getOverride())) {
             item.setPrecoVenda(precoSugerido);
         }

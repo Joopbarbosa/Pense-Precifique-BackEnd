@@ -155,7 +155,6 @@ class NumeroSequencialConcorrenciaIT {
         List<Integer> numeros = executarConcorrente(usuario.getEmail(), () -> {
             CatalogoRequest req = new CatalogoRequest();
             req.setNome("Catálogo Concorrente " + contador.incrementAndGet() + "-" + UUID.randomUUID());
-            req.setMargem(new BigDecimal("50"));
             return catalogoService.cadastrar(req).getNumero();
         });
         assertSemColisao(numeros);

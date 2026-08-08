@@ -55,10 +55,9 @@ class CustomizacaoAnexadaVinculoIdIT {
                 .precoCusto(custo).precoVenda(precoVenda).build());
     }
 
-    private UUID novoCatalogo(String nome, String margem) {
+    private UUID novoCatalogo(String nome) {
         CatalogoRequest request = new CatalogoRequest();
         request.setNome(nome);
-        request.setMargem(new BigDecimal(margem));
         CatalogoResponse response = catalogoService.cadastrar(request);
         return response.getId();
     }
@@ -68,7 +67,7 @@ class CustomizacaoAnexadaVinculoIdIT {
         Usuario usuario = seedUsuario();
         Produto principal = novoProduto(usuario, "Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"), new BigDecimal("10.00"));
         Produto customizacao = novoProduto(usuario, "Topo", TipoProduto.CUSTOMIZACAO, new BigDecimal("2.0000"), new BigDecimal("5.00"));
-        UUID catalogoId = novoCatalogo("Catálogo Bolos", "50");
+        UUID catalogoId = novoCatalogo("Catálogo Bolos");
 
         ItemCatalogoRequest request = new ItemCatalogoRequest();
         request.setProdutoId(principal.getId());

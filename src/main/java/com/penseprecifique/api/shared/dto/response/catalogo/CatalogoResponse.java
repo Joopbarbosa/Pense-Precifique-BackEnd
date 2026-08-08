@@ -3,7 +3,6 @@ package com.penseprecifique.api.shared.dto.response.catalogo;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 @Getter
@@ -14,7 +13,6 @@ public class CatalogoResponse {
     private Integer numero;
     private String identificador;
     private String nome;
-    private BigDecimal margem;
     private boolean ativo;
     /** Contagem de itens do catálogo — calculado no Service, não existe coluna pra isso. */
     private Integer quantidadeItens;

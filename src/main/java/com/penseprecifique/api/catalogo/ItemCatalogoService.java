@@ -34,8 +34,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ItemCatalogoService {
 
-    private static final BigDecimal CEM = new BigDecimal("100");
-
     private final ItemCatalogoRepository itemCatalogoRepository;
     private final ItemCatalogoCustomizacaoRepository customizacaoRepository;
     private final CatalogoRepository catalogoRepository;
@@ -71,21 +69,21 @@ public class ItemCatalogoService {
     }
 
     /**
-     * RN-NOVA-8 — preview ao vivo do preço sugerido de um item de catálogo (produto + quantidade de pacote +
+     * CAT-013 — preview ao vivo do preço sugerido de um item de catálogo (produto + quantidade de pacote +
      * customizações anexadas), sem persistir nada. Mesmo cálculo de {@link #calcularPrecoSugerido}, já usado em
      * adicionar/editar — aqui exposto isoladamente para a tela de Novo/Editar Item recalcular a cada mudança.
      */
     @Transactional(readOnly = true)
     public ItemCatalogoPrecoSugeridoResponse previewPreco(UUID catalogoId, ItemCatalogoPreviewRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        Catalogo catalogo = catalogoRepository.findByIdAndUsuarioId(catalogoId, usuarioId)
+        catalogoRepository.findByIdAndUsuarioId(catalogoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Catálogo não encontrado"));
 
         Produto produto = buscarProduto(request.getProdutoId(), usuarioId);
         validarProdutoTemCusto(produto); // RN-044
 
         List<ItemCatalogoCustomizacao> customizacoes = new ArrayList<>();
-        BigDecimal custoCustomizacoes = BigDecimal.ZERO;
+        BigDecimal precoVendaCustomizacoes = BigDecimal.ZERO;
         if (request.getCustomizacoesAnexadas() != null) {
             for (CustomizacaoAnexadaRequest req : request.getCustomizacoesAnexadas()) {
                 Produto produtoCustomizacao = buscarProduto(req.getProdutoId(), usuarioId);
@@ -94,14 +92,14 @@ public class ItemCatalogoService {
                         .produto(produtoCustomizacao)
                         .quantidade(req.getQuantidade())
                         .build());
-                custoCustomizacoes = custoCustomizacoes.add(
-                        produtoCustomizacao.getPrecoCusto().multiply(req.getQuantidade()));
+                precoVendaCustomizacoes = precoVendaCustomizacoes.add(
+                        produtoCustomizacao.getPrecoVenda().multiply(req.getQuantidade()));
             }
         }
 
-        BigDecimal precoSugerido = calcularPrecoSugerido(produto, request.getQuantidadePacote(), customizacoes, catalogo.getMargem());
+        BigDecimal precoSugerido = calcularPrecoSugerido(produto, request.getQuantidadePacote(), customizacoes);
         return new ItemCatalogoPrecoSugeridoResponse(
-                produto.getPrecoCusto(), request.getQuantidadePacote(), custoCustomizacoes, catalogo.getMargem(), precoSugerido);
+                produto.getPrecoVenda(), request.getQuantidadePacote(), precoVendaCustomizacoes, precoSugerido);
     }
 
     // ---------------------------------------------------------------
@@ -122,8 +120,8 @@ public class ItemCatalogoService {
 
         List<ItemCatalogoCustomizacao> customizacoes = salvarCustomizacoes(item, request.getCustomizacoesAnexadas(), usuarioId);
 
-        BigDecimal precoSugerido = calcularPrecoSugerido(produto, request.getQuantidadePacote(), customizacoes, catalogo.getMargem());
-        aplicarPrecoVenda(item, request.getPrecoVenda(), precoSugerido); // RN-042 / RN-038a
+        BigDecimal precoSugerido = calcularPrecoSugerido(produto, request.getQuantidadePacote(), customizacoes);
+        aplicarPrecoVenda(item, request.getPrecoVenda(), precoSugerido); // CAT-003 / RN-038a
         item = itemCatalogoRepository.save(item);
 
         return montarResponse(item, customizacoes, precoSugerido);
@@ -132,7 +130,6 @@ public class ItemCatalogoService {
     public ItemCatalogoResponse editar(UUID itemId, ItemCatalogoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         ItemCatalogo item = buscarItemDoUsuario(itemId, usuarioId);
-        Catalogo catalogo = item.getCatalogo();
 
         Produto produto = buscarProduto(request.getProdutoId(), usuarioId);
         validarProdutoTemCusto(produto); // RN-044
@@ -144,7 +141,7 @@ public class ItemCatalogoService {
         customizacaoRepository.deleteAll(customizacaoRepository.findByItemCatalogoId(item.getId()));
         List<ItemCatalogoCustomizacao> customizacoes = salvarCustomizacoes(item, request.getCustomizacoesAnexadas(), usuarioId);
 
-        BigDecimal precoSugerido = calcularPrecoSugerido(produto, request.getQuantidadePacote(), customizacoes, catalogo.getMargem());
+        BigDecimal precoSugerido = calcularPrecoSugerido(produto, request.getQuantidadePacote(), customizacoes);
         aplicarPrecoVenda(item, request.getPrecoVenda(), precoSugerido); // RN-038a
         item = itemCatalogoRepository.save(item);
 
@@ -158,39 +155,26 @@ public class ItemCatalogoService {
     }
 
     // ---------------------------------------------------------------
-    // RN-042 — cálculo do preço sugerido (reutilizado no recálculo por margem do Catálogo)
+    // CAT-003 — cálculo do preço sugerido: herda o preço de venda do produto e das customizações
+    // anexadas, sem margem própria de Catálogo (#239)
     // ---------------------------------------------------------------
 
     public BigDecimal calcularPrecoSugerido(Produto produto, Integer quantidadePacote,
-                                            List<ItemCatalogoCustomizacao> customizacoes, BigDecimal margem) {
-        BigDecimal custoBase = produto.getPrecoCusto().multiply(BigDecimal.valueOf(quantidadePacote));
-        BigDecimal custoCustomizacoes = BigDecimal.ZERO;
+                                            List<ItemCatalogoCustomizacao> customizacoes) {
+        BigDecimal precoVendaBase = produto.getPrecoVenda().multiply(BigDecimal.valueOf(quantidadePacote));
+        BigDecimal precoVendaCustomizacoes = BigDecimal.ZERO;
         for (ItemCatalogoCustomizacao customizacao : customizacoes) {
-            custoCustomizacoes = custoCustomizacoes.add(
-                    customizacao.getProduto().getPrecoCusto().multiply(customizacao.getQuantidade()));
+            precoVendaCustomizacoes = precoVendaCustomizacoes.add(
+                    customizacao.getProduto().getPrecoVenda().multiply(customizacao.getQuantidade()));
         }
-        BigDecimal margemAplicada = margem != null ? margem : BigDecimal.ZERO;
-        BigDecimal fator = BigDecimal.ONE.add(margemAplicada.divide(CEM, 6, RoundingMode.HALF_UP));
-        return custoBase.add(custoCustomizacoes).multiply(fator).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    /**
-     * RN-042 — recalcula o preço de venda de um item quando a MARGEM do catálogo muda.
-     * Só deve ser chamado para itens sem override (a decisão fica no {@code CatalogoService}).
-     */
-    public void recalcularPrecoVendaPorMargem(ItemCatalogo item, BigDecimal novaMargem) {
-        List<ItemCatalogoCustomizacao> customizacoes = customizacaoRepository.findByItemCatalogoId(item.getId());
-        BigDecimal precoSugerido = calcularPrecoSugerido(item.getProduto(), item.getQuantidadePacote(), customizacoes, novaMargem);
-        item.setPrecoVenda(precoSugerido);
-        item.setOverride(false);
-        itemCatalogoRepository.save(item);
+        return precoVendaBase.add(precoVendaCustomizacoes).setScale(2, RoundingMode.HALF_UP);
     }
 
     // ---------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------
 
-    /** RN-038a — override quando o preço informado diverge do sugerido; senão acompanha a margem. */
+    /** RN-038a — override quando o preço informado diverge do sugerido; senão acompanha o preço de venda do produto. */
     private void aplicarPrecoVenda(ItemCatalogo item, BigDecimal precoVendaInformado, BigDecimal precoSugerido) {
         if (precoVendaInformado != null && precoVendaInformado.compareTo(precoSugerido) != 0) {
             item.setPrecoVenda(precoVendaInformado);
@@ -224,8 +208,7 @@ public class ItemCatalogoService {
 
     private ItemCatalogoResponse montarResponse(ItemCatalogo item) {
         List<ItemCatalogoCustomizacao> customizacoes = customizacaoRepository.findByItemCatalogoId(item.getId());
-        BigDecimal precoSugerido = calcularPrecoSugerido(item.getProduto(), item.getQuantidadePacote(),
-                customizacoes, item.getCatalogo().getMargem());
+        BigDecimal precoSugerido = calcularPrecoSugerido(item.getProduto(), item.getQuantidadePacote(), customizacoes);
         return montarResponse(item, customizacoes, precoSugerido);
     }
 

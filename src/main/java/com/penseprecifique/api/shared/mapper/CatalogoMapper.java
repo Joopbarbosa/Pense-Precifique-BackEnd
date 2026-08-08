@@ -16,7 +16,6 @@ public class CatalogoMapper {
         response.setNumero(catalogo.getNumero());
         response.setIdentificador(IdentificadorFormatter.formatar("CTG", catalogo.getNumero()));
         response.setNome(catalogo.getNome());
-        response.setMargem(catalogo.getMargem());
         response.setAtivo(catalogo.getAtivo());
         response.setQuantidadeItens(quantidadeItens);
         return response;
@@ -26,14 +25,12 @@ public class CatalogoMapper {
         return Catalogo.builder()
                 .usuario(usuario)
                 .nome(request.getNome())
-                .margem(request.getMargem())
                 .ativo(true)
                 .build();
     }
 
     public void updateEntity(CatalogoRequest request, Catalogo catalogo) {
         catalogo.setNome(request.getNome());
-        catalogo.setMargem(request.getMargem());
         // numero e ativo não mudam por essa via (numero é gerado no Service via RN-053, ativo tem endpoint próprio)
     }
 }

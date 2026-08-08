@@ -84,10 +84,9 @@ class ProdutoResolverVinculosIT {
                 .build());
     }
 
-    private UUID novoCatalogo(String nome, BigDecimal margem) {
+    private UUID novoCatalogo(String nome) {
         CatalogoRequest request = new CatalogoRequest();
         request.setNome(nome);
-        request.setMargem(margem);
         CatalogoResponse response = catalogoService.cadastrar(request);
         return response.getId();
     }
@@ -184,7 +183,7 @@ class ProdutoResolverVinculosIT {
     void excluirComVinculoEmCatalogoPrincipalSemResolverContinuaBloqueado() {
         seedUsuario();
         Produto produto = novoProduto("PRO-6", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        UUID catalogoId = novoCatalogo("CTG-1", new BigDecimal("50"));
+        UUID catalogoId = novoCatalogo("CTG-1");
         novoItem(catalogoId, produto.getId());
 
         BusinessException ex = assertThrows(BusinessException.class, () -> produtoService.excluir(produto.getId()));
@@ -212,7 +211,7 @@ class ProdutoResolverVinculosIT {
     void resolverVinculosApenasBlocoCatalogoRemoverVinculosProsseguiComInativar() {
         seedUsuario();
         Produto alvo = novoProduto("PRO-6", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        UUID catalogoId = novoCatalogo("CTG-1", new BigDecimal("50"));
+        UUID catalogoId = novoCatalogo("CTG-1");
         ItemCatalogoResponse item = novoItem(catalogoId, alvo.getId());
 
         produtoService.resolverVinculos(alvo.getId(),
@@ -249,8 +248,8 @@ class ProdutoResolverVinculosIT {
     void resolverVinculosAmbosBlocosComAcoesDiferentesAplicaAmbosEProsseguiComExcluir() {
         seedUsuario();
         Produto alvo = novoProduto("PRO-6", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        UUID catalogo1 = novoCatalogo("CTG-1", new BigDecimal("50"));
-        UUID catalogo2 = novoCatalogo("CTG-2", new BigDecimal("50"));
+        UUID catalogo1 = novoCatalogo("CTG-1");
+        UUID catalogo2 = novoCatalogo("CTG-2");
         ItemCatalogoResponse item1 = novoItem(catalogo1, alvo.getId());
         ItemCatalogoResponse item2 = novoItem(catalogo2, alvo.getId());
 
@@ -278,7 +277,7 @@ class ProdutoResolverVinculosIT {
     void resolverVinculosSubstituirCatalogoEComponenteCobrindoTudoAtualizaTudoEProsseguiComExcluir() {
         seedUsuario();
         Produto alvo = novoProduto("PRO-6", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        UUID catalogoId = novoCatalogo("CTG-1", new BigDecimal("50"));
+        UUID catalogoId = novoCatalogo("CTG-1");
         ItemCatalogoResponse item = novoItem(catalogoId, alvo.getId());
 
         Produto produtoPai = novoProduto("Bolo composto", TipoProduto.PRODUTO, BigDecimal.ZERO);
@@ -294,7 +293,8 @@ class ProdutoResolverVinculosIT {
 
         ItemCatalogo itemAtualizado = itemCatalogoRepository.findById(item.getId()).orElseThrow();
         assertEquals(substitutoPrincipal.getId(), itemAtualizado.getProduto().getId());
-        assertEquals(0, new BigDecimal("6.00").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda deveria acompanhar o novo custo (sem override)");
+        // precoVenda = substitutoPrincipal.precoVenda(10.00) x quantidadePacote(1) = 10.00
+        assertEquals(0, new BigDecimal("10.00").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda deveria acompanhar o precoVenda do produto substituto (sem override)");
 
         FichaTecnicaItem componenteAtualizado = fichaTecnicaItemRepository.findById(componente.getId()).orElseThrow();
         assertEquals(substitutoComponente.getId(), componenteAtualizado.getProdutoBase().getId());
@@ -311,7 +311,7 @@ class ProdutoResolverVinculosIT {
     void resolverVinculosBlocoComponenteIncompletoNaoAplicaNadaNemOBlocoCatalogo() {
         seedUsuario();
         Produto alvo = novoProduto("PRO-6", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        UUID catalogoId = novoCatalogo("CTG-1", new BigDecimal("50"));
+        UUID catalogoId = novoCatalogo("CTG-1");
         ItemCatalogoResponse item = novoItem(catalogoId, alvo.getId());
 
         Produto produtoPai1 = novoProduto("Bolo composto 1", TipoProduto.PRODUTO, BigDecimal.ZERO);
@@ -337,7 +337,7 @@ class ProdutoResolverVinculosIT {
     void resolverVinculosBlocoCatalogoAusenteQuandoHaVinculoLancaENaoAplicaNada() {
         seedUsuario();
         Produto alvo = novoProduto("PRO-6", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        UUID catalogoId = novoCatalogo("CTG-1", new BigDecimal("50"));
+        UUID catalogoId = novoCatalogo("CTG-1");
         ItemCatalogoResponse item = novoItem(catalogoId, alvo.getId());
 
         Produto produtoPai = novoProduto("Bolo composto", TipoProduto.PRODUTO, BigDecimal.ZERO);
@@ -365,7 +365,7 @@ class ProdutoResolverVinculosIT {
         seedUsuario();
         Produto principal = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
         Produto alvo = novoProduto("Topo de bolo", TipoProduto.CUSTOMIZACAO, new BigDecimal("1.0000"));
-        UUID catalogoId = novoCatalogo("CTG-2", new BigDecimal("50"));
+        UUID catalogoId = novoCatalogo("CTG-2");
         novoItemComCustomizacao(catalogoId, principal.getId(), alvo.getId(), BigDecimal.ONE);
 
         produtoService.resolverVinculos(alvo.getId(),
@@ -381,7 +381,7 @@ class ProdutoResolverVinculosIT {
         Produto principal = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
         Produto alvo = novoProduto("Topo de bolo", TipoProduto.CUSTOMIZACAO, new BigDecimal("1.0000"));
         Produto substituto = novoProduto("Topo de bolo especial", TipoProduto.CUSTOMIZACAO, new BigDecimal("3.0000"));
-        UUID catalogoId = novoCatalogo("CTG-2", new BigDecimal("50"));
+        UUID catalogoId = novoCatalogo("CTG-2");
         ItemCatalogoResponse item = novoItemComCustomizacao(catalogoId, principal.getId(), alvo.getId(), BigDecimal.ONE);
 
         ItemCatalogoCustomizacao customizacao = itemCatalogoCustomizacaoRepository.findByProdutoId(alvo.getId()).get(0);
@@ -395,7 +395,8 @@ class ProdutoResolverVinculosIT {
         assertEquals(substituto.getId(), customizacaoAtualizada.getProduto().getId());
 
         ItemCatalogo itemAtualizado = itemCatalogoRepository.findById(item.getId()).orElseThrow();
-        assertEquals(0, new BigDecimal("7.50").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda deveria acompanhar o novo custo (sem override)");
+        // precoVenda = principal.precoVenda(10.00) x 1 + substituto.precoVenda(10.00) x 1 = 20.00
+        assertEquals(0, new BigDecimal("20.00").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda deveria acompanhar o precoVenda da customização substituta (sem override)");
 
         assertTrue(produtoRepository.findById(alvo.getId()).orElseThrow().getDeletedAt() != null);
     }
