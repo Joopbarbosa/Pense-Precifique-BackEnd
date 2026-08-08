@@ -110,7 +110,7 @@ class InsumoResolverVinculosIT {
         vincular(pro5, insumo, new BigDecimal("3"));
 
         ResolverVinculosInsumoRequestDTO request = new ResolverVinculosInsumoRequestDTO(
-                AcaoResolucaoVinculo.INATIVAR_VINCULADOS, OperacaoPosResolucaoVinculo.INATIVAR, null);
+                AcaoResolucaoVinculo.REMOVER_VINCULOS, OperacaoPosResolucaoVinculo.INATIVAR, null);
         insumoService.resolverVinculos(insumo.getId(), request);
 
         assertFalse(produtoRepository.findById(pro3.getId()).orElseThrow().getAtivo());

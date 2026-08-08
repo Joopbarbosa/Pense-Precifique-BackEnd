@@ -14,7 +14,10 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.domain.enums.TipoVinculoProduto;
 import com.penseprecifique.api.shared.dto.request.produto.BaixaManualProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.produto.ResolucaoVinculoCatalogoRequest;
+import com.penseprecifique.api.shared.dto.request.produto.ResolucaoVinculoComponenteRequest;
 import com.penseprecifique.api.shared.dto.request.produto.ResolverVinculosProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.produto.SubstituicaoComponenteVinculoRequest;
 import com.penseprecifique.api.shared.dto.request.produto.SubstituicaoVinculoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ComponenteVinculadoResponse;
@@ -326,13 +329,18 @@ public class ProdutoService {
     }
 
     /**
-     * #237/PDT-0XX — resolução em massa dos 3 tipos de vínculo que bloqueiam {@link #inativar(UUID)}/
-     * {@link #excluir(UUID)}: produto principal de item de catálogo, customização anexada a um item, e
-     * componente ({@code produtoBase}) na ficha técnica de outro produto. {@code INATIVAR_VINCULADOS}
-     * remove só o vínculo específico (ItemCatalogo não tem campo {@code ativo} — a única forma de
-     * "desligar" um vínculo pontual é soft-delete do item / remoção da linha de customização ou
-     * componente, sem tocar outros itens do mesmo catálogo/produto). Depois de resolver, executa a
-     * operação original ({@code operacao}) na mesma chamada. Transação única — sem aplicação parcial.
+     * #237 (V0.7, correção de contrato) — resolução em massa dos vínculos que bloqueiam
+     * {@link #inativar(UUID)}/{@link #excluir(UUID)}, agrupados em 2 blocos independentes com ação
+     * própria cada um: {@code catalogo} (item de catálogo principal + customização anexada) e
+     * {@code componente} (produto usado como {@code produtoBase} na ficha técnica de outro produto).
+     * Cada bloco só é obrigatório no request se o produto de fato tiver vínculo daquele tipo — bloco
+     * ausente quando há vínculo pendente daquele tipo é erro; bloco presente sem vínculo daquele tipo
+     * é ignorado. {@code REMOVER_VINCULOS} remove só o vínculo específico daquele bloco (ItemCatalogo
+     * não tem campo {@code ativo} — a única forma de "desligar" um vínculo pontual é soft-delete do
+     * item / remoção da linha de customização ou componente, sem tocar outros itens do mesmo
+     * catálogo/produto). Depois de resolver os blocos presentes, executa a operação original
+     * ({@code operacao}) na mesma chamada. Transação única (classe é {@code @Transactional}) — sem
+     * aplicação parcial mesmo com ações diferentes por bloco.
      */
     public void resolverVinculos(UUID id, ResolverVinculosProdutoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
@@ -343,15 +351,26 @@ public class ProdutoService {
         List<ItemCatalogoCustomizacao> customizacoesAnexadas = itemCatalogoCustomizacaoRepository.findByProdutoId(id);
         List<FichaTecnicaItem> componentesEmOutrosProdutos = fichaTecnicaItemRepository.findByProdutoBaseId(id);
 
-        if (itensPrincipal.isEmpty() && customizacoesAnexadas.isEmpty() && componentesEmOutrosProdutos.isEmpty()) {
+        boolean temVinculoCatalogo = !itensPrincipal.isEmpty() || !customizacoesAnexadas.isEmpty();
+        boolean temVinculoComponente = !componentesEmOutrosProdutos.isEmpty();
+
+        if (!temVinculoCatalogo && !temVinculoComponente) {
             throw new BusinessException("Produto " + produto.getNome() + " não possui vínculos pendentes de resolução.");
         }
+        if (temVinculoCatalogo && request.getCatalogo() == null) {
+            throw new BusinessException("Produto " + produto.getNome()
+                    + " possui vínculo de catálogo pendente — o bloco \"catalogo\" é obrigatório.");
+        }
+        if (temVinculoComponente && request.getComponente() == null) {
+            throw new BusinessException("Produto " + produto.getNome()
+                    + " possui vínculo de componente de ficha técnica pendente — o bloco \"componente\" é obrigatório.");
+        }
 
-        if (request.getAcao() == AcaoResolucaoVinculo.INATIVAR_VINCULADOS) {
-            inativarVinculados(itensPrincipal, customizacoesAnexadas, componentesEmOutrosProdutos);
-        } else {
-            aplicarSubstituicoesProduto(usuarioId, itensPrincipal, customizacoesAnexadas, componentesEmOutrosProdutos,
-                    request.getSubstituicoes());
+        if (temVinculoCatalogo) {
+            resolverVinculoCatalogo(usuarioId, itensPrincipal, customizacoesAnexadas, request.getCatalogo());
+        }
+        if (temVinculoComponente) {
+            resolverVinculoComponente(usuarioId, componentesEmOutrosProdutos, request.getComponente());
         }
 
         switch (request.getOperacao()) {
@@ -361,24 +380,27 @@ public class ProdutoService {
         produtoRepository.save(produto);
     }
 
-    private void inativarVinculados(List<ItemCatalogo> itensPrincipal, List<ItemCatalogoCustomizacao> customizacoesAnexadas,
-                                     List<FichaTecnicaItem> componentesEmOutrosProdutos) {
+    private void resolverVinculoCatalogo(UUID usuarioId, List<ItemCatalogo> itensPrincipal,
+                                          List<ItemCatalogoCustomizacao> customizacoesAnexadas,
+                                          ResolucaoVinculoCatalogoRequest request) {
+        if (request.getAcao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
+            removerVinculosCatalogo(itensPrincipal, customizacoesAnexadas);
+        } else {
+            aplicarSubstituicoesCatalogo(usuarioId, itensPrincipal, customizacoesAnexadas, request.getSubstituicoes());
+        }
+    }
+
+    private void removerVinculosCatalogo(List<ItemCatalogo> itensPrincipal, List<ItemCatalogoCustomizacao> customizacoesAnexadas) {
         LocalDateTime agora = LocalDateTime.now();
         itensPrincipal.forEach(item -> item.setDeletedAt(agora));
         itemCatalogoRepository.saveAll(itensPrincipal);
 
         itemCatalogoCustomizacaoRepository.deleteAll(customizacoesAnexadas);
-
-        Set<UUID> produtosPaisAfetados = componentesEmOutrosProdutos.stream()
-                .map(item -> item.getProduto().getId()).collect(Collectors.toSet());
-        fichaTecnicaItemRepository.deleteAll(componentesEmOutrosProdutos);
-        produtosPaisAfetados.forEach(this::recalcularPrecoCustoPersistido);
     }
 
-    private void aplicarSubstituicoesProduto(UUID usuarioId, List<ItemCatalogo> itensPrincipal,
-                                              List<ItemCatalogoCustomizacao> customizacoesAnexadas,
-                                              List<FichaTecnicaItem> componentesEmOutrosProdutos,
-                                              List<SubstituicaoVinculoProdutoRequest> substituicoes) {
+    private void aplicarSubstituicoesCatalogo(UUID usuarioId, List<ItemCatalogo> itensPrincipal,
+                                               List<ItemCatalogoCustomizacao> customizacoesAnexadas,
+                                               List<SubstituicaoVinculoProdutoRequest> substituicoes) {
         List<SubstituicaoVinculoProdutoRequest> lista = substituicoes != null ? substituicoes : List.of();
         Map<UUID, SubstituicaoVinculoProdutoRequest> porVinculoId = new HashMap<>();
         for (SubstituicaoVinculoProdutoRequest sub : lista) {
@@ -402,18 +424,6 @@ public class ProdutoService {
             }
             substituirCustomizacaoAnexada(customizacao, novoProduto);
         }
-
-        for (FichaTecnicaItem componente : componentesEmOutrosProdutos) {
-            SubstituicaoVinculoProdutoRequest sub = exigirSubstituicao(porVinculoId, componente.getId(),
-                    TipoVinculoProduto.COMPONENTE_FICHA_TECNICA, "componente de ficha técnica");
-            Produto novoProdutoBase = buscarProdutoDoUsuario(sub.getNovoProdutoId(), usuarioId);
-            if (novoProdutoBase.getTipo() != TipoProduto.PRODUTO || !Boolean.TRUE.equals(novoProdutoBase.getAtivo())) {
-                throw new BusinessException("Apenas produtos ativos do tipo Produto podem ser usados como componente de ficha técnica.");
-            }
-            componente.setProdutoBase(novoProdutoBase);
-            fichaTecnicaItemRepository.save(componente);
-            recalcularPrecoCustoPersistido(componente.getProduto().getId());
-        }
     }
 
     private SubstituicaoVinculoProdutoRequest exigirSubstituicao(Map<UUID, SubstituicaoVinculoProdutoRequest> porVinculoId,
@@ -423,6 +433,45 @@ public class ProdutoService {
             throw new BusinessException("Falta substituição para o vínculo de " + descricao + " (id " + vinculoId + ").");
         }
         return sub;
+    }
+
+    private void resolverVinculoComponente(UUID usuarioId, List<FichaTecnicaItem> componentesEmOutrosProdutos,
+                                            ResolucaoVinculoComponenteRequest request) {
+        if (request.getAcao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
+            removerVinculosComponente(componentesEmOutrosProdutos);
+        } else {
+            aplicarSubstituicoesComponente(usuarioId, componentesEmOutrosProdutos, request.getSubstituicoes());
+        }
+    }
+
+    private void removerVinculosComponente(List<FichaTecnicaItem> componentesEmOutrosProdutos) {
+        Set<UUID> produtosPaisAfetados = componentesEmOutrosProdutos.stream()
+                .map(item -> item.getProduto().getId()).collect(Collectors.toSet());
+        fichaTecnicaItemRepository.deleteAll(componentesEmOutrosProdutos);
+        produtosPaisAfetados.forEach(this::recalcularPrecoCustoPersistido);
+    }
+
+    private void aplicarSubstituicoesComponente(UUID usuarioId, List<FichaTecnicaItem> componentesEmOutrosProdutos,
+                                                 List<SubstituicaoComponenteVinculoRequest> substituicoes) {
+        List<SubstituicaoComponenteVinculoRequest> lista = substituicoes != null ? substituicoes : List.of();
+        Map<UUID, SubstituicaoComponenteVinculoRequest> porVinculoId = new HashMap<>();
+        for (SubstituicaoComponenteVinculoRequest sub : lista) {
+            porVinculoId.put(sub.getVinculoId(), sub);
+        }
+
+        for (FichaTecnicaItem componente : componentesEmOutrosProdutos) {
+            SubstituicaoComponenteVinculoRequest sub = porVinculoId.get(componente.getId());
+            if (sub == null) {
+                throw new BusinessException("Falta substituição para o vínculo de componente de ficha técnica (id " + componente.getId() + ").");
+            }
+            Produto novoProdutoBase = buscarProdutoDoUsuario(sub.getNovoProdutoId(), usuarioId);
+            if (novoProdutoBase.getTipo() != TipoProduto.PRODUTO || !Boolean.TRUE.equals(novoProdutoBase.getAtivo())) {
+                throw new BusinessException("Apenas produtos ativos do tipo Produto podem ser usados como componente de ficha técnica.");
+            }
+            componente.setProdutoBase(novoProdutoBase);
+            fichaTecnicaItemRepository.save(componente);
+            recalcularPrecoCustoPersistido(componente.getProduto().getId());
+        }
     }
 
     /** Padrão calculado+override (RN-038a/RN-042): só recalcula precoVenda se o item não estiver em override. */

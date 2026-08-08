@@ -171,7 +171,7 @@ public class InsumoService {
             throw new BusinessException("Insumo " + insumo.getNome() + " não possui vínculos pendentes de resolução.");
         }
 
-        if (request.acao() == AcaoResolucaoVinculo.INATIVAR_VINCULADOS) {
+        if (request.acao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
             vinculados.forEach(produto -> produto.setAtivo(false));
             produtoRepository.saveAll(vinculados);
         } else {
