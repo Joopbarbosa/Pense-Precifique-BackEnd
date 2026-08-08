@@ -1,10 +1,12 @@
 package com.penseprecifique.api.shared.mapper;
 
+import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.FichaTecnicaItemResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoDetalheResponse;
@@ -127,6 +129,14 @@ public class ProdutoMapper {
 
         response.setCustoUnitario(custoUnitario);
         response.setCustoTotal(item.getQuantidade().multiply(custoUnitario));
+        return response;
+    }
+
+    public CatalogoVinculadoResponse toCatalogoVinculadoResponse(Catalogo catalogo) {
+        CatalogoVinculadoResponse response = new CatalogoVinculadoResponse();
+        response.setId(catalogo.getId());
+        response.setIdentificador(IdentificadorFormatter.formatar("CTG", catalogo.getNumero()));
+        response.setNome(catalogo.getNome());
         return response;
     }
 

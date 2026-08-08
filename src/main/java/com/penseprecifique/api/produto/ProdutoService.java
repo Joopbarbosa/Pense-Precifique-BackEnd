@@ -1,7 +1,9 @@
 package com.penseprecifique.api.produto;
 
+import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.ConfiguracaoPrecificacao;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -9,6 +11,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.produto.BaixaManualProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.PrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoContagensResponse;
@@ -17,6 +20,8 @@ import com.penseprecifique.api.shared.dto.response.produto.ProdutoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProdutoMapper;
+import com.penseprecifique.api.catalogo.ItemCatalogoCustomizacaoRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
@@ -30,8 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -48,6 +56,8 @@ public class ProdutoService {
     private final ConfiguracaoPrecificacaoRepository configuracaoPrecificacaoRepository;
     private final ProdutoMapper produtoMapper;
     private final UsuarioRepository usuarioRepository;
+    private final ItemCatalogoRepository itemCatalogoRepository;
+    private final ItemCatalogoCustomizacaoRepository itemCatalogoCustomizacaoRepository;
 
     /**
      * #135/RN-039 — custoUnitario recalculado ao vivo por item da página, mesmo cálculo de buscarPorId
@@ -237,8 +247,39 @@ public class ProdutoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+
+        List<Catalogo> catalogosVinculados = listarCatalogosVinculados(id);
+        if (!catalogosVinculados.isEmpty()) {
+            String nomes = catalogosVinculados.stream().map(Catalogo::getNome).collect(Collectors.joining(", "));
+            throw new BusinessException("Produto " + produto.getNome()
+                    + " está vinculado ao(s) catálogo(s): " + nomes
+                    + ". Remova o produto desses catálogos antes de inativá-lo.");
+        }
+
         produto.setAtivo(false);
         produtoRepository.save(produto);
+    }
+
+    /**
+     * PDT-013 — catálogos (não excluídos) que referenciam o produto, como produto principal de um
+     * item de catálogo ou como customização anexada a um item de catálogo de outro produto. União
+     * distinta por catálogo — o mesmo catálogo pode referenciar o produto nos dois papéis.
+     */
+    @Transactional(readOnly = true)
+    public List<CatalogoVinculadoResponse> catalogosVinculados(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        return listarCatalogosVinculados(id).stream().map(produtoMapper::toCatalogoVinculadoResponse).toList();
+    }
+
+    private List<Catalogo> listarCatalogosVinculados(UUID produtoId) {
+        Map<UUID, Catalogo> catalogosPorId = new LinkedHashMap<>();
+        itemCatalogoRepository.findByProdutoIdAndDeletedAtIsNull(produtoId)
+                .forEach(item -> catalogosPorId.putIfAbsent(item.getCatalogo().getId(), item.getCatalogo()));
+        itemCatalogoCustomizacaoRepository.findItensCatalogoPorProdutoComoCustomizacao(produtoId)
+                .forEach((ItemCatalogo item) -> catalogosPorId.putIfAbsent(item.getCatalogo().getId(), item.getCatalogo()));
+        return List.copyOf(catalogosPorId.values());
     }
 
     /**
