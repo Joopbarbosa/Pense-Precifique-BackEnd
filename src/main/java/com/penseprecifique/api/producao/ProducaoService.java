@@ -1055,10 +1055,8 @@ public class ProducaoService {
 
             boolean algumInsumoNaoFracionavel = ficha.stream()
                     .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel()));
-            if (algumInsumoNaoFracionavel && quantidades.get(produtoId).compareTo(produto.getRendimento()) != 0) {
-                throw new BusinessException("Produto " + produto.getNome()
-                        + " não permite quantidade fracionada — a produção deve ser de exatamente "
-                        + produto.getRendimento() + " unidades");
+            if (algumInsumoNaoFracionavel) {
+                validarMultiploDoRendimento(produto, ficha, quantidades.get(produtoId));
             }
 
             produtos.add(produto);
@@ -1066,6 +1064,44 @@ public class ProducaoService {
         }
 
         return new ProdutosValidados(produtos, quantidades, fichas);
+    }
+
+    /**
+     * PDC-027 — substitui PDC-005 (Reversão #214). Produto com algum insumo não-fracionável na ficha
+     * já não trava mais em exatamente 1x o rendimento: aceita qualquer múltiplo inteiro, limitado ao
+     * estoque disponível dos insumos não-fracionáveis que não permitem estoque negativo.
+     */
+    private void validarMultiploDoRendimento(Produto produto, List<FichaTecnicaItem> ficha, BigDecimal quantidadeInformada) {
+        BigDecimal rendimento = produto.getRendimento();
+        if (quantidadeInformada.remainder(rendimento).compareTo(BigDecimal.ZERO) != 0) {
+            throw new BusinessException("Produto " + produto.getNome()
+                    + " exige quantidade em múltiplos de " + rendimento + " unidades");
+        }
+
+        BigDecimal multiploMaximoPermitido = null;
+        String insumoLimitante = null;
+        for (FichaTecnicaItem item : ficha) {
+            Insumo insumo = item.getInsumo();
+            boolean naoFracionavel = insumo != null && Boolean.FALSE.equals(insumo.getFracionavel());
+            if (!naoFracionavel || !Boolean.FALSE.equals(insumo.getPermitirEstoqueNegativo())) {
+                continue;
+            }
+
+            BigDecimal maxMultiplos = insumo.getEstoqueAtual().divideToIntegralValue(item.getQuantidade());
+            if (multiploMaximoPermitido == null || maxMultiplos.compareTo(multiploMaximoPermitido) < 0) {
+                multiploMaximoPermitido = maxMultiplos;
+                insumoLimitante = insumo.getNome();
+            }
+        }
+
+        if (multiploMaximoPermitido != null) {
+            BigDecimal quantidadeMaxima = multiploMaximoPermitido.multiply(rendimento);
+            if (quantidadeInformada.compareTo(quantidadeMaxima) > 0) {
+                throw new BusinessException("Produto " + produto.getNome()
+                        + ": quantidade máxima permitida é " + quantidadeMaxima
+                        + " unidades, limitado pelo estoque de " + insumoLimitante);
+            }
+        }
     }
 
     private List<ProducaoProduto> gravarProducaoProdutos(Producao producao, ProdutosValidados validados) {
