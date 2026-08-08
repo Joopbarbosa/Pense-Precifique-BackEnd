@@ -119,6 +119,19 @@ class ProducaoMultiploRendimentoIT {
     }
 
     @Test
+    void estoqueInsuficienteParaUmaVezORendimentoNaoBloqueiaCriacao() {
+        // Regressão do achado no Frontend de #214 (correção 2026-08-08) — maxMultiplos=0
+        // (estoque=1 < ficha.quantidade=2 por receita) não deve bloquear a criação com o erro de
+        // teto por estoque; quantidade = rendimento (mínimo possível) é aceita normalmente, e a
+        // trava por estoque insuficiente segue acontecendo só ao tentar Iniciar (TRAVADA).
+        seedCaixaDeBombom(false, "1");
+
+        ProducaoDetalheResponse detalhe = producaoService.criarProducao(requestCom(new BigDecimal("2")));
+
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, detalhe.getEstado());
+    }
+
+    @Test
     void permitirEstoqueNegativoTrueSemLimiteDeMultiplos() {
         // PDC-CEN-086 — insumo permite estoque negativo -> só a checagem de múltiplo se aplica, sem teto
         seedCaixaDeBombom(true, "1");

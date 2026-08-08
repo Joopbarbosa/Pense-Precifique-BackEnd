@@ -1070,6 +1070,12 @@ public class ProducaoService {
      * PDC-027 — substitui PDC-005 (Reversão #214). Produto com algum insumo não-fracionável na ficha
      * já não trava mais em exatamente 1x o rendimento: aceita qualquer múltiplo inteiro, limitado ao
      * estoque disponível dos insumos não-fracionáveis que não permitem estoque negativo.
+     *
+     * Correção (regressão achada no Frontend de #214, decisão de negócio confirmada 2026-08-08): o
+     * teto por estoque só se aplica quando há pelo menos 1x de estoque disponível (maxMultiplos >= 1).
+     * Estoque insuficiente para nem 1x o rendimento (maxMultiplos = 0) NÃO bloqueia a criação aqui —
+     * a produção segue o fluxo pré-existente de trava por estoque insuficiente (TRAVADA ao tentar
+     * Iniciar, com Dividir/Travar tudo/Retomar), que já existia antes de #214 e não muda.
      */
     private void validarMultiploDoRendimento(Produto produto, List<FichaTecnicaItem> ficha, BigDecimal quantidadeInformada) {
         BigDecimal rendimento = produto.getRendimento();
@@ -1088,6 +1094,10 @@ public class ProducaoService {
             }
 
             BigDecimal maxMultiplos = insumo.getEstoqueAtual().divideToIntegralValue(item.getQuantidade());
+            if (maxMultiplos.compareTo(BigDecimal.ZERO) == 0) {
+                // Sem estoque para nem 1x o rendimento — não limita a criação, fica para a trava pós-criação.
+                continue;
+            }
             if (multiploMaximoPermitido == null || maxMultiplos.compareTo(multiploMaximoPermitido) < 0) {
                 multiploMaximoPermitido = maxMultiplos;
                 insumoLimitante = insumo.getNome();
