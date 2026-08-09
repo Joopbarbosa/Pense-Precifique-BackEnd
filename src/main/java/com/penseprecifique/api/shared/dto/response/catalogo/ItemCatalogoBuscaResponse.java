@@ -15,4 +15,8 @@ public class ItemCatalogoBuscaResponse {
     private BigDecimal precoVenda;
     private String catalogoNome;
     private Integer catalogoNumero;
+    /** #238 — tag global fracionável/estoque negativo/estoque atual, mesmo padrão de ProdutoResponse. */
+    private boolean algumInsumoNaoFracionavel;
+    private boolean permitirEstoqueNegativo;
+    private BigDecimal estoqueAtual;
 }

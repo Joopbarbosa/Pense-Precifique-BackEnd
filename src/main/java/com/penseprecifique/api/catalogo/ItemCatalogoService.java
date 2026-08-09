@@ -1,6 +1,7 @@
 package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -15,6 +16,7 @@ import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoResponse
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ItemCatalogoMapper;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class ItemCatalogoService {
     private final ItemCatalogoCustomizacaoRepository customizacaoRepository;
     private final CatalogoRepository catalogoRepository;
     private final ProdutoRepository produtoRepository;
+    private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final ItemCatalogoMapper itemCatalogoMapper;
     private final UsuarioRepository usuarioRepository;
 
@@ -64,7 +67,8 @@ public class ItemCatalogoService {
     public List<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId) {
         UUID usuarioId = getUsuarioIdAutenticado();
         return itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId).stream()
-                .map(itemCatalogoMapper::toBuscaResponse)
+                .map(item -> itemCatalogoMapper.toBuscaResponse(item,
+                        fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId())))
                 .toList();
     }
 
@@ -214,7 +218,8 @@ public class ItemCatalogoService {
 
     private ItemCatalogoResponse montarResponse(ItemCatalogo item, List<ItemCatalogoCustomizacao> customizacoes,
                                                 BigDecimal precoSugerido) {
-        ItemCatalogoResponse response = itemCatalogoMapper.toResponse(item, customizacoes);
+        List<FichaTecnicaItem> fichaTecnicaProduto = fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId());
+        ItemCatalogoResponse response = itemCatalogoMapper.toResponse(item, customizacoes, fichaTecnicaProduto);
         response.setPrecoSugerido(precoSugerido);
         response.setBloqueadoParaVenda(produtoBloqueado(item.getProduto())); // RN-045
         return response;

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.mapper;
 
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
@@ -68,10 +69,15 @@ public class OrcamentoMapper {
     }
 
     public OrcamentoItemResponse toItemResponse(OrcamentoItem item) {
-        return toItemResponse(item, null);
+        return toItemResponse(item, null, null);
     }
 
     public OrcamentoItemResponse toItemResponse(OrcamentoItem item, List<OrcamentoItemCustomizacao> customizacoes) {
+        return toItemResponse(item, customizacoes, null);
+    }
+
+    public OrcamentoItemResponse toItemResponse(OrcamentoItem item, List<OrcamentoItemCustomizacao> customizacoes,
+                                                 List<FichaTecnicaItem> fichaTecnicaProduto) {
         OrcamentoItemResponse response = new OrcamentoItemResponse();
         response.setId(item.getId());
         Produto produtoVendido = item.getProdutoVendido();
@@ -90,6 +96,12 @@ public class OrcamentoMapper {
         response.setSubtotal(item.getSubtotal());
         if (customizacoes != null) {
             response.setCustomizacoes(customizacoes.stream().map(this::toItemCustomizacaoResponse).toList());
+        }
+        response.setPermitirEstoqueNegativo(produtoVendido.getPermitirEstoqueNegativo());
+        response.setEstoqueAtual(produtoVendido.getEstoqueAtual());
+        if (fichaTecnicaProduto != null) {
+            response.setAlgumInsumoNaoFracionavel(fichaTecnicaProduto.stream()
+                    .anyMatch(i -> i.getInsumo() != null && Boolean.FALSE.equals(i.getInsumo().getFracionavel())));
         }
         return response;
     }

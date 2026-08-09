@@ -17,4 +17,8 @@ public class ProducaoProdutoResponse {
     private BigDecimal quantidade;
     /** #188/RN-NOVA-4 — perda declarada ao finalizar (0 quando não declarada). */
     private BigDecimal quantidadePerdida;
+    /** #238 — tag global fracionável/estoque negativo/estoque atual, mesmo padrão de ProdutoResponse. */
+    private boolean algumInsumoNaoFracionavel;
+    private boolean permitirEstoqueNegativo;
+    private BigDecimal estoqueAtual;
 }

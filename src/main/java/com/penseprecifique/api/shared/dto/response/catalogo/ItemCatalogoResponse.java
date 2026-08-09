@@ -23,4 +23,8 @@ public class ItemCatalogoResponse {
     /** RN-045 — true quando o Produto do item foi inativado/excluído; item permanece mas fica bloqueado para venda. */
     private boolean bloqueadoParaVenda;
     private List<CustomizacaoAnexadaResponse> customizacoesAnexadas = new ArrayList<>();
+    /** #238 — tag global fracionável/estoque negativo/estoque atual, mesmo padrão de ProdutoResponse. */
+    private boolean algumInsumoNaoFracionavel;
+    private boolean permitirEstoqueNegativo;
+    private BigDecimal estoqueAtual;
 }

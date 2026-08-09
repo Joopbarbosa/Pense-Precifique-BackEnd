@@ -63,6 +63,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -182,7 +183,18 @@ public class ProducaoService {
     private ProducaoResponse montarResponseComAlertas(Producao producao) {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
-        return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos), historico);
+        return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos), historico,
+                fichaTecnicaPorProduto(produtos));
+    }
+
+    /** #238 — tag global fracionável/estoque negativo/estoque atual por produto da produção. */
+    private Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto(List<ProducaoProduto> produtos) {
+        Map<UUID, List<FichaTecnicaItem>> resultado = new HashMap<>();
+        for (ProducaoProduto pp : produtos) {
+            UUID produtoId = pp.getProduto().getId();
+            resultado.computeIfAbsent(produtoId, fichaTecnicaItemRepository::findByProdutoId);
+        }
+        return resultado;
     }
 
     @Transactional(readOnly = true)
@@ -839,7 +851,8 @@ public class ProducaoService {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
         List<Producao> producoesFilhas = producaoRepository.findByProducaoOrigemId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas);
+        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas,
+                fichaTecnicaPorProduto(produtos));
     }
 
     /** Componente (insumo ou produto-base) com a necessidade já somada entre todos os produtos da produção. */
