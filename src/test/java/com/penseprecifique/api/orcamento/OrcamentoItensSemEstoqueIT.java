@@ -56,7 +56,7 @@ class OrcamentoItensSemEstoqueIT {
     private Produto novoProduto(String nome, int numero, BigDecimal estoqueAtual) {
         return produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
-                .tempoProducao(30).estoqueAtual(estoqueAtual).build());
+                .tempoProducao(30).estoqueAtual(estoqueAtual).precoVenda(new BigDecimal("10.00")).build());
     }
 
     private OrcamentoItemRequest itemAvulso(UUID produtoId, int quantidade, String preco) {

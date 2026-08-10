@@ -44,13 +44,17 @@ public class FichaTecnicaService {
             if (temInsumo) {
                 Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getInsumoId(), usuarioId)
                         .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + req.getInsumoId()));
+                // INS-011 — insumo inativo não pode ser adicionado a nova ficha técnica.
+                if (!Boolean.TRUE.equals(insumo.getAtivo())) {
+                    throw new BusinessException("Este insumo está inativo e não pode ser adicionado. Reative-o para continuar.");
+                }
                 validarQuantidadeInsumo(insumo, req.getQuantidade());
                 builder.insumo(insumo).produtoBase(null);
             } else {
                 Produto produtoBase = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getProdutoBaseId(), usuarioId)
                         .orElseThrow(() -> new ResourceNotFoundException("Produto base não encontrado: " + req.getProdutoBaseId()));
-                if (produtoBase.getTipo() != TipoProduto.PRODUTO_BASE) {
-                    throw new BusinessException("O produto referenciado na ficha técnica deve ser do tipo PRODUTO_BASE.");
+                if (produtoBase.getTipo() != TipoProduto.PRODUTO || !Boolean.TRUE.equals(produtoBase.getAtivo())) {
+                    throw new BusinessException("Apenas produtos ativos do tipo Produto podem ser usados como componente de ficha técnica.");
                 }
                 builder.produtoBase(produtoBase).insumo(null);
             }
@@ -65,6 +69,27 @@ public class FichaTecnicaService {
     public BigDecimal recalcularPrecoCusto(UUID produtoId) {
         List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produtoId);
         return calcularPrecoCusto(itens);
+    }
+
+    /**
+     * #228 — resolução de vínculo por substituição: troca o insumo usado em todas as linhas da ficha
+     * técnica de {@code produtoId} que referenciam {@code insumoAntigoId}, preservando a quantidade já
+     * configurada em cada linha. Não recalcula {@code produto.precoCusto} — quem chama é responsável por
+     * disparar o recálculo persistido (ver {@code ProdutoService.recalcularPrecoCustoPersistido}).
+     */
+    public void substituirInsumoEmProduto(UUID produtoId, UUID insumoAntigoId, UUID novoInsumoId, UUID usuarioId) {
+        Insumo novoInsumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(novoInsumoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + novoInsumoId));
+        if (!Boolean.TRUE.equals(novoInsumo.getAtivo())) {
+            throw new BusinessException("O insumo substituto está inativo e não pode ser usado. Reative-o para continuar.");
+        }
+
+        List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoIdAndInsumoId(produtoId, insumoAntigoId);
+        for (FichaTecnicaItem item : itens) {
+            validarQuantidadeInsumo(novoInsumo, item.getQuantidade());
+            item.setInsumo(novoInsumo);
+            fichaTecnicaItemRepository.save(item);
+        }
     }
 
     private void validarQuantidadeInsumo(Insumo insumo, BigDecimal quantidade) {

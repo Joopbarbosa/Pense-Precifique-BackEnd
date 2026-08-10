@@ -21,7 +21,6 @@ public class ProdutoContagensResponse {
     @Setter
     public static class PorTipo {
         private long produto;
-        private long produtoBase;
         private long customizacao;
     }
 }

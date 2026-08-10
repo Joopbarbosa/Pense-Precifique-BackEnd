@@ -58,10 +58,10 @@ class ProducaoSimularAlertasIT {
 
         Produto produtoA = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(1).nome("Produto A").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(30).rendimento(BigDecimal.ONE).build());
+                .tempoProducao(30).rendimento(BigDecimal.ONE).precoVenda(new BigDecimal("10.00")).build());
         Produto produtoB = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(2).nome("Produto B").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(30).rendimento(BigDecimal.ONE).build());
+                .tempoProducao(30).rendimento(BigDecimal.ONE).precoVenda(new BigDecimal("10.00")).build());
 
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
                 .produto(produtoA).insumo(papel).quantidade(new BigDecimal("3")).build());

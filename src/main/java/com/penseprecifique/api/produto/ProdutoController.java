@@ -3,6 +3,9 @@ package com.penseprecifique.api.produto;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.produto.BaixaManualProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.produto.ProdutoRequest;
+import com.penseprecifique.api.shared.dto.request.produto.ResolverVinculosProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
+import com.penseprecifique.api.shared.dto.response.produto.ComponenteVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.PrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoContagensResponse;
@@ -17,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -71,6 +75,24 @@ public class ProdutoController {
     @PostMapping("/{id}/reativar")
     public ResponseEntity<Void> reativar(@PathVariable UUID id) {
         produtoService.reativar(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/catalogos-vinculados")
+    public ResponseEntity<List<CatalogoVinculadoResponse>> catalogosVinculados(@PathVariable UUID id) {
+        return ResponseEntity.ok(produtoService.catalogosVinculados(id));
+    }
+
+    @GetMapping("/{id}/componentes-vinculados")
+    public ResponseEntity<List<ComponenteVinculadoResponse>> componentesVinculados(@PathVariable UUID id) {
+        return ResponseEntity.ok(produtoService.componentesVinculados(id));
+    }
+
+    @PostMapping("/{id}/resolver-vinculos")
+    public ResponseEntity<Void> resolverVinculos(
+            @PathVariable UUID id,
+            @Valid @RequestBody ResolverVinculosProdutoRequest request) {
+        produtoService.resolverVinculos(id, request);
         return ResponseEntity.noContent().build();
     }
 

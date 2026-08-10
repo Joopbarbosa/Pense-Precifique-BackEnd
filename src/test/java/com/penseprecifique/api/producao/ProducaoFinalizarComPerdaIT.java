@@ -49,7 +49,7 @@ class ProducaoFinalizarComPerdaIT {
 
         Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(1).nome("Kit Convite Casamento").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(60).estoqueAtual(BigDecimal.ZERO).build());
+                .tempoProducao(60).estoqueAtual(BigDecimal.ZERO).precoVenda(new BigDecimal("10.00")).build());
 
         Producao producao = Producao.builder()
                 .usuario(usuario).numero(numeroProducao).estado(EstadoProducao.EM_ANDAMENTO)

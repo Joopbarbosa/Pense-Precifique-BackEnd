@@ -63,6 +63,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -182,7 +183,18 @@ public class ProducaoService {
     private ProducaoResponse montarResponseComAlertas(Producao producao) {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
-        return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos), historico);
+        return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos), historico,
+                fichaTecnicaPorProduto(produtos));
+    }
+
+    /** #238 — tag global fracionável/estoque negativo/estoque atual por produto da produção. */
+    private Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto(List<ProducaoProduto> produtos) {
+        Map<UUID, List<FichaTecnicaItem>> resultado = new HashMap<>();
+        for (ProducaoProduto pp : produtos) {
+            UUID produtoId = pp.getProduto().getId();
+            resultado.computeIfAbsent(produtoId, fichaTecnicaItemRepository::findByProdutoId);
+        }
+        return resultado;
     }
 
     @Transactional(readOnly = true)
@@ -839,7 +851,8 @@ public class ProducaoService {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
         List<Producao> producoesFilhas = producaoRepository.findByProducaoOrigemId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas);
+        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas,
+                fichaTecnicaPorProduto(produtos));
     }
 
     /** Componente (insumo ou produto-base) com a necessidade já somada entre todos os produtos da produção. */
@@ -1055,10 +1068,8 @@ public class ProducaoService {
 
             boolean algumInsumoNaoFracionavel = ficha.stream()
                     .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel()));
-            if (algumInsumoNaoFracionavel && quantidades.get(produtoId).compareTo(produto.getRendimento()) != 0) {
-                throw new BusinessException("Produto " + produto.getNome()
-                        + " não permite quantidade fracionada — a produção deve ser de exatamente "
-                        + produto.getRendimento() + " unidades");
+            if (algumInsumoNaoFracionavel) {
+                validarMultiploDoRendimento(produto, ficha, quantidades.get(produtoId));
             }
 
             produtos.add(produto);
@@ -1066,6 +1077,54 @@ public class ProducaoService {
         }
 
         return new ProdutosValidados(produtos, quantidades, fichas);
+    }
+
+    /**
+     * PDC-027 — substitui PDC-005 (Reversão #214). Produto com algum insumo não-fracionável na ficha
+     * já não trava mais em exatamente 1x o rendimento: aceita qualquer múltiplo inteiro, limitado ao
+     * estoque disponível dos insumos não-fracionáveis que não permitem estoque negativo.
+     *
+     * Correção (regressão achada no Frontend de #214, decisão de negócio confirmada 2026-08-08): o
+     * teto por estoque só se aplica quando há pelo menos 1x de estoque disponível (maxMultiplos >= 1).
+     * Estoque insuficiente para nem 1x o rendimento (maxMultiplos = 0) NÃO bloqueia a criação aqui —
+     * a produção segue o fluxo pré-existente de trava por estoque insuficiente (TRAVADA ao tentar
+     * Iniciar, com Dividir/Travar tudo/Retomar), que já existia antes de #214 e não muda.
+     */
+    private void validarMultiploDoRendimento(Produto produto, List<FichaTecnicaItem> ficha, BigDecimal quantidadeInformada) {
+        BigDecimal rendimento = produto.getRendimento();
+        if (quantidadeInformada.remainder(rendimento).compareTo(BigDecimal.ZERO) != 0) {
+            throw new BusinessException("Produto " + produto.getNome()
+                    + " exige quantidade em múltiplos de " + rendimento + " unidades");
+        }
+
+        BigDecimal multiploMaximoPermitido = null;
+        String insumoLimitante = null;
+        for (FichaTecnicaItem item : ficha) {
+            Insumo insumo = item.getInsumo();
+            boolean naoFracionavel = insumo != null && Boolean.FALSE.equals(insumo.getFracionavel());
+            if (!naoFracionavel || !Boolean.FALSE.equals(insumo.getPermitirEstoqueNegativo())) {
+                continue;
+            }
+
+            BigDecimal maxMultiplos = insumo.getEstoqueAtual().divideToIntegralValue(item.getQuantidade());
+            if (maxMultiplos.compareTo(BigDecimal.ZERO) == 0) {
+                // Sem estoque para nem 1x o rendimento — não limita a criação, fica para a trava pós-criação.
+                continue;
+            }
+            if (multiploMaximoPermitido == null || maxMultiplos.compareTo(multiploMaximoPermitido) < 0) {
+                multiploMaximoPermitido = maxMultiplos;
+                insumoLimitante = insumo.getNome();
+            }
+        }
+
+        if (multiploMaximoPermitido != null) {
+            BigDecimal quantidadeMaxima = multiploMaximoPermitido.multiply(rendimento);
+            if (quantidadeInformada.compareTo(quantidadeMaxima) > 0) {
+                throw new BusinessException("Produto " + produto.getNome()
+                        + ": quantidade máxima permitida é " + quantidadeMaxima
+                        + " unidades, limitado pelo estoque de " + insumoLimitante);
+            }
+        }
     }
 
     private List<ProducaoProduto> gravarProducaoProdutos(Producao producao, ProdutosValidados validados) {

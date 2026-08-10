@@ -26,4 +26,8 @@ public class OrcamentoItemResponse {
     private BigDecimal precoUnitario;
     private BigDecimal subtotal;
     private List<OrcamentoItemCustomizacaoResponse> customizacoes;
+    /** #238 — tag global fracionável/estoque negativo/estoque atual, mesmo padrão de ProdutoResponse. */
+    private boolean algumInsumoNaoFracionavel;
+    private boolean permitirEstoqueNegativo;
+    private BigDecimal estoqueAtual;
 }

@@ -155,7 +155,6 @@ class NumeroSequencialConcorrenciaIT {
         List<Integer> numeros = executarConcorrente(usuario.getEmail(), () -> {
             CatalogoRequest req = new CatalogoRequest();
             req.setNome("Catálogo Concorrente " + contador.incrementAndGet() + "-" + UUID.randomUUID());
-            req.setMargem(new BigDecimal("50"));
             return catalogoService.cadastrar(req).getNumero();
         });
         assertSemColisao(numeros);
@@ -168,7 +167,7 @@ class NumeroSequencialConcorrenciaIT {
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
         Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(1).nome("Bolo Concorrência").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(30).rendimento(BigDecimal.TEN).build());
+                .tempoProducao(30).rendimento(BigDecimal.TEN).precoVenda(new BigDecimal("10.00")).build());
         Insumo insumo = insumoRepository.save(Insumo.builder()
                 .usuario(usuario).numero(1).nome("Farinha Concorrência").marca("X").unidadeMedida("g")
                 .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
@@ -197,7 +196,7 @@ class NumeroSequencialConcorrenciaIT {
                 .usuario(usuario).numero(1).nome("Cliente Orçamento Concorrência").ativa(true).build());
         Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(1).nome("Produto Avulso Concorrência").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(30).build());
+                .tempoProducao(30).precoVenda(new BigDecimal("10.00")).build());
 
         List<Integer> numeros = executarConcorrente(usuario.getEmail(), () -> {
             OrcamentoRequest req = new OrcamentoRequest();

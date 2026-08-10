@@ -44,16 +44,16 @@ class ProdutoContagensIT {
         return produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(tipo)
                 .tempoProducao(30).ativo(ativo)
-                // chk_preco_venda_tipo — CUSTOMIZACAO exige preco_venda preenchido no banco
-                .precoVenda(tipo == TipoProduto.CUSTOMIZACAO ? new BigDecimal("10.00") : null)
+                // chk_preco_venda_tipo — preco_venda obrigatório pra todo tipo desde #210+231+234
+                .precoVenda(new BigDecimal("10.00"))
                 .build());
     }
 
     @Test
-    void contagemCorretaComProdutosDasTresCategoriasEInativos() {
+    void contagemCorretaComProdutosDasCategoriasEInativos() {
         seedUsuario();
         novoProduto("Kit Convite", 1, TipoProduto.PRODUTO, true);
-        novoProduto("Bolo Base", 2, TipoProduto.PRODUTO_BASE, true);
+        novoProduto("Kit Presente", 2, TipoProduto.PRODUTO, true);
         novoProduto("Embalagem Presente", 3, TipoProduto.CUSTOMIZACAO, true);
         novoProduto("Kit Antigo", 4, TipoProduto.PRODUTO, false);
 
@@ -61,8 +61,7 @@ class ProdutoContagensIT {
 
         assertEquals(4, contagens.getTotal());
         assertEquals(1, contagens.getInativos());
-        assertEquals(2, contagens.getPorTipo().getProduto());
-        assertEquals(1, contagens.getPorTipo().getProdutoBase());
+        assertEquals(3, contagens.getPorTipo().getProduto());
         assertEquals(1, contagens.getPorTipo().getCustomizacao());
     }
 
@@ -75,7 +74,6 @@ class ProdutoContagensIT {
         assertEquals(0, contagens.getTotal());
         assertEquals(0, contagens.getInativos());
         assertEquals(0, contagens.getPorTipo().getProduto());
-        assertEquals(0, contagens.getPorTipo().getProdutoBase());
         assertEquals(0, contagens.getPorTipo().getCustomizacao());
     }
 
@@ -89,7 +87,7 @@ class ProdutoContagensIT {
                 .senhaHash("x").ativo(true).build());
         produtoRepository.save(Produto.builder()
                 .usuario(outro).numero(1).nome("Kit Outro Usuário").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(30).ativo(true).build());
+                .tempoProducao(30).ativo(true).precoVenda(new BigDecimal("10.00")).build());
 
         ProdutoContagensResponse contagens = produtoService.contagens();
 

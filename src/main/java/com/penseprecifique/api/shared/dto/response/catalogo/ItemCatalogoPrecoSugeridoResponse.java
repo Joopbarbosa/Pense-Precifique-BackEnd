@@ -11,9 +11,8 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ItemCatalogoPrecoSugeridoResponse {
 
-    private BigDecimal custoUnitario;
+    private BigDecimal precoVendaProduto;
     private Integer quantidadePacote;
-    private BigDecimal custoCustomizacoes;
-    private BigDecimal margem;
+    private BigDecimal precoVendaCustomizacoes;
     private BigDecimal precoSugerido;
 }

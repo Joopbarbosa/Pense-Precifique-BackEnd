@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.mapper;
 
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
@@ -14,14 +15,18 @@ import com.penseprecifique.api.shared.dto.response.producao.ProducaoResumoRespon
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class ProducaoMapper {
 
     public ProducaoResponse toResponse(Producao producao, List<ProducaoProduto> produtos,
                                         List<AlertaInsumoResponse> alertasInsumos,
-                                        List<HistoricoStatusProducao> historicoStatus) {
+                                        List<HistoricoStatusProducao> historicoStatus,
+                                        Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto) {
         ProducaoResponse response = new ProducaoResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
@@ -30,7 +35,9 @@ public class ProducaoMapper {
         response.setDataInicio(producao.getDataInicio());
         response.setDataTerminoPrevista(producao.getDataTerminoPrevista());
         response.setObservacoes(producao.getObservacoes());
-        response.setProdutos(produtos.stream().map(this::toProducaoProdutoResponse).toList());
+        response.setProdutos(produtos.stream()
+                .map(pp -> toProducaoProdutoResponse(pp, fichaTecnicaPorProduto.get(pp.getProduto().getId())))
+                .toList());
         response.setAlertasInsumos(alertasInsumos);
         response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
         return response;
@@ -41,7 +48,8 @@ public class ProducaoMapper {
                                                        List<ProducaoProduto> produtos,
                                                        List<AlertaInsumoResponse> alertasInsumos,
                                                        List<HistoricoStatusProducao> historicoStatus,
-                                                       List<Producao> producoesFilhas) {
+                                                       List<Producao> producoesFilhas,
+                                                       Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto) {
         ProducaoDetalheResponse response = new ProducaoDetalheResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
@@ -55,7 +63,9 @@ public class ProducaoMapper {
         response.setJustificativaNaoRealizada(producao.getJustificativaNaoRealizada());
         response.setProducaoOrigemId(producao.getProducaoOrigem() != null ? producao.getProducaoOrigem().getId() : null);
         response.setTipoOrigem(producao.getTipoOrigem());
-        response.setProdutos(produtos.stream().map(this::toProducaoProdutoResponse).toList());
+        response.setProdutos(produtos.stream()
+                .map(pp -> toProducaoProdutoResponse(pp, fichaTecnicaPorProduto.get(pp.getProduto().getId())))
+                .toList());
         response.setAlertasInsumos(alertasInsumos);
         response.setInsumosConsumidos(insumosConsumidos.stream().map(this::toInsumoConsumidoResponse).toList());
         response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
@@ -81,13 +91,19 @@ public class ProducaoMapper {
         return response;
     }
 
-    public ProducaoProdutoResponse toProducaoProdutoResponse(ProducaoProduto producaoProduto) {
+    public ProducaoProdutoResponse toProducaoProdutoResponse(ProducaoProduto producaoProduto,
+                                                               List<FichaTecnicaItem> fichaTecnicaProduto) {
         ProducaoProdutoResponse response = new ProducaoProdutoResponse();
         response.setProdutoId(producaoProduto.getProduto().getId());
         response.setNomeProduto(producaoProduto.getProduto().getNome());
         response.setTipoProduto(producaoProduto.getProduto().getTipo());
         response.setQuantidade(producaoProduto.getQuantidade());
         response.setQuantidadePerdida(producaoProduto.getQuantidadePerdida());
+        response.setPermitirEstoqueNegativo(producaoProduto.getProduto().getPermitirEstoqueNegativo());
+        response.setEstoqueAtual(producaoProduto.getProduto().getEstoqueAtual());
+        List<FichaTecnicaItem> ficha = fichaTecnicaProduto != null ? fichaTecnicaProduto : Collections.emptyList();
+        response.setAlgumInsumoNaoFracionavel(ficha.stream()
+                .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel())));
         return response;
     }
 

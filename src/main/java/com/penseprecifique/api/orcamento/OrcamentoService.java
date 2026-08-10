@@ -1,6 +1,7 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
@@ -39,6 +40,7 @@ import com.penseprecifique.api.shared.mapper.OrcamentoMapper;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoCustomizacaoRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -76,6 +78,7 @@ public class OrcamentoService {
     private final ItemCatalogoCustomizacaoRepository itemCatalogoCustomizacaoRepository;
     private final ClienteRepository clienteRepository;
     private final ProdutoRepository produtoRepository;
+    private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final ReciboEstornoRepository reciboEstornoRepository;
@@ -758,7 +761,9 @@ public class OrcamentoService {
         for (OrcamentoItem item : itens) {
             List<OrcamentoItemCustomizacao> customizacoes =
                     orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId());
-            itensResponse.add(orcamentoMapper.toItemResponse(item, customizacoes));
+            List<FichaTecnicaItem> fichaTecnicaProduto =
+                    fichaTecnicaItemRepository.findByProdutoId(item.getProdutoVendido().getId());
+            itensResponse.add(orcamentoMapper.toItemResponse(item, customizacoes, fichaTecnicaProduto));
         }
         OrcamentoDetalheResponse response = orcamentoMapper.toDetalheResponse(orcamento, itens);
         response.setItens(itensResponse);

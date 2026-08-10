@@ -60,7 +60,7 @@ class ProducaoListagemHistoricoIT {
 
         Produto bolo = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(1).nome("Bolo").tipo(TipoProduto.PRODUTO)
-                .tempoProducao(60).rendimento(new BigDecimal("10")).build());
+                .tempoProducao(60).rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
 
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
                 .produto(bolo).insumo(farinha).quantidade(new BigDecimal("1")).build());
