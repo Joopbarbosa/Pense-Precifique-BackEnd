@@ -29,6 +29,13 @@ jwt:
   secret: ${JWT_SECRET}
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
+pdf:
+  microservice:
+    # Nome do serviço no docker-compose raiz (rede interna Docker) — trocar via env var quando o
+    # deploy em produção (VPS) tiver a URL real do microsserviço.
+    base-url: ${PDF_MICROSERVICE_BASE_URL:http://pense-precifique-pdf:3001}
+    timeout-seconds: ${PDF_MICROSERVICE_TIMEOUT_SECONDS:30}
+
 ---
 # ============================================================
 # application-dev.yml — desenvolvimento local

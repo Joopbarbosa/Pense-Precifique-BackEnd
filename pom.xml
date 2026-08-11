@@ -138,6 +138,20 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- WireMock — mocka o HTTP do microsserviço pense-precifique-pdf em PdfMicroservicoClientIT.
+             "-standalone" (não "wiremock" puro) de propósito: sombreia Jetty/Apache HttpClient5
+             internamente sob o pacote "wiremock.*" — o artefato "wiremock" comum exige que o
+             consumidor traga a própria versão de Jetty/httpclient5, e as versões que ele pede
+             (Jetty 12.0.14, httpclient5 5.5) colidem com as que spring-boot-dependencies gerencia
+             (nenhuma delas é usada por este projeto fora do WireMock, então não há downgrade real
+             a proteger — só um conflito de resolução de versão sem consumidor de verdade). -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.13.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

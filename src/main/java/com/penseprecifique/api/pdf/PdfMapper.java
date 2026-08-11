@@ -48,6 +48,57 @@ public class PdfMapper {
             .build();
     }
 
+    /**
+     * Remonta {@link OrcamentoPdfData} (achatado, usado pelo template Thymeleaf local) no formato
+     * aninhado {@code {empresa, documento}} exigido por {@code orcamentoSchema} do microsserviço
+     * pense-precifique-pdf (contrato-pdf.md seção 1) — reaproveita a formatação já validada em
+     * {@link #toOrcamentoPdfData}, só reempacota.
+     *
+     * <p>{@code logoUrl} vai sempre {@code null} nesta rodada — decisão explícita do MVP
+     * (contrato-pdf.md seção 1: campo existe na entidade {@code Empresa} mas nunca foi populado).
+     */
+    public PdfMicroservicoOrcamentoPayload toMicroservicoPayload(OrcamentoPdfData dados) {
+        PdfMicroservicoEmpresaPayload empresa = PdfMicroservicoEmpresaPayload.builder()
+            .nome(dados.getNomeEmpresa())
+            .email(dados.getEmailEmpresa())
+            .whatsapp(dados.getTelefoneEmpresa())
+            .logoUrl(null)
+            .build();
+
+        List<PdfMicroservicoItemPayload> itens = dados.getItens().stream()
+            .map(item -> PdfMicroservicoItemPayload.builder()
+                .nomeProduto(item.getNomeProduto())
+                .customizacoes(semPlaceholder(item.getCustomizacoes()))
+                .quantidade(item.getQuantidade())
+                .precoUnitario(item.getPrecoUnitario())
+                .subtotal(item.getSubtotal())
+                .build())
+            .collect(Collectors.toList());
+
+        PdfMicroservicoDocumentoOrcamentoPayload documento = PdfMicroservicoDocumentoOrcamentoPayload.builder()
+            .numeroFormatado(dados.getNumeroFormatado())
+            .nomeCliente(dados.getNomeCliente())
+            .dataEmissao(dados.getDataEmissao())
+            .dataValidade(dados.getDataValidade())
+            .prazoProducao(dados.getPrazoProducao())
+            .inicioProducao(dados.getInicioProducao())
+            .metodoPagamento(dados.getMetodoPagamento())
+            .sinalAtivo(dados.isSinalAtivo())
+            .valorSinal(dados.getValorSinal())
+            .restanteAposSinal(dados.getRestanteAposSinal())
+            .subtotal(dados.getSubtotal())
+            .desconto(dados.getDesconto())
+            .total(dados.getTotal())
+            .observacoes(dados.getObservacoes())
+            .itens(itens)
+            .build();
+
+        return PdfMicroservicoOrcamentoPayload.builder()
+            .empresa(empresa)
+            .documento(documento)
+            .build();
+    }
+
     public ReciboPdfData toReciboPdfData(Orcamento orc, Empresa empresa) {
         return ReciboPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
@@ -136,6 +187,16 @@ public class PdfMapper {
         return customizacoes.stream()
             .map(c -> c.getProduto().getNome())
             .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * {@code formatarCustomizacoes} usa "—" como placeholder de exibição pro template Thymeleaf
+     * local (mantido como está — fora do escopo desta integração). O schema do microsserviço
+     * (contrato-pdf.md seção 1) exige {@code null} explícito quando o item não tem customização,
+     * nunca o placeholder — só {@link #toMicroservicoPayload} precisa dessa tradução.
+     */
+    private String semPlaceholder(String valorFormatado) {
+        return "—".equals(valorFormatado) ? null : valorFormatado;
     }
 
     private String formatarMoeda(BigDecimal valor) {

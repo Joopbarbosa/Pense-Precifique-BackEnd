@@ -8,6 +8,8 @@ import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
+import com.penseprecifique.api.shared.dto.pdf.OrcamentoPdfData;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.empresa.EmpresaRepository;
@@ -45,6 +47,7 @@ public class PdfService {
     private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final PdfMapper pdfMapper;
+    private final PdfMicroservicoClient pdfMicroservicoClient;
 
     private byte[] renderizarPdf(String template, Context ctx) {
         String html = templateEngine.process("pdf/" + template, ctx);
@@ -62,6 +65,13 @@ public class PdfService {
         }
     }
 
+    /**
+     * Delega ao microsserviço pense-precifique-pdf (fluxo D do PRD) em vez do OpenHTMLToPDF local
+     * — {@link #renderizarPdf} e o template Thymeleaf "orcamento" ficam sem uso aqui, mas não são
+     * removidos ainda (fallback até o novo fluxo ser validado em uso real; limpeza é tarefa
+     * separada). Os outros documentos (recibo-sinal, recibo-pagamento, pdf-multa, recibo-estorno)
+     * continuam no fluxo antigo — fora do escopo deste MVP (só orçamento).
+     */
     public byte[] gerarPdfOrcamento(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
@@ -73,10 +83,10 @@ public class PdfService {
                 .collect(Collectors.toMap(OrcamentoItem::getId,
                         item -> orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId())));
 
-        Context ctx = new Context();
-        ctx.setVariable("dados", pdfMapper.toOrcamentoPdfData(orcamento, empresa, itens, customizacoesPorItem));
+        OrcamentoPdfData dados = pdfMapper.toOrcamentoPdfData(orcamento, empresa, itens, customizacoesPorItem);
+        PdfMicroservicoOrcamentoPayload payload = pdfMapper.toMicroservicoPayload(dados);
 
-        return renderizarPdf("orcamento", ctx);
+        return pdfMicroservicoClient.gerarPdf("orcamento", orcamentoId, payload);
     }
 
     public byte[] gerarReciboSinal(UUID orcamentoId) {
