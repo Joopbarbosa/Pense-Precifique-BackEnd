@@ -3,6 +3,7 @@ package com.penseprecifique.api.pdf;
 import com.penseprecifique.api.shared.domain.entity.Empresa;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
@@ -10,6 +11,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.empresa.EmpresaRepository;
+import com.penseprecifique.api.orcamento.OrcamentoItemCustomizacaoRepository;
 import com.penseprecifique.api.orcamento.OrcamentoItemRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
 import com.penseprecifique.api.orcamento.ReciboPagamentoRepository;
@@ -25,7 +27,9 @@ import org.thymeleaf.spring6.SpringTemplateEngine;
 
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -39,6 +43,7 @@ public class PdfService {
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
+    private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final PdfMapper pdfMapper;
 
     private byte[] renderizarPdf(String template, Context ctx) {
@@ -64,9 +69,12 @@ public class PdfService {
 
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem = itens.stream()
+                .collect(Collectors.toMap(OrcamentoItem::getId,
+                        item -> orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId())));
 
         Context ctx = new Context();
-        ctx.setVariable("dados", pdfMapper.toOrcamentoPdfData(orcamento, empresa, itens));
+        ctx.setVariable("dados", pdfMapper.toOrcamentoPdfData(orcamento, empresa, itens, customizacoesPorItem));
 
         return renderizarPdf("orcamento", ctx);
     }

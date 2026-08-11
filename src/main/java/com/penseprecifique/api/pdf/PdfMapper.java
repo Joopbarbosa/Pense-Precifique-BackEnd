@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -21,7 +23,8 @@ public class PdfMapper {
     private static final DecimalFormat MOEDA_FORMATTER =
         new DecimalFormat("#,##0.00", new DecimalFormatSymbols(Locale.of("pt", "BR")));
 
-    public OrcamentoPdfData toOrcamentoPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens) {
+    public OrcamentoPdfData toOrcamentoPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
+            Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         return OrcamentoPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
@@ -41,7 +44,7 @@ public class PdfMapper {
             .desconto(formatarDesconto(orc))
             .total(formatarMoeda(orc.getTotal()))
             .observacoes(orc.getObservacoes())
-            .itens(mapearItens(itens))
+            .itens(mapearItens(itens, customizacoesPorItem))
             .build();
     }
 
@@ -109,19 +112,30 @@ public class PdfMapper {
             .build();
     }
 
-    private List<ItemPdfData> mapearItens(List<OrcamentoItem> itens) {
+    private List<ItemPdfData> mapearItens(List<OrcamentoItem> itens,
+            Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         if (itens == null || itens.isEmpty()) {
             return List.of();
         }
         return itens.stream()
             .map(item -> ItemPdfData.builder()
-                .nomeProduto(item.getItemCatalogo() != null ? item.getItemCatalogo().getProduto().getNome() : "—")
-                .customizacoes("—")
+                .nomeProduto(item.getProdutoVendido().getNome())
+                .customizacoes(formatarCustomizacoes(
+                        customizacoesPorItem != null ? customizacoesPorItem.get(item.getId()) : null))
                 .quantidade(item.getQuantidade() != null ? item.getQuantidade().toString() : "—")
                 .precoUnitario(item.getPrecoUnitario() != null ? formatarMoeda(item.getPrecoUnitario()) : "—")
                 .subtotal(item.getSubtotal() != null ? formatarMoeda(item.getSubtotal()) : "—")
                 .build())
             .collect(Collectors.toList());
+    }
+
+    private String formatarCustomizacoes(List<OrcamentoItemCustomizacao> customizacoes) {
+        if (customizacoes == null || customizacoes.isEmpty()) {
+            return "—";
+        }
+        return customizacoes.stream()
+            .map(c -> c.getProduto().getNome())
+            .collect(Collectors.joining(", "));
     }
 
     private String formatarMoeda(BigDecimal valor) {
