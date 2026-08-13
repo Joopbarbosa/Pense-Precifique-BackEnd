@@ -147,6 +147,33 @@ class PdfMicroservicoClientIT {
     }
 
     @Test
+    void gerarHtmlSucessoRetornaStringDoMicroservicoComFormatHtml() {
+        String htmlFalso = "<html><body>Preview de teste</body></html>";
+        wireMockServer.stubFor(post(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=html"))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "text/html")
+                        .withBody(htmlFalso)));
+
+        String resultado = client.gerarHtml("orcamento", ORCAMENTO_ID, payloadMinimo());
+
+        assertEquals(htmlFalso, resultado);
+        wireMockServer.verify(postRequestedFor(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=html"))
+                .withHeader("X-User-Token", equalTo("token-de-teste-123")));
+    }
+
+    @Test
+    void gerarHtmlMicroservicoIndisponivel503LancaMesmaBusinessExceptionAmigavelDoGerarPdf() {
+        wireMockServer.stubFor(post(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=html"))
+                .willReturn(aResponse().withStatus(503)));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> client.gerarHtml("orcamento", ORCAMENTO_ID, payloadMinimo()));
+
+        assertEquals("Geração de documento temporariamente indisponível. Tente novamente em instantes.",
+                ex.getMessage());
+    }
+
+    @Test
     void payloadRejeitado400NaoVazaDetalheDoMicroservicoAoUsuario() {
         wireMockServer.stubFor(post(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=pdf"))
                 .willReturn(aResponse().withStatus(400)

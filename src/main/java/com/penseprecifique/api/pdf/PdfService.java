@@ -73,6 +73,21 @@ public class PdfService {
      * continuam no fluxo antigo — fora do escopo deste MVP (só orçamento).
      */
     public byte[] gerarPdfOrcamento(UUID orcamentoId) {
+        PdfMicroservicoOrcamentoPayload payload = montarPayloadOrcamento(orcamentoId);
+        return pdfMicroservicoClient.gerarPdf("orcamento", orcamentoId, payload);
+    }
+
+    /**
+     * Preview (Fluxo E do PRD) — mesma montagem de payload de {@link #gerarPdfOrcamento}, só
+     * troca a chamada final para {@code format=html}: preview e download vêm da mesma fonte
+     * (o microsserviço), sem layout duplicado no frontend.
+     */
+    public String gerarPreviewHtmlOrcamento(UUID orcamentoId) {
+        PdfMicroservicoOrcamentoPayload payload = montarPayloadOrcamento(orcamentoId);
+        return pdfMicroservicoClient.gerarHtml("orcamento", orcamentoId, payload);
+    }
+
+    private PdfMicroservicoOrcamentoPayload montarPayloadOrcamento(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
@@ -84,9 +99,7 @@ public class PdfService {
                         item -> orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId())));
 
         OrcamentoPdfData dados = pdfMapper.toOrcamentoPdfData(orcamento, empresa, itens, customizacoesPorItem);
-        PdfMicroservicoOrcamentoPayload payload = pdfMapper.toMicroservicoPayload(dados);
-
-        return pdfMicroservicoClient.gerarPdf("orcamento", orcamentoId, payload);
+        return pdfMapper.toMicroservicoPayload(dados);
     }
 
     public byte[] gerarReciboSinal(UUID orcamentoId) {

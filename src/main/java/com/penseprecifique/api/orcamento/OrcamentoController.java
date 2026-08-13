@@ -16,9 +16,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -93,6 +95,14 @@ public class OrcamentoController {
                 .header("Content-Type", "application/pdf")
                 .header("Content-Disposition", "attachment; filename=orcamento.pdf")
                 .body(pdf);
+    }
+
+    @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtml(@PathVariable UUID id) {
+        String html = pdfService.gerarPreviewHtmlOrcamento(id);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(html);
     }
 
     @GetMapping("/{id}/recibo-sinal")

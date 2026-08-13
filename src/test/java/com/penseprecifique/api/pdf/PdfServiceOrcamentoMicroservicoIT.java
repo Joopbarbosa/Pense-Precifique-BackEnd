@@ -36,7 +36,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -139,6 +141,39 @@ class PdfServiceOrcamentoMicroservicoIT {
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> pdfService.gerarPdfOrcamento(orcamentoId));
+
+        assertEquals("Geração de documento temporariamente indisponível. Tente novamente em instantes.",
+                ex.getMessage());
+    }
+
+    @Test
+    @Transactional
+    void gerarPreviewHtmlOrcamentoChamaOMicroservicoComFormatHtmlERetornaOHtml() {
+        UUID orcamentoId = criarOrcamentoSimples();
+        String htmlFalso = "<html><body>Preview e2e</body></html>";
+
+        wireMockServer.stubFor(post(urlPathMatching("/render/orcamento/" + orcamentoId + ".*"))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "text/html")
+                        .withBody(htmlFalso)));
+
+        String resultado = pdfService.gerarPreviewHtmlOrcamento(orcamentoId);
+
+        assertEquals(htmlFalso, resultado);
+        wireMockServer.verify(postRequestedFor(urlPathMatching("/render/orcamento/" + orcamentoId + ".*"))
+                .withQueryParam("format", equalTo("html")));
+    }
+
+    @Test
+    @Transactional
+    void gerarPreviewHtmlOrcamentoPropagaMensagemAmigavelQuandoMicroservicoFalha() {
+        UUID orcamentoId = criarOrcamentoSimples();
+
+        wireMockServer.stubFor(post(urlPathMatching("/render/orcamento/" + orcamentoId + ".*"))
+                .willReturn(aResponse().withStatus(503)));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> pdfService.gerarPreviewHtmlOrcamento(orcamentoId));
 
         assertEquals("Geração de documento temporariamente indisponível. Tente novamente em instantes.",
                 ex.getMessage());

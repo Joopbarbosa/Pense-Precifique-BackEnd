@@ -16,6 +16,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.UUID;
 
@@ -69,9 +70,29 @@ public class PdfMicroservicoClient {
     }
 
     public byte[] gerarPdf(String tipo, UUID id, PdfMicroservicoOrcamentoPayload payload) {
+        return renderizar(tipo, id, payload, "pdf");
+    }
+
+    /**
+     * Mesmo endpoint de {@link #gerarPdf}, só muda o {@code format} — usado pelo preview
+     * (Fluxo E do PRD), que exibe o HTML retornado em vez de gerar o binário via Puppeteer.
+     *
+     * <p>Lê sempre como {@code byte[]} e decodifica explicitamente em UTF-8, em vez de pedir
+     * {@code .body(String.class)} — o {@code StringHttpMessageConverter} do {@code RestClient}
+     * cai no charset default (ISO-8859-1) quando o microsserviço não declara {@code charset} no
+     * header {@code Content-Type: text/html}, corrompendo qualquer acentuação (nome de cliente,
+     * empresa, produto — comum em dado PT-BR). Confirmado via teste de integração antes desta
+     * correção.
+     */
+    public String gerarHtml(String tipo, UUID id, PdfMicroservicoOrcamentoPayload payload) {
+        byte[] bytes = renderizar(tipo, id, payload, "html");
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private byte[] renderizar(String tipo, UUID id, PdfMicroservicoOrcamentoPayload payload, String format) {
         try {
             return restClient.post()
-                    .uri("/render/{tipo}/{id}?format=pdf", tipo, id)
+                    .uri("/render/{tipo}/{id}?format={format}", tipo, id, format)
                     .header("X-User-Token", tokenAtual())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
