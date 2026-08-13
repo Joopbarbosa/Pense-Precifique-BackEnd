@@ -35,4 +35,26 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
     """)
     List<ItemCatalogo> buscarDisponiveisParaOrcamento(@Param("usuarioId") UUID usuarioId,
                                                        @Param("catalogoId") UUID catalogoId);
+
+    /**
+     * RN-NOVA-6 (#217) — mesma consulta acima com filtro por nome do produto (case-insensitive).
+     * Método separado (em vez de `:busca IS NULL OR ...` na mesma query) porque bind de parâmetro
+     * nulo dentro de `LOWER(CONCAT(...))` faz o Hibernate/driver inferir o tipo como `bytea` e o
+     * Postgres rejeita com "function lower(bytea) does not exist" — mesmo padrão de
+     * ProdutoService#listar (`temBusca` decide qual finder chamar), não um `CAST` no JPQL.
+     */
+    @Query("""
+        SELECT ic FROM ItemCatalogo ic
+        WHERE ic.catalogo.usuario.id = :usuarioId
+        AND ic.deletedAt IS NULL
+        AND ic.catalogo.ativo = true
+        AND ic.produto.ativo = true
+        AND ic.produto.deletedAt IS NULL
+        AND (:catalogoId IS NULL OR ic.catalogo.id = :catalogoId)
+        AND LOWER(ic.produto.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
+        ORDER BY ic.produto.nome
+    """)
+    List<ItemCatalogo> buscarDisponiveisParaOrcamentoComBusca(@Param("usuarioId") UUID usuarioId,
+                                                                @Param("catalogoId") UUID catalogoId,
+                                                                @Param("busca") String busca);
 }

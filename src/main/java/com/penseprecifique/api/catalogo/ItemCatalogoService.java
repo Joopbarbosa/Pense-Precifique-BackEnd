@@ -62,11 +62,17 @@ public class ItemCatalogoService {
      * RN-044/045/046 — busca de itens de catálogo para a Seção Itens do orçamento.
      * Diferente de {@code buscarItemCatalogoParaVenda} (validação ao adicionar um item específico),
      * aqui o bloqueio é aplicado como filtro de listagem: o item simplesmente não aparece na busca.
+     * RN-NOVA-6 (#217) — `busca` filtra por nome do produto, server-side (mesmo padrão de
+     * ProdutoService#listar); em branco/nulo, retorna a listagem completa.
      */
     @Transactional(readOnly = true)
-    public List<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId) {
+    public List<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        return itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId).stream()
+        boolean temBusca = busca != null && !busca.isBlank();
+        List<ItemCatalogo> itens = temBusca
+                ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim())
+                : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId);
+        return itens.stream()
                 .map(item -> itemCatalogoMapper.toBuscaResponse(item,
                         fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId())))
                 .toList();

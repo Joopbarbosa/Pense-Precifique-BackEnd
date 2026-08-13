@@ -46,8 +46,9 @@ public class OrcamentoController {
 
     @GetMapping("/itens-catalogo")
     public ResponseEntity<List<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
-            @RequestParam(required = false) UUID catalogoId) {
-        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId));
+            @RequestParam(required = false) UUID catalogoId,
+            @RequestParam(required = false) String busca) {
+        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId, busca));
     }
 
     @GetMapping("/{id}")
