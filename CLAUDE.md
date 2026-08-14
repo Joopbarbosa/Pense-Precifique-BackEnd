@@ -1,12 +1,22 @@
 # Pense & Precifique — Contexto do Back-End
 
-> **V0.7** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
+> **V0.8** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
 > Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
 > Atualizado em: 2026-07-20 — Retomada de fechamento V0.6: varredura de resíduos do fluxo antigo de Produção (nenhum encontrado em código, exceto coluna/campo órfão `data_producao`/`dataProducao` — ver Bugs conhecidos), ciclo de vida completo documentado (6 estados, transições, agrupamento/divisão), contrato de `consumoReal`, RN-069 (PDC-010), race condition conhecida do número sequencial, RN-037 (PDC-021)/RN-060 (PDC-001) marcadas obsoletas.
 > Atualizado em: 2026-07-31 — Retomada de fechamento V0.6.1.1 (pocket de limpeza): endpoints novos/alterados documentados (`simular-alertas` de Produção e Orçamento, `contagens`/`inativar`/`reativar` de Produto, filtro de data em Orçamento), RN-051 (PDC-005) corrigida no endpoint de Produção (conceito de `lotes` removido), decisão de fluxo sem branch por tarefa, aprendizado sobre confirmar payload real antes de confiar em nota de backlog "decisão registrada".
 > Atualizado em: 2026-08-05 — Reorganização estrutural pura de `shared/dto/request/` e `shared/dto/response/` por módulo de domínio (achado do usuário: 30+ arquivos numa pasta linear só alfabética). Sem mudança de payload/endpoint/comportamento — ver seção "Estrutura de pacotes".
 > Atualizado em: 2026-08-10 — Retomada de fechamento V0.7: `PRODUTO_BASE` eliminado (migration V28, PDT-001), múltiplos do rendimento em Produção (PDC-027, ex-PDC-005), Catálogo perde margem própria e herda `preco_venda` do Produto (migration V29, CAT-003), inativação reversível de Insumo (INS-010/011) e padrão `resolver-vinculos` por blocos independentes em Produto/Insumo (PDT-013/014, INS-012). GitFlow por versão retomado (ver "Padrão de commits"/regra abaixo). `docs-pense-precifique/` passou a ser um repositório git próprio nesta versão — ver "Documentação externa".
+> Atualizado em: 2026-08-14 — Retomada de fechamento V0.8: épico #89 consolidado — `PdfService`
+> delega geração de PDF/preview de Orçamento ao microsserviço externo `pense-precifique-pdf` via
+> `PdfMicroservicoClient` (novo endpoint `GET /orcamentos/{id}/preview-html`), arquitetura padrão
+> de geração de documento a partir de agora (os outros 4 tipos continuam locais até migração
+> própria — ver "Stack"). Corrigido no caminho: `PdfMapper.mapearItens()` não resolvia produto
+> avulso/customizações reais (bug urgente, achado no Passo 0 do épico). #217 (busca de item de
+> catálogo server-side, `?busca=` em `GET /orcamentos/itens-catalogo`) e #218 (bloqueio de
+> `POST /orcamentos` por estoque insuficiente + DTO dedicado `SimulacaoEstoqueProdutoResponse`)
+> fecham o pocket. Dependência nova de infraestrutura (backend → serviço externo via HTTP)
+> registrada em `docs-pense-precifique/MAPA_INTERDEPENDENCIAS.md`.
 
 ---
 
@@ -17,7 +27,12 @@
 - **Banco:** PostgreSQL 16 (Docker)
 - **Autenticação:** JWT stateless (HS512)
 - **Migrations:** Flyway — `resources/db/migration/`, até V16 (tabela completa abaixo, todos os nomes confirmados via `ls`)
-- **PDF:** OpenHTMLToPDF + Thymeleaf (PdfMapper pattern)
+- **PDF:** híbrido desde V0.8 (épico #89) — **Orçamento** delega ao microsserviço externo
+  `pense-precifique-pdf` (Node/Express/React SSR/Puppeteer, `PdfMicroservicoClient`, ver
+  `docs-pense-precifique/modulos/PDF/`), arquitetura padrão para geração de documento daqui pra
+  frente. Os outros 4 tipos (recibo-sinal, recibo-pagamento, pdf-multa, recibo-estorno) continuam
+  em OpenHTMLToPDF + Thymeleaf local (`PdfMapper` pattern) até migração própria, pós-gate de
+  aprovação do MVP.
 - **Documentação:** Springdoc OpenAPI (Swagger) — apenas em `dev`
 - **Build:** Maven (`./mvnw`)
 
@@ -311,7 +326,8 @@ ${dados.total}
 | GET | /orcamentos/itens/busca | Busca de item de catálogo com filtro opcional por catálogo (EP-07, confirmar path exato) |
 | POST | /orcamentos/{id}/avancar-status | Transição de status |
 | POST | /orcamentos/{id}/cancelar | Cancela (wizard por status) |
-| GET | /orcamentos/{id}/pdf | PDF do orçamento |
+| GET | /orcamentos/{id}/pdf | PDF do orçamento — delega ao microsserviço `pense-precifique-pdf` (épico #89, V0.8), via `PdfMicroservicoClient`. Outros 4 tipos abaixo continuam via OpenHTMLToPDF/Thymeleaf local até migração própria |
+| GET | /orcamentos/{id}/preview-html | **Novo (épico #89, V0.8)** — proxy para o preview HTML do microsserviço (`text/html;charset=UTF-8`), consumido pelo frontend via `<iframe srcDoc>` |
 | GET | /orcamentos/{id}/recibo-sinal | Recibo do sinal |
 | GET | /orcamentos/{id}/recibo-pagamento | Recibo de pagamento |
 | GET | /orcamentos/{id}/pdf-multa | PDF de multa |
