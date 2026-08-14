@@ -75,6 +75,18 @@ class ItemCatalogoBuscaOrcamentoIT {
     }
 
     @Test
+    void respostaExpoeProdutoId() {
+        seedUsuarioECatalogo();
+        ItemCatalogo item = novoItem("Kit Convite Floral", 1);
+
+        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null);
+
+        assertEquals(1, resultado.size());
+        assertEquals(item.getProduto().getId(), resultado.get(0).getProdutoId(),
+                "#218 — produtoId precisa estar presente para montar a navegação de criação de produção");
+    }
+
+    @Test
     void buscaFiltraPorNomeDoProdutoCaseInsensitive() {
         seedUsuarioECatalogo();
         novoItem("Kit Convite Floral", 1);

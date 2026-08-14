@@ -55,6 +55,7 @@ public class ItemCatalogoMapper {
     public ItemCatalogoBuscaResponse toBuscaResponse(ItemCatalogo item, List<FichaTecnicaItem> fichaTecnicaProduto) {
         ItemCatalogoBuscaResponse response = new ItemCatalogoBuscaResponse();
         response.setId(item.getId());
+        response.setProdutoId(item.getProduto().getId());
         response.setNomeProduto(item.getProduto().getNome());
         response.setPrecoVenda(item.getPrecoVenda());
         response.setCatalogoNome(item.getCatalogo().getNome());
