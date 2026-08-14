@@ -26,11 +26,11 @@ import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemCustomi
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
-import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoqueProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
@@ -159,6 +159,7 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
 
         validarRegras(request);
+        validarEstoqueSuficiente(request.getItens(), usuarioId);
 
         TipoDesconto tipoDesconto = parseTipoDesconto(request.getTipoDesconto());
 
@@ -273,69 +274,88 @@ public class OrcamentoService {
      * (RN-NOVA-7). Diferença de modelo: Orçamento vende Produto já pronto (estoque do próprio
      * Produto), não consumo de insumo via ficha técnica — por isso a resolução usa
      * {@code Produto.estoqueAtual}/{@code permitirEstoqueNegativo} (mesmo critério de
-     * {@link #calcularAvisosEstoque}/{@link #validarEstoqueParaFinalizar}), não
-     * {@code calcularAlertas} de Produção. Reaproveita {@link AlertaInsumoResponse}/
-     * {@link SituacaoAlertaInsumo} (campo "nomeInsumo" já é genérico em Produção — cobre também
-     * produtoBase de ficha técnica — aqui recebe o nome do Produto vendido) para manter o mesmo
-     * contrato de "situação estruturada" no frontend. SUFICIENTE não é filtrado aqui, mesmo
+     * {@link #calcularAvisosEstoque}/{@link #validarEstoqueParaFinalizar}/{@link #decidirSituacaoEstoque}).
+     * #218 (RN-NOVA-8/9) — resposta dedicada {@link SimulacaoEstoqueProdutoResponse}, com
+     * {@code permitirEstoqueNegativo} explícito (gap do antigo reaproveitamento de
+     * {@code AlertaInsumoResponse}, DTO de Produção). SUFICIENTE não é filtrado aqui, mesmo
      * comportamento não-filtrado do simularAlertas de Produção — quem decide omitir da exibição é
      * o front.
      */
     @Transactional(readOnly = true)
-    public List<AlertaInsumoResponse> simularAlertas(List<SimularAlertasOrcamentoItemRequest> itens) {
+    public List<SimulacaoEstoqueProdutoResponse> simularAlertas(List<SimularAlertasOrcamentoItemRequest> itens) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
         Map<UUID, BigDecimal> necessidadePorProduto = new LinkedHashMap<>();
         Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
 
         for (SimularAlertasOrcamentoItemRequest item : itens) {
-            boolean temCatalogo = item.getItemCatalogoId() != null;
-            boolean temProduto = item.getProdutoId() != null;
-            if (temCatalogo == temProduto) {
-                throw new BusinessException(
-                        "Cada item deve ter exatamente uma origem: itemCatalogoId (Catálogo) ou produtoId (avulso).");
-            }
-
-            Produto produto;
-            BigDecimal necessaria;
-            if (temCatalogo) {
-                ItemCatalogo itemCatalogo = itemCatalogoRepository.findByIdAndDeletedAtIsNull(item.getItemCatalogoId())
-                        .filter(i -> i.getCatalogo().getUsuario().getId().equals(usuarioId))
-                        .orElseThrow(() -> new BusinessException("Item de catálogo não encontrado"));
-                produto = itemCatalogo.getProduto();
-                necessaria = BigDecimal.valueOf((long) item.getQuantidade() * itemCatalogo.getQuantidadePacote());
-            } else {
-                produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(item.getProdutoId(), usuarioId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
-                necessaria = BigDecimal.valueOf(item.getQuantidade());
-            }
-
-            necessidadePorProduto.merge(produto.getId(), necessaria, BigDecimal::add);
-            produtosPorId.putIfAbsent(produto.getId(), produto);
+            ProdutoNecessario resolvido = resolverProdutoNecessario(
+                    item.getItemCatalogoId(), item.getProdutoId(), item.getQuantidade(), usuarioId);
+            necessidadePorProduto.merge(resolvido.produto().getId(), resolvido.necessaria(), BigDecimal::add);
+            produtosPorId.putIfAbsent(resolvido.produto().getId(), resolvido.produto());
         }
 
-        List<AlertaInsumoResponse> alertas = new ArrayList<>();
+        List<SimulacaoEstoqueProdutoResponse> alertas = new ArrayList<>();
         for (Map.Entry<UUID, BigDecimal> entry : necessidadePorProduto.entrySet()) {
             Produto produto = produtosPorId.get(entry.getKey());
             BigDecimal necessaria = entry.getValue();
+            boolean permitirEstoqueNegativo = Boolean.TRUE.equals(produto.getPermitirEstoqueNegativo());
 
-            SituacaoAlertaInsumo situacao;
-            if (produto.getEstoqueAtual().compareTo(necessaria) >= 0) {
-                situacao = SituacaoAlertaInsumo.SUFICIENTE;
-            } else if (Boolean.FALSE.equals(produto.getPermitirEstoqueNegativo())) {
-                situacao = SituacaoAlertaInsumo.BLOQUEIO_FUTURO;
-            } else {
-                situacao = SituacaoAlertaInsumo.AVISO;
-            }
-
-            AlertaInsumoResponse alerta = new AlertaInsumoResponse();
-            alerta.setNomeInsumo(produto.getNome());
+            SimulacaoEstoqueProdutoResponse alerta = new SimulacaoEstoqueProdutoResponse();
+            alerta.setProdutoId(produto.getId());
+            alerta.setNomeProduto(produto.getNome());
             alerta.setEstoqueAtual(produto.getEstoqueAtual());
             alerta.setQuantidadeNecessaria(necessaria);
-            alerta.setSituacao(situacao);
+            alerta.setPermitirEstoqueNegativo(permitirEstoqueNegativo);
+            alerta.setSituacao(decidirSituacaoEstoque(produto.getEstoqueAtual(), necessaria, permitirEstoqueNegativo));
             alertas.add(alerta);
         }
         return alertas;
+    }
+
+    /**
+     * RN-NOVA-8/9/RN-081 — critério único de "situação de estoque" para um Produto vendido em
+     * Orçamento, compartilhado entre {@link #simularAlertas} e o bloqueio pré-save de
+     * RN-NOVA-10 ({@link #validarEstoqueSuficiente}) — os dois lugares precisam concordar no
+     * mesmo critério do que conta como "insuficiente".
+     */
+    private SituacaoAlertaInsumo decidirSituacaoEstoque(BigDecimal estoqueAtual, BigDecimal necessaria,
+                                                          boolean permitirEstoqueNegativo) {
+        if (estoqueAtual.compareTo(necessaria) >= 0) {
+            return SituacaoAlertaInsumo.SUFICIENTE;
+        }
+        return permitirEstoqueNegativo ? SituacaoAlertaInsumo.AVISO : SituacaoAlertaInsumo.BLOQUEIO_FUTURO;
+    }
+
+    /** Resolução de item em construção (Catálogo ou avulso) para o Produto vendido + quantidade necessária. */
+    private record ProdutoNecessario(Produto produto, BigDecimal necessaria) {
+    }
+
+    /**
+     * Resolve a origem XOR de um item em construção (itemCatalogoId ou produtoId) para o Produto
+     * vendido e a quantidade necessária dele — mesma resolução usada por {@link #simularAlertas} e
+     * pelo bloqueio pré-save de RN-NOVA-10, para não divergir em qual produto/quantidade cada
+     * caminho está avaliando.
+     */
+    private ProdutoNecessario resolverProdutoNecessario(UUID itemCatalogoId, UUID produtoId, int quantidade,
+                                                          UUID usuarioId) {
+        boolean temCatalogo = itemCatalogoId != null;
+        boolean temProduto = produtoId != null;
+        if (temCatalogo == temProduto) {
+            throw new BusinessException(
+                    "Cada item deve ter exatamente uma origem: itemCatalogoId (Catálogo) ou produtoId (avulso).");
+        }
+
+        if (temCatalogo) {
+            ItemCatalogo itemCatalogo = itemCatalogoRepository.findByIdAndDeletedAtIsNull(itemCatalogoId)
+                    .filter(i -> i.getCatalogo().getUsuario().getId().equals(usuarioId))
+                    .orElseThrow(() -> new BusinessException("Item de catálogo não encontrado"));
+            BigDecimal necessaria = BigDecimal.valueOf((long) quantidade * itemCatalogo.getQuantidadePacote());
+            return new ProdutoNecessario(itemCatalogo.getProduto(), necessaria);
+        }
+        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        return new ProdutoNecessario(produto, BigDecimal.valueOf(quantidade));
     }
 
     /**
@@ -718,6 +738,43 @@ public class OrcamentoService {
                 && request.getPercentualSinal() == null
                 && request.getValorSinal() == null) {
             throw new BusinessException("Quando o sinal está ativo, o percentual ou o valor do sinal deve ser informado");
+        }
+    }
+
+    /**
+     * RN-NOVA-10 — defesa em profundidade de RN-NOVA-8: bloqueia POST /orcamentos (400) antes de
+     * qualquer persistência quando algum item tem permitirEstoqueNegativo=false e a quantidade
+     * solicitada excede o estoque atual do Produto. Mesma resolução de origem
+     * ({@link #resolverProdutoNecessario}) e mesmo critério de situação
+     * ({@link #decidirSituacaoEstoque}) do endpoint de simulação ({@link #simularAlertas}), para os
+     * dois lugares nunca divergirem no que conta como "insuficiente". Itens com
+     * permitirEstoqueNegativo=true e estoque insuficiente não são bloqueados aqui — continuam
+     * cobertos só pelo aviso informativo pós-criação de {@link #calcularAvisosEstoque}.
+     */
+    private void validarEstoqueSuficiente(List<OrcamentoItemRequest> itens, UUID usuarioId) {
+        Map<UUID, BigDecimal> necessidadePorProduto = new LinkedHashMap<>();
+        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
+
+        for (OrcamentoItemRequest itemReq : itens) {
+            ProdutoNecessario resolvido = resolverProdutoNecessario(
+                    itemReq.getItemCatalogoId(), itemReq.getProdutoId(), itemReq.getQuantidade(), usuarioId);
+            necessidadePorProduto.merge(resolvido.produto().getId(), resolvido.necessaria(), BigDecimal::add);
+            produtosPorId.putIfAbsent(resolvido.produto().getId(), resolvido.produto());
+        }
+
+        List<String> bloqueados = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : necessidadePorProduto.entrySet()) {
+            Produto produto = produtosPorId.get(entry.getKey());
+            boolean permitirEstoqueNegativo = Boolean.TRUE.equals(produto.getPermitirEstoqueNegativo());
+            SituacaoAlertaInsumo situacao = decidirSituacaoEstoque(produto.getEstoqueAtual(), entry.getValue(), permitirEstoqueNegativo);
+            if (situacao == SituacaoAlertaInsumo.BLOQUEIO_FUTURO) {
+                bloqueados.add(produto.getNome());
+            }
+        }
+        if (!bloqueados.isEmpty()) {
+            throw new BusinessException(
+                    "Estoque insuficiente para " + String.join(", ", bloqueados)
+                            + ". Este(s) produto(s) não permite(m) estoque negativo.");
         }
     }
 

@@ -4,11 +4,11 @@ import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
-import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoqueProdutoResponse;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;
@@ -68,7 +68,7 @@ public class OrcamentoController {
     }
 
     @PostMapping("/simular-alertas")
-    public ResponseEntity<List<AlertaInsumoResponse>> simularAlertas(
+    public ResponseEntity<List<SimulacaoEstoqueProdutoResponse>> simularAlertas(
             @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {
         return ResponseEntity.ok(orcamentoService.simularAlertas(itens));
     }

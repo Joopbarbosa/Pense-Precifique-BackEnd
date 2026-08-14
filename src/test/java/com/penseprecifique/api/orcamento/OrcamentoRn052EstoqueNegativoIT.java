@@ -121,8 +121,14 @@ class OrcamentoRn052EstoqueNegativoIT {
     @Test
     void permitirEstoqueNegativoFalseContinuaBloqueandoSemGateDeConfirmacao() {
         seedUsuarioECliente();
-        Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("3"), false);
+        // #218/RN-NOVA-10 — estoque suficiente na criação (10 >= 10) para não ser barrado por
+        // POST /orcamentos; o estoque cai para 3 só depois, simulando outra operação consumindo
+        // estoque no intervalo (RN-NOVA-11 — estoque é sempre consulta ao vivo, nunca congelado),
+        // para isolar o bloqueio incondicional de RN-059 em avancar-status.
+        Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("10"), false);
         UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 10);
+        produto.setEstoqueAtual(new BigDecimal("3"));
+        produtoRepository.save(produto);
 
         AvancaStatusRequest request = new AvancaStatusRequest();
         request.setConfirmarEstoqueNegativoProdutoIds(List.of(produto.getId()));
