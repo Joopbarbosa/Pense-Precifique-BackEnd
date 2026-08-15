@@ -2,19 +2,14 @@ package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.domain.entity.Empresa;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
-import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
-import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
-import com.penseprecifique.api.shared.dto.pdf.OrcamentoPdfData;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.empresa.EmpresaRepository;
-import com.penseprecifique.api.orcamento.OrcamentoItemCustomizacaoRepository;
-import com.penseprecifique.api.orcamento.OrcamentoItemRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
 import com.penseprecifique.api.orcamento.ReciboPagamentoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -28,26 +23,21 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
 import java.io.ByteArrayOutputStream;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class PdfService {
 
     private final SpringTemplateEngine templateEngine;
     private final OrcamentoRepository orcamentoRepository;
-    private final OrcamentoItemRepository orcamentoItemRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
-    private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final PdfMapper pdfMapper;
     private final PdfMicroservicoClient pdfMicroservicoClient;
+    private final OrcamentoPdfPayloadService orcamentoPdfPayloadService;
 
     private byte[] renderizarPdf(String template, Context ctx) {
         String html = templateEngine.process("pdf/" + template, ctx);
@@ -71,37 +61,29 @@ public class PdfService {
      * removidos ainda (fallback até o novo fluxo ser validado em uso real; limpeza é tarefa
      * separada). Os outros documentos (recibo-sinal, recibo-pagamento, pdf-multa, recibo-estorno)
      * continuam no fluxo antigo — fora do escopo deste MVP (só orçamento).
+     *
+     * <p>Sem {@code @Transactional} de propósito (#262): a leitura de banco acontece em
+     * {@link OrcamentoPdfPayloadService#montarPayloadOrcamento}, um bean injetado (não
+     * auto-invocação) com sua própria transação curta, que fecha antes desta chamada HTTP de até
+     * 30s — a conexão do pool não fica presa durante a espera do microsserviço.
      */
     public byte[] gerarPdfOrcamento(UUID orcamentoId) {
-        PdfMicroservicoOrcamentoPayload payload = montarPayloadOrcamento(orcamentoId);
+        PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
         return pdfMicroservicoClient.gerarPdf("orcamento", orcamentoId, payload);
     }
 
     /**
      * Preview (Fluxo E do PRD) — mesma montagem de payload de {@link #gerarPdfOrcamento}, só
      * troca a chamada final para {@code format=html}: preview e download vêm da mesma fonte
-     * (o microsserviço), sem layout duplicado no frontend.
+     * (o microsserviço), sem layout duplicado no frontend. Sem {@code @Transactional} pelo mesmo
+     * motivo documentado em {@link #gerarPdfOrcamento}.
      */
     public String gerarPreviewHtmlOrcamento(UUID orcamentoId) {
-        PdfMicroservicoOrcamentoPayload payload = montarPayloadOrcamento(orcamentoId);
+        PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
         return pdfMicroservicoClient.gerarHtml("orcamento", orcamentoId, payload);
     }
 
-    private PdfMicroservicoOrcamentoPayload montarPayloadOrcamento(UUID orcamentoId) {
-        Usuario usuario = getUsuarioAutenticado();
-        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
-
-        Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
-        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
-        Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem = itens.stream()
-                .collect(Collectors.toMap(OrcamentoItem::getId,
-                        item -> orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId())));
-
-        OrcamentoPdfData dados = pdfMapper.toOrcamentoPdfData(orcamento, empresa, itens, customizacoesPorItem);
-        return pdfMapper.toMicroservicoPayload(dados);
-    }
-
+    @Transactional(readOnly = true)
     public byte[] gerarReciboSinal(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
@@ -119,6 +101,7 @@ public class PdfService {
         return renderizarPdf("recibo-sinal", ctx);
     }
 
+    @Transactional(readOnly = true)
     public byte[] gerarReciboPagamento(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
@@ -139,6 +122,7 @@ public class PdfService {
         return renderizarPdf("recibo-pagamento", ctx);
     }
 
+    @Transactional(readOnly = true)
     public byte[] gerarPdfMulta(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
@@ -156,6 +140,7 @@ public class PdfService {
         return renderizarPdf("pdf-multa", ctx);
     }
 
+    @Transactional(readOnly = true)
     public byte[] gerarReciboEstornoSinal(UUID orcamentoId) {
         Usuario usuario = getUsuarioAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
