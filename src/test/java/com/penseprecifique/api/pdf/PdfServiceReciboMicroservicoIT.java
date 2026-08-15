@@ -5,10 +5,12 @@ import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
 import com.penseprecifique.api.orcamento.OrcamentoService;
+import com.penseprecifique.api.orcamento.ReciboPagamentoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
@@ -18,6 +20,7 @@ import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,8 +51,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * #248 (Frente A) — fim a fim de verdade para os 3 documentos migrados nesta rodada, mesmo padrão
- * de {@link PdfServiceOrcamentoMicroservicoIT} (#89): orçamento real no banco até
+ * #248 — fim a fim de verdade para os 4 documentos migrados na Epic (Frente A: recibo-sinal/
+ * pdf-multa/recibo-estorno; recibo-pagamento fecha a Epic), mesmo padrão de
+ * {@link PdfServiceOrcamentoMicroservicoIT} (#89): orçamento real no banco até
  * {@code PdfService.gerar*} chamar o microsserviço via HTTP (WireMock). Guards de negócio
  * (status/cancelamentoTipo/estornoSinal) preservados exatamente como no fluxo antigo — só a fonte
  * do PDF muda (microsserviço em vez de OpenHTMLToPDF local).
@@ -76,6 +80,7 @@ class PdfServiceReciboMicroservicoIT {
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired ReciboPagamentoRepository reciboPagamentoRepository;
 
     @BeforeEach
     void resetarStubsEToken() {
@@ -219,6 +224,63 @@ class PdfServiceReciboMicroservicoIT {
                 () -> pdfService.gerarReciboEstornoSinal(orcamentoId));
 
         assertEquals("Recibo de estorno só disponível para cancelamentos com estorno de sinal", ex.getMessage());
+    }
+
+    @Test
+    @Transactional
+    void gerarReciboPagamentoChamaOMicroservicoQuandoStatusPermiteERetornaOsBytes() {
+        UUID orcamentoId = criarOrcamentoSimples();
+        Orcamento orcamento = buscarParaEditar(orcamentoId);
+        orcamento.setStatus(StatusOrcamento.PAGO);
+        orcamento.setDataAprovacao(LocalDateTime.now());
+        orcamentoRepository.save(orcamento);
+
+        reciboPagamentoRepository.save(ReciboPagamento.builder()
+                .orcamento(orcamento)
+                .valorTotal(orcamento.getTotal())
+                .valorSinalPago(BigDecimal.ZERO)
+                .valorRestantePago(orcamento.getTotal())
+                .totalQuitado(orcamento.getTotal())
+                .build());
+
+        byte[] pdfFalso = "%PDF-1.4 recibo-pagamento falso".getBytes(StandardCharsets.UTF_8);
+        wireMockServer.stubFor(post(urlPathMatching("/render/recibo-pagamento/" + orcamentoId + ".*"))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/pdf")
+                        .withBody(pdfFalso)));
+
+        byte[] resultado = pdfService.gerarReciboPagamento(orcamentoId);
+
+        assertArrayEquals(pdfFalso, resultado);
+    }
+
+    @Test
+    @Transactional
+    void gerarReciboPagamentoBloqueiaAntesDeChamarOMicroservicoQuandoStatusNaoPermite() {
+        UUID orcamentoId = criarOrcamentoSimples(); // nasce em RASCUNHO
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> pdfService.gerarReciboPagamento(orcamentoId));
+
+        assertEquals("Recibo de pagamento só disponível para orçamentos com status PAGO", ex.getMessage());
+        wireMockServer.verify(0, com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
+                urlPathMatching("/render/recibo-pagamento/.*")));
+    }
+
+    @Test
+    @Transactional
+    void gerarReciboPagamentoLancaNotFoundQuandoStatusPagoMasSemReciboPersistido() {
+        UUID orcamentoId = criarOrcamentoSimples();
+        Orcamento orcamento = buscarParaEditar(orcamentoId);
+        orcamento.setStatus(StatusOrcamento.PAGO);
+        orcamentoRepository.save(orcamento);
+        // status PAGO, mas sem ReciboPagamento persistido (nunca deveria acontecer via
+        // OrcamentoService.avancarStatus, que sempre cria o recibo na transição ENTREGUE → PAGO —
+        // teste cobre a defesa de leitura do bean colaborador mesmo assim)
+
+        assertThrows(ResourceNotFoundException.class, () -> pdfService.gerarReciboPagamento(orcamentoId));
+        wireMockServer.verify(0, com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
+                urlPathMatching("/render/recibo-pagamento/.*")));
     }
 
     @Test

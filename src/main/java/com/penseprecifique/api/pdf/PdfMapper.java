@@ -139,6 +139,31 @@ public class PdfMapper {
             .build();
     }
 
+    /**
+     * #248 (última migração da Epic) — mesmo padrão de {@link #toReciboSinalMicroservicoPayload}:
+     * reempacota {@link ReciboPagamentoPdfData} (achatado, {@code toReciboPagamentoPdfData}) no
+     * formato aninhado {@code {empresa, documento}} exigido pelo microsserviço, sem recalcular
+     * nada.
+     */
+    public PdfMicroservicoReciboPagamentoPayload toReciboPagamentoMicroservicoPayload(ReciboPagamentoPdfData dados) {
+        return PdfMicroservicoReciboPagamentoPayload.builder()
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .documento(PdfMicroservicoDocumentoReciboPagamentoPayload.builder()
+                .numeroFormatado(dados.getNumeroFormatado())
+                .nomeCliente(dados.getNomeCliente())
+                .metodoPagamento(dados.getMetodoPagamento())
+                .valorTotal(dados.getValorTotal())
+                .valorSinalPago(dados.getValorSinalPago())
+                .valorRestantePago(dados.getValorRestantePago())
+                .totalQuitado(dados.getTotalQuitado())
+                .dataAprovacao(dados.getDataAprovacao())
+                .prazoProducao(dados.getPrazoProducao())
+                .inicioProducao(dados.getInicioProducao())
+                .dataPagamento(dados.getDataPagamento())
+                .build())
+            .build();
+    }
+
     public ReciboPdfData toReciboPdfDataMulta(Orcamento orc, Empresa empresa) {
         BigDecimal valorMulta = calcularValorMulta(orc);
         return ReciboPdfData.builder()
