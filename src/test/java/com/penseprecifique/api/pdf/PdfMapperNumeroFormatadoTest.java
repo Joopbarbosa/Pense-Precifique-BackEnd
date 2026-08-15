@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -25,7 +26,8 @@ class PdfMapperNumeroFormatadoTest {
 
     @Test
     void orcamentoPdfDataNaoTemZeroAEsquerdaNemPrefixo() {
-        String numeroFormatado = pdfMapper.toOrcamentoPdfData(orcamentoComNumero(47), null, List.of()).getNumeroFormatado();
+        String numeroFormatado = pdfMapper.toOrcamentoPdfData(orcamentoComNumero(47), null, List.of(), Map.of())
+                .getNumeroFormatado();
         assertEquals("47", numeroFormatado);
     }
 

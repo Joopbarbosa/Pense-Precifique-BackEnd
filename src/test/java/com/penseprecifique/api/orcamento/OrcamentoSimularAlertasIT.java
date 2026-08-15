@@ -13,7 +13,7 @@ import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
-import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoqueProdutoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -91,11 +92,13 @@ class OrcamentoSimularAlertasIT {
         seedUsuario();
         Produto produto = novoProduto("Laço Decorativo", 1, new BigDecimal("100"), true);
 
-        List<AlertaInsumoResponse> alertas = orcamentoService.simularAlertas(List.of(itemAvulso(produto.getId(), 5)));
+        List<SimulacaoEstoqueProdutoResponse> alertas = orcamentoService.simularAlertas(List.of(itemAvulso(produto.getId(), 5)));
 
         assertEquals(1, alertas.size(), "SUFICIENTE não é filtrado pelo backend, mesmo padrão de Produção");
         assertEquals(SituacaoAlertaInsumo.SUFICIENTE, alertas.get(0).getSituacao());
-        assertEquals("Laço Decorativo", alertas.get(0).getNomeInsumo());
+        assertEquals("Laço Decorativo", alertas.get(0).getNomeProduto());
+        assertEquals(produto.getId(), alertas.get(0).getProdutoId());
+        assertTrue(alertas.get(0).isPermitirEstoqueNegativo());
     }
 
     @Test
@@ -103,13 +106,14 @@ class OrcamentoSimularAlertasIT {
         seedUsuario();
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("3"), false);
 
-        List<AlertaInsumoResponse> alertas = orcamentoService.simularAlertas(List.of(itemAvulso(produto.getId(), 10)));
+        List<SimulacaoEstoqueProdutoResponse> alertas = orcamentoService.simularAlertas(List.of(itemAvulso(produto.getId(), 10)));
 
         assertEquals(1, alertas.size());
-        AlertaInsumoResponse alerta = alertas.get(0);
+        SimulacaoEstoqueProdutoResponse alerta = alertas.get(0);
         assertEquals(SituacaoAlertaInsumo.BLOQUEIO_FUTURO, alerta.getSituacao());
         assertEquals(0, new BigDecimal("3").compareTo(alerta.getEstoqueAtual()));
         assertEquals(0, new BigDecimal("10").compareTo(alerta.getQuantidadeNecessaria()));
+        assertFalse(alerta.isPermitirEstoqueNegativo());
     }
 
     @Test
@@ -117,7 +121,7 @@ class OrcamentoSimularAlertasIT {
         seedUsuario();
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("3"), true);
 
-        List<AlertaInsumoResponse> alertas = orcamentoService.simularAlertas(List.of(itemAvulso(produto.getId(), 10)));
+        List<SimulacaoEstoqueProdutoResponse> alertas = orcamentoService.simularAlertas(List.of(itemAvulso(produto.getId(), 10)));
 
         assertEquals(1, alertas.size());
         assertEquals(SituacaoAlertaInsumo.AVISO, alertas.get(0).getSituacao());
@@ -130,19 +134,20 @@ class OrcamentoSimularAlertasIT {
         ItemCatalogo itemCatalogo = novoItemCatalogo(produtoCatalogo, 1, 2);
         Produto produtoAvulso = novoProduto("Laço Decorativo", 2, new BigDecimal("100"), true);
 
-        List<AlertaInsumoResponse> alertas = orcamentoService.simularAlertas(List.of(
+        List<SimulacaoEstoqueProdutoResponse> alertas = orcamentoService.simularAlertas(List.of(
                 itemCatalogo(itemCatalogo.getId(), 2),
                 itemAvulso(produtoAvulso.getId(), 5)));
 
         assertEquals(2, alertas.size());
         // item de catálogo: quantidade 2 * quantidadePacote 2 = 4 necessário, estoque 3 -> AVISO
-        AlertaInsumoResponse alertaCatalogo = alertas.stream()
-                .filter(a -> a.getNomeInsumo().equals("Kit Convite")).findFirst().orElseThrow();
+        SimulacaoEstoqueProdutoResponse alertaCatalogo = alertas.stream()
+                .filter(a -> a.getNomeProduto().equals("Kit Convite")).findFirst().orElseThrow();
         assertEquals(SituacaoAlertaInsumo.AVISO, alertaCatalogo.getSituacao());
         assertEquals(0, new BigDecimal("4").compareTo(alertaCatalogo.getQuantidadeNecessaria()));
+        assertEquals(produtoCatalogo.getId(), alertaCatalogo.getProdutoId());
 
-        AlertaInsumoResponse alertaAvulso = alertas.stream()
-                .filter(a -> a.getNomeInsumo().equals("Laço Decorativo")).findFirst().orElseThrow();
+        SimulacaoEstoqueProdutoResponse alertaAvulso = alertas.stream()
+                .filter(a -> a.getNomeProduto().equals("Laço Decorativo")).findFirst().orElseThrow();
         assertEquals(SituacaoAlertaInsumo.SUFICIENTE, alertaAvulso.getSituacao());
     }
 

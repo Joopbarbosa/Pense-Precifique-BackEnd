@@ -4,11 +4,11 @@ import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
-import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoqueProdutoResponse;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;
@@ -16,9 +16,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -44,8 +46,9 @@ public class OrcamentoController {
 
     @GetMapping("/itens-catalogo")
     public ResponseEntity<List<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
-            @RequestParam(required = false) UUID catalogoId) {
-        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId));
+            @RequestParam(required = false) UUID catalogoId,
+            @RequestParam(required = false) String busca) {
+        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId, busca));
     }
 
     @GetMapping("/{id}")
@@ -65,7 +68,7 @@ public class OrcamentoController {
     }
 
     @PostMapping("/simular-alertas")
-    public ResponseEntity<List<AlertaInsumoResponse>> simularAlertas(
+    public ResponseEntity<List<SimulacaoEstoqueProdutoResponse>> simularAlertas(
             @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {
         return ResponseEntity.ok(orcamentoService.simularAlertas(itens));
     }
@@ -93,6 +96,14 @@ public class OrcamentoController {
                 .header("Content-Type", "application/pdf")
                 .header("Content-Disposition", "attachment; filename=orcamento.pdf")
                 .body(pdf);
+    }
+
+    @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtml(@PathVariable UUID id) {
+        String html = pdfService.gerarPreviewHtmlOrcamento(id);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(html);
     }
 
     @GetMapping("/{id}/recibo-sinal")
