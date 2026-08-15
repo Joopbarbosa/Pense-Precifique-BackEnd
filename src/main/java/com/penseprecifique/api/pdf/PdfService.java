@@ -5,8 +5,10 @@ import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
-import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoPdfMultaPayload;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboEstornoPayload;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboSinalPayload;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.empresa.EmpresaRepository;
@@ -38,6 +40,7 @@ public class PdfService {
     private final PdfMapper pdfMapper;
     private final PdfMicroservicoClient pdfMicroservicoClient;
     private final OrcamentoPdfPayloadService orcamentoPdfPayloadService;
+    private final ReciboPdfPayloadService reciboPdfPayloadService;
 
     private byte[] renderizarPdf(String template, Context ctx) {
         String html = templateEngine.process("pdf/" + template, ctx);
@@ -59,8 +62,9 @@ public class PdfService {
      * Delega ao microsserviço pense-precifique-pdf (fluxo D do PRD) em vez do OpenHTMLToPDF local
      * — {@link #renderizarPdf} e o template Thymeleaf "orcamento" ficam sem uso aqui, mas não são
      * removidos ainda (fallback até o novo fluxo ser validado em uso real; limpeza é tarefa
-     * separada). Os outros documentos (recibo-sinal, recibo-pagamento, pdf-multa, recibo-estorno)
-     * continuam no fluxo antigo — fora do escopo deste MVP (só orçamento).
+     * separada). Desde #248, recibo-sinal/pdf-multa/recibo-estorno também migraram (ver
+     * {@link #gerarReciboSinal}) — só recibo-pagamento continua no fluxo antigo (entidade extra,
+     * {@code ReciboPagamento}, migração própria em tarefa separada).
      *
      * <p>Sem {@code @Transactional} de propósito (#262): a leitura de banco acontece em
      * {@link OrcamentoPdfPayloadService#montarPayloadOrcamento}, um bean injetado (não
@@ -83,22 +87,16 @@ public class PdfService {
         return pdfMicroservicoClient.gerarHtml("orcamento", orcamentoId, payload);
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Migrado ao microsserviço em #248 (Frente A) — mesmo padrão de {@link #gerarPdfOrcamento}
+     * (#262): leitura de banco em {@link ReciboPdfPayloadService}, bean injetado, chamada HTTP
+     * fora de qualquer {@code @Transactional}. Thymeleaf "recibo-sinal" e o template Java
+     * associado ficam sem uso aqui (mesmo tratamento dado ao antigo template de orçamento em #89
+     * — limpeza é tarefa separada).
+     */
     public byte[] gerarReciboSinal(UUID orcamentoId) {
-        Usuario usuario = getUsuarioAutenticado();
-        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
-
-        if (orcamento.getStatus().ordinal() < StatusOrcamento.SINAL_PAGO.ordinal()) {
-            throw new BusinessException("Recibo do sinal só disponível a partir do status SINAL_PAGO");
-        }
-
-        Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
-
-        Context ctx = new Context();
-        ctx.setVariable("dados", pdfMapper.toReciboPdfData(orcamento, empresa));
-
-        return renderizarPdf("recibo-sinal", ctx);
+        PdfMicroservicoReciboSinalPayload payload = reciboPdfPayloadService.montarPayloadReciboSinal(orcamentoId);
+        return pdfMicroservicoClient.gerarPdf("recibo-sinal", orcamentoId, payload);
     }
 
     @Transactional(readOnly = true)
@@ -122,40 +120,16 @@ public class PdfService {
         return renderizarPdf("recibo-pagamento", ctx);
     }
 
-    @Transactional(readOnly = true)
+    /** Migrado ao microsserviço em #248 (Frente A) — mesmo padrão de {@link #gerarReciboSinal}. */
     public byte[] gerarPdfMulta(UUID orcamentoId) {
-        Usuario usuario = getUsuarioAutenticado();
-        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
-
-        if (orcamento.getCancelamentoTipo() != TipoCancelamento.MULTA) {
-            throw new BusinessException("PDF de multa só disponível para cancelamentos com multa");
-        }
-
-        Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
-
-        Context ctx = new Context();
-        ctx.setVariable("dados", pdfMapper.toReciboPdfDataMulta(orcamento, empresa));
-
-        return renderizarPdf("pdf-multa", ctx);
+        PdfMicroservicoPdfMultaPayload payload = reciboPdfPayloadService.montarPayloadPdfMulta(orcamentoId);
+        return pdfMicroservicoClient.gerarPdf("pdf-multa", orcamentoId, payload);
     }
 
-    @Transactional(readOnly = true)
+    /** Migrado ao microsserviço em #248 (Frente A) — mesmo padrão de {@link #gerarReciboSinal}. */
     public byte[] gerarReciboEstornoSinal(UUID orcamentoId) {
-        Usuario usuario = getUsuarioAutenticado();
-        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
-
-        if (!Boolean.TRUE.equals(orcamento.getEstornoSinal())) {
-            throw new BusinessException("Recibo de estorno só disponível para cancelamentos com estorno de sinal");
-        }
-
-        Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
-
-        Context ctx = new Context();
-        ctx.setVariable("dados", pdfMapper.toReciboPdfDataEstorno(orcamento, empresa));
-
-        return renderizarPdf("recibo-estorno", ctx);
+        PdfMicroservicoReciboEstornoPayload payload = reciboPdfPayloadService.montarPayloadReciboEstorno(orcamentoId);
+        return pdfMicroservicoClient.gerarPdf("recibo-estorno", orcamentoId, payload);
     }
 
     private Usuario getUsuarioAutenticado() {

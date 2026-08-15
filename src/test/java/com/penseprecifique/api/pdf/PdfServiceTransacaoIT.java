@@ -2,12 +2,15 @@ package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.orcamento.OrcamentoRepository;
 import com.penseprecifique.api.orcamento.OrcamentoService;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
@@ -56,6 +59,7 @@ class PdfServiceTransacaoIT {
 
     @Autowired PdfService pdfService;
     @Autowired OrcamentoService orcamentoService;
+    @Autowired OrcamentoRepository orcamentoRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -131,6 +135,74 @@ class PdfServiceTransacaoIT {
                 });
 
         pdfService.gerarPreviewHtmlOrcamento(orcamentoId);
+
+        assertFalse(transacaoAtivaNaChamadaHttp.get(),
+                "chamada HTTP ao microsservico nao deve acontecer dentro de uma transacao aberta");
+    }
+
+    /**
+     * #248 (Frente A) — mesma prova para os 3 documentos migrados nesta rodada, via
+     * {@link ReciboPdfPayloadService} (bean colaborador único para os 3, ver decisoes-pdf.md).
+     */
+    @Test
+    void gerarReciboSinalChamaOMicroservicoForaDeQualquerTransacao() {
+        UUID orcamentoId = criarOrcamentoSimples();
+        Orcamento orcamento = orcamentoRepository.findById(orcamentoId).orElseThrow();
+        orcamento.setStatus(com.penseprecifique.api.shared.domain.enums.StatusOrcamento.SINAL_PAGO);
+        orcamento.setMetodoSinalRecebido(MetodoPagamento.PIX);
+        orcamento.setValorSinal(new BigDecimal("25.00"));
+        orcamentoRepository.save(orcamento);
+
+        AtomicBoolean transacaoAtivaNaChamadaHttp = new AtomicBoolean(true);
+        when(pdfMicroservicoClient.gerarPdf(anyString(), any(UUID.class), any()))
+                .thenAnswer(invocation -> {
+                    transacaoAtivaNaChamadaHttp.set(TransactionSynchronizationManager.isActualTransactionActive());
+                    return "pdf-falso".getBytes(StandardCharsets.UTF_8);
+                });
+
+        pdfService.gerarReciboSinal(orcamentoId);
+
+        assertFalse(transacaoAtivaNaChamadaHttp.get(),
+                "chamada HTTP ao microsservico nao deve acontecer dentro de uma transacao aberta");
+    }
+
+    @Test
+    void gerarPdfMultaChamaOMicroservicoForaDeQualquerTransacao() {
+        UUID orcamentoId = criarOrcamentoSimples();
+        Orcamento orcamento = orcamentoRepository.findById(orcamentoId).orElseThrow();
+        orcamento.setCancelamentoTipo(TipoCancelamento.MULTA);
+        orcamento.setPercentualMulta(new BigDecimal("10"));
+        orcamentoRepository.save(orcamento);
+
+        AtomicBoolean transacaoAtivaNaChamadaHttp = new AtomicBoolean(true);
+        when(pdfMicroservicoClient.gerarPdf(anyString(), any(UUID.class), any()))
+                .thenAnswer(invocation -> {
+                    transacaoAtivaNaChamadaHttp.set(TransactionSynchronizationManager.isActualTransactionActive());
+                    return "pdf-falso".getBytes(StandardCharsets.UTF_8);
+                });
+
+        pdfService.gerarPdfMulta(orcamentoId);
+
+        assertFalse(transacaoAtivaNaChamadaHttp.get(),
+                "chamada HTTP ao microsservico nao deve acontecer dentro de uma transacao aberta");
+    }
+
+    @Test
+    void gerarReciboEstornoSinalChamaOMicroservicoForaDeQualquerTransacao() {
+        UUID orcamentoId = criarOrcamentoSimples();
+        Orcamento orcamento = orcamentoRepository.findById(orcamentoId).orElseThrow();
+        orcamento.setEstornoSinal(true);
+        orcamento.setValorSinal(new BigDecimal("25.00"));
+        orcamentoRepository.save(orcamento);
+
+        AtomicBoolean transacaoAtivaNaChamadaHttp = new AtomicBoolean(true);
+        when(pdfMicroservicoClient.gerarPdf(anyString(), any(UUID.class), any()))
+                .thenAnswer(invocation -> {
+                    transacaoAtivaNaChamadaHttp.set(TransactionSynchronizationManager.isActualTransactionActive());
+                    return "pdf-falso".getBytes(StandardCharsets.UTF_8);
+                });
+
+        pdfService.gerarReciboEstornoSinal(orcamentoId);
 
         assertFalse(transacaoAtivaNaChamadaHttp.get(),
                 "chamada HTTP ao microsservico nao deve acontecer dentro de uma transacao aberta");

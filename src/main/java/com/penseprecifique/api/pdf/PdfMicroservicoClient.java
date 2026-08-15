@@ -1,6 +1,5 @@
 package com.penseprecifique.api.pdf;
 
-import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,7 +68,7 @@ public class PdfMicroservicoClient {
                 .build();
     }
 
-    public byte[] gerarPdf(String tipo, UUID id, PdfMicroservicoOrcamentoPayload payload) {
+    public byte[] gerarPdf(String tipo, UUID id, Object payload) {
         return renderizar(tipo, id, payload, "pdf");
     }
 
@@ -84,12 +83,12 @@ public class PdfMicroservicoClient {
      * empresa, produto — comum em dado PT-BR). Confirmado via teste de integração antes desta
      * correção.
      */
-    public String gerarHtml(String tipo, UUID id, PdfMicroservicoOrcamentoPayload payload) {
+    public String gerarHtml(String tipo, UUID id, Object payload) {
         byte[] bytes = renderizar(tipo, id, payload, "html");
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    private byte[] renderizar(String tipo, UUID id, PdfMicroservicoOrcamentoPayload payload, String format) {
+    private byte[] renderizar(String tipo, UUID id, Object payload, String format) {
         try {
             return restClient.post()
                     .uri("/render/{tipo}/{id}?format={format}", tipo, id, format)

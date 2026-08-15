@@ -2,6 +2,7 @@ package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.domain.entity.*;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.dto.pdf.*;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,8 @@ public class PdfMapper {
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
+            .telefoneCliente(orc.getCliente() != null ? orc.getCliente().getWhatsapp() : null)
+            .emailCliente(orc.getCliente() != null ? orc.getCliente().getEmail() : null)
             .dataEmissao(formatarData(orc.getCreatedAt()))
             .dataValidade(orc.getDataValidade() != null ? formatarData(orc.getDataValidade()) : "Não definida")
             .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
@@ -40,8 +43,10 @@ public class PdfMapper {
             .valorSinal(orc.getValorSinal() != null ? formatarMoeda(orc.getValorSinal()) : null)
             .restanteAposSinal(orc.getValorSinal() != null && orc.getTotal() != null ?
                 formatarMoeda(orc.getTotal().subtract(orc.getValorSinal())) : null)
+            .percentualSinal(orc.getPercentualSinal() != null ? orc.getPercentualSinal() + "%" : null)
             .subtotal(formatarMoeda(orc.getSubtotal()))
             .desconto(formatarDesconto(orc))
+            .percentualDesconto(formatarPercentualDesconto(orc))
             .total(formatarMoeda(orc.getTotal()))
             .observacoes(orc.getObservacoes())
             .itens(mapearItens(itens, customizacoesPorItem))
@@ -58,12 +63,8 @@ public class PdfMapper {
      * (contrato-pdf.md seção 1: campo existe na entidade {@code Empresa} mas nunca foi populado).
      */
     public PdfMicroservicoOrcamentoPayload toMicroservicoPayload(OrcamentoPdfData dados) {
-        PdfMicroservicoEmpresaPayload empresa = PdfMicroservicoEmpresaPayload.builder()
-            .nome(dados.getNomeEmpresa())
-            .email(dados.getEmailEmpresa())
-            .whatsapp(dados.getTelefoneEmpresa())
-            .logoUrl(null)
-            .build();
+        PdfMicroservicoEmpresaPayload empresa =
+            toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa());
 
         List<PdfMicroservicoItemPayload> itens = dados.getItens().stream()
             .map(item -> PdfMicroservicoItemPayload.builder()
@@ -78,6 +79,8 @@ public class PdfMapper {
         PdfMicroservicoDocumentoOrcamentoPayload documento = PdfMicroservicoDocumentoOrcamentoPayload.builder()
             .numeroFormatado(dados.getNumeroFormatado())
             .nomeCliente(dados.getNomeCliente())
+            .telefoneCliente(dados.getTelefoneCliente())
+            .emailCliente(dados.getEmailCliente())
             .dataEmissao(dados.getDataEmissao())
             .dataValidade(dados.getDataValidade())
             .prazoProducao(dados.getPrazoProducao())
@@ -86,8 +89,10 @@ public class PdfMapper {
             .sinalAtivo(dados.isSinalAtivo())
             .valorSinal(dados.getValorSinal())
             .restanteAposSinal(dados.getRestanteAposSinal())
+            .percentualSinal(dados.getPercentualSinal())
             .subtotal(dados.getSubtotal())
             .desconto(dados.getDesconto())
+            .percentualDesconto(dados.getPercentualDesconto())
             .total(dados.getTotal())
             .observacoes(dados.getObservacoes())
             .itens(itens)
@@ -163,6 +168,69 @@ public class PdfMapper {
             .build();
     }
 
+    /**
+     * #248 (Frente A) — mesmo padrão de {@link #toMicroservicoPayload}: reempacota
+     * {@link ReciboPdfData} (achatado, {@code toReciboPdfData}) no formato aninhado
+     * {@code {empresa, documento}} exigido pelo microsserviço, sem recalcular nada.
+     */
+    public PdfMicroservicoReciboSinalPayload toReciboSinalMicroservicoPayload(ReciboPdfData dados) {
+        return PdfMicroservicoReciboSinalPayload.builder()
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .documento(PdfMicroservicoDocumentoReciboSinalPayload.builder()
+                .numeroFormatado(dados.getNumeroFormatado())
+                .nomeCliente(dados.getNomeCliente())
+                .metodoRecebido(dados.getMetodoRecebido())
+                .valorRecebido(dados.getValorRecebido())
+                .dataAprovacao(dados.getDataAprovacao())
+                .prazoProducao(dados.getPrazoProducao())
+                .inicioProducao(dados.getInicioProducao())
+                .build())
+            .build();
+    }
+
+    /**
+     * {@code motivo} não tem fallback "—" em {@link #toReciboPdfDataMulta} (só
+     * {@code orc.getCancelamentoMotivo()} direto) — vai {@code null} quando o cancelamento não tem
+     * motivo registrado, por isso o campo é {@code .nullable()} em {@code pdfMultaSchema}
+     * (contrato-pdf.md).
+     */
+    public PdfMicroservicoPdfMultaPayload toPdfMultaMicroservicoPayload(ReciboPdfData dados) {
+        return PdfMicroservicoPdfMultaPayload.builder()
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .documento(PdfMicroservicoDocumentoPdfMultaPayload.builder()
+                .numeroFormatado(dados.getNumeroFormatado())
+                .nomeCliente(dados.getNomeCliente())
+                .motivo(dados.getMotivo())
+                .percentualMulta(dados.getPercentualMulta())
+                .valorMulta(dados.getValorMulta())
+                .dataAprovacao(dados.getDataAprovacao())
+                .prazoProducao(dados.getPrazoProducao())
+                .inicioProducao(dados.getInicioProducao())
+                .build())
+            .build();
+    }
+
+    public PdfMicroservicoReciboEstornoPayload toReciboEstornoMicroservicoPayload(ReciboPdfData dados) {
+        return PdfMicroservicoReciboEstornoPayload.builder()
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .documento(PdfMicroservicoDocumentoReciboEstornoPayload.builder()
+                .numeroFormatado(dados.getNumeroFormatado())
+                .nomeCliente(dados.getNomeCliente())
+                .valorRecebido(dados.getValorRecebido())
+                .dataEstorno(dados.getDataEstorno())
+                .build())
+            .build();
+    }
+
+    private PdfMicroservicoEmpresaPayload toEmpresaPayload(String nomeEmpresa, String emailEmpresa, String telefoneEmpresa) {
+        return PdfMicroservicoEmpresaPayload.builder()
+            .nome(nomeEmpresa)
+            .email(emailEmpresa)
+            .whatsapp(telefoneEmpresa)
+            .logoUrl(null)
+            .build();
+    }
+
     private List<ItemPdfData> mapearItens(List<OrcamentoItem> itens,
             Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         if (itens == null || itens.isEmpty()) {
@@ -227,6 +295,22 @@ public class PdfMapper {
         }
         BigDecimal descontoCalculado = orc.getSubtotal().subtract(orc.getTotal());
         return formatarMoeda(descontoCalculado);
+    }
+
+    /**
+     * Diferente de {@link #formatarDesconto} — {@code descontoValor} só É o percentual quando
+     * {@code descontoTipo == PERCENTUAL} (confirmado em {@code OrcamentoService.calcularTotal});
+     * quando o tipo é {@code VALOR}, {@code descontoValor} é um valor monetário, não um
+     * percentual, e este campo deve ficar {@code null}.
+     */
+    private String formatarPercentualDesconto(Orcamento orc) {
+        if (orc.getDescontoTipo() != TipoDesconto.PERCENTUAL) {
+            return null;
+        }
+        if (orc.getDescontoValor() == null || orc.getDescontoValor().compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return orc.getDescontoValor() + "%";
     }
 
     private String formatarInicio(Orcamento orc) {
