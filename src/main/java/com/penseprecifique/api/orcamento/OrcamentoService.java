@@ -159,7 +159,6 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
 
         validarRegras(request);
-        validarEstoqueSuficiente(request.getItens(), usuarioId);
 
         TipoDesconto tipoDesconto = parseTipoDesconto(request.getTipoDesconto());
 
@@ -314,10 +313,11 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-NOVA-8/9/RN-081 — critério único de "situação de estoque" para um Produto vendido em
-     * Orçamento, compartilhado entre {@link #simularAlertas} e o bloqueio pré-save de
-     * RN-NOVA-10 ({@link #validarEstoqueSuficiente}) — os dois lugares precisam concordar no
-     * mesmo critério do que conta como "insuficiente".
+     * RN-NOVA-8/9/RN-081/RN-NOVA-11 (revisada) — critério único de "situação de estoque" para um
+     * Produto vendido em Orçamento, usado por {@link #simularAlertas} (aviso ao adicionar/checkpoint
+     * ao criar, nunca bloqueante). RN-NOVA-10 (bloqueio pré-save em {@code criar()}) foi removida —
+     * o orçamento nunca é bloqueado por estoque insuficiente; a única trava real é
+     * {@link #validarEstoqueParaFinalizar}, no avanço para FINALIZADO.
      */
     private SituacaoAlertaInsumo decidirSituacaoEstoque(BigDecimal estoqueAtual, BigDecimal necessaria,
                                                           boolean permitirEstoqueNegativo) {
@@ -738,43 +738,6 @@ public class OrcamentoService {
                 && request.getPercentualSinal() == null
                 && request.getValorSinal() == null) {
             throw new BusinessException("Quando o sinal está ativo, o percentual ou o valor do sinal deve ser informado");
-        }
-    }
-
-    /**
-     * RN-NOVA-10 — defesa em profundidade de RN-NOVA-8: bloqueia POST /orcamentos (400) antes de
-     * qualquer persistência quando algum item tem permitirEstoqueNegativo=false e a quantidade
-     * solicitada excede o estoque atual do Produto. Mesma resolução de origem
-     * ({@link #resolverProdutoNecessario}) e mesmo critério de situação
-     * ({@link #decidirSituacaoEstoque}) do endpoint de simulação ({@link #simularAlertas}), para os
-     * dois lugares nunca divergirem no que conta como "insuficiente". Itens com
-     * permitirEstoqueNegativo=true e estoque insuficiente não são bloqueados aqui — continuam
-     * cobertos só pelo aviso informativo pós-criação de {@link #calcularAvisosEstoque}.
-     */
-    private void validarEstoqueSuficiente(List<OrcamentoItemRequest> itens, UUID usuarioId) {
-        Map<UUID, BigDecimal> necessidadePorProduto = new LinkedHashMap<>();
-        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
-
-        for (OrcamentoItemRequest itemReq : itens) {
-            ProdutoNecessario resolvido = resolverProdutoNecessario(
-                    itemReq.getItemCatalogoId(), itemReq.getProdutoId(), itemReq.getQuantidade(), usuarioId);
-            necessidadePorProduto.merge(resolvido.produto().getId(), resolvido.necessaria(), BigDecimal::add);
-            produtosPorId.putIfAbsent(resolvido.produto().getId(), resolvido.produto());
-        }
-
-        List<String> bloqueados = new ArrayList<>();
-        for (Map.Entry<UUID, BigDecimal> entry : necessidadePorProduto.entrySet()) {
-            Produto produto = produtosPorId.get(entry.getKey());
-            boolean permitirEstoqueNegativo = Boolean.TRUE.equals(produto.getPermitirEstoqueNegativo());
-            SituacaoAlertaInsumo situacao = decidirSituacaoEstoque(produto.getEstoqueAtual(), entry.getValue(), permitirEstoqueNegativo);
-            if (situacao == SituacaoAlertaInsumo.BLOQUEIO_FUTURO) {
-                bloqueados.add(produto.getNome());
-            }
-        }
-        if (!bloqueados.isEmpty()) {
-            throw new BusinessException(
-                    "Estoque insuficiente para " + String.join(", ", bloqueados)
-                            + ". Este(s) produto(s) não permite(m) estoque negativo.");
         }
     }
 
