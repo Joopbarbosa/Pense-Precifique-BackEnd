@@ -1,66 +1,28 @@
 package com.penseprecifique.api.pdf;
 
-import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoPdfMultaPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboEstornoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboPagamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboSinalPayload;
-import com.penseprecifique.api.shared.exception.BusinessException;
-import com.penseprecifique.api.empresa.EmpresaRepository;
-import com.penseprecifique.api.orcamento.OrcamentoRepository;
-import com.penseprecifique.api.orcamento.ReciboPagamentoRepository;
-import com.penseprecifique.api.auth.UsuarioRepository;
-import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.thymeleaf.context.Context;
-import org.thymeleaf.spring6.SpringTemplateEngine;
 
-import java.io.ByteArrayOutputStream;
 import java.util.UUID;
 
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class PdfService {
 
-    private final SpringTemplateEngine templateEngine;
-    private final OrcamentoRepository orcamentoRepository;
-    private final EmpresaRepository empresaRepository;
-    private final UsuarioRepository usuarioRepository;
-    private final ReciboPagamentoRepository reciboPagamentoRepository;
-    private final PdfMapper pdfMapper;
     private final PdfMicroservicoClient pdfMicroservicoClient;
     private final OrcamentoPdfPayloadService orcamentoPdfPayloadService;
     private final ReciboPdfPayloadService reciboPdfPayloadService;
     private final ReciboPagamentoPdfPayloadService reciboPagamentoPdfPayloadService;
 
-    private byte[] renderizarPdf(String template, Context ctx) {
-        String html = templateEngine.process("pdf/" + template, ctx);
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            PdfRendererBuilder builder = new PdfRendererBuilder();
-            builder.withHtmlContent(html, null);
-            builder.toStream(baos);
-            builder.run();
-            return baos.toByteArray();
-        } catch (Exception e) {
-            log.error("Erro ao renderizar PDF do template '{}': {} - {}",
-                    template, e.getClass().getName(), e.getMessage(), e);
-            throw new BusinessException("Erro ao gerar PDF: "
-                    + e.getClass().getSimpleName() + " - " + e.getMessage());
-        }
-    }
-
     /**
-     * Delega ao microsserviço pense-precifique-pdf (fluxo D do PRD) em vez do OpenHTMLToPDF local
-     * — {@link #renderizarPdf} e o template Thymeleaf "orcamento" ficam sem uso aqui, mas não são
-     * removidos ainda (fallback até o novo fluxo ser validado em uso real; limpeza é tarefa
-     * separada). Desde #248, os outros 4 tipos (recibo-sinal/pdf-multa/recibo-estorno/
-     * recibo-pagamento) também migraram — ver {@link #gerarReciboSinal}/{@link #gerarReciboPagamento}.
-     * Epic #248 completa (5/5 documentos no microsserviço).
+     * Delega ao microsserviço pense-precifique-pdf (fluxo D do PRD). Epic #248 completa (5/5
+     * documentos no microsserviço) — fluxo Thymeleaf/OpenHTMLToPDF local removido nesta limpeza
+     * (V0.8.1, PB005).
      *
      * <p>Sem {@code @Transactional} de propósito (#262): a leitura de banco acontece em
      * {@link OrcamentoPdfPayloadService#montarPayloadOrcamento}, um bean injetado (não
@@ -86,9 +48,7 @@ public class PdfService {
     /**
      * Migrado ao microsserviço em #248 (Frente A) — mesmo padrão de {@link #gerarPdfOrcamento}
      * (#262): leitura de banco em {@link ReciboPdfPayloadService}, bean injetado, chamada HTTP
-     * fora de qualquer {@code @Transactional}. Thymeleaf "recibo-sinal" e o template Java
-     * associado ficam sem uso aqui (mesmo tratamento dado ao antigo template de orçamento em #89
-     * — limpeza é tarefa separada).
+     * fora de qualquer {@code @Transactional}.
      */
     public byte[] gerarReciboSinal(UUID orcamentoId) {
         PdfMicroservicoReciboSinalPayload payload = reciboPdfPayloadService.montarPayloadReciboSinal(orcamentoId);
@@ -100,13 +60,7 @@ public class PdfService {
      * colaborador próprio ({@link ReciboPagamentoPdfPayloadService}), não
      * {@link ReciboPdfPayloadService} — leitura estruturalmente diferente (entidade
      * {@code ReciboPagamento} própria, relação 1:1 com {@code Orcamento}), ver decisoes-pdf.md.
-     * Último dos 5 tipos de documento a migrar — fecha a Epic #248 (4/4).
-     *
-     * <p>Thymeleaf "recibo-pagamento" e os membros que só esse fluxo usava
-     * ({@code orcamentoRepository}, {@code empresaRepository}, {@code reciboPagamentoRepository},
-     * {@code usuarioRepository}, {@code templateEngine}, {@code renderizarPdf},
-     * {@code getUsuarioAutenticado}) ficam sem uso nesta classe — mesmo tratamento dado aos
-     * templates órfãos anteriores (#89/#248 Frente A); limpeza é tarefa separada (V0.8.2).
+     * Último dos 5 tipos de documento a migrar — fechou a Epic #248 (4/4).
      */
     public byte[] gerarReciboPagamento(UUID orcamentoId) {
         PdfMicroservicoReciboPagamentoPayload payload =
@@ -124,11 +78,5 @@ public class PdfService {
     public byte[] gerarReciboEstornoSinal(UUID orcamentoId) {
         PdfMicroservicoReciboEstornoPayload payload = reciboPdfPayloadService.montarPayloadReciboEstorno(orcamentoId);
         return pdfMicroservicoClient.gerarPdf("recibo-estorno", orcamentoId, payload);
-    }
-
-    private Usuario getUsuarioAutenticado() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return usuarioRepository.findByEmailAndDeletedAtIsNull(email)
-                .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
     }
 }
