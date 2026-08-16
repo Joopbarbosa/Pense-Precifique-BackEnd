@@ -80,19 +80,13 @@ public class ProdutoService {
      * por item), mesmo critério já usado em GET /producoes (página limitada a 20 itens por padrão).
      */
     @Transactional(readOnly = true)
-    public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Pageable pageable) {
+    public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Boolean semCatalogo, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
-        Page<Produto> pagina;
-        if (tipo != null && temBusca) {
-            pagina = produtoRepository.findByUsuarioIdAndTipoAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, tipo, busca, pageable);
-        } else if (tipo != null) {
-            pagina = produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo, pageable);
-        } else if (temBusca) {
-            pagina = produtoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, busca, pageable);
-        } else {
-            pagina = produtoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable);
-        }
+        boolean filtrarSemCatalogo = Boolean.TRUE.equals(semCatalogo);
+        Page<Produto> pagina = temBusca
+                ? produtoRepository.buscarComBusca(usuarioId, tipo, filtrarSemCatalogo, busca, pageable)
+                : produtoRepository.buscar(usuarioId, tipo, filtrarSemCatalogo, pageable);
 
         BigDecimal valorHora = buscarValorHora(usuarioId);
         return pagina.map(produto -> montarResponseComCustoAoVivo(produto, valorHora));
