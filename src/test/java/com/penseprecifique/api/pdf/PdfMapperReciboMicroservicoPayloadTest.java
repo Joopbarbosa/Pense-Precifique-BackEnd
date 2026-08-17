@@ -67,6 +67,8 @@ class PdfMapperReciboMicroservicoPayloadTest {
                   "documento": {
                     "numeroFormatado": "47",
                     "nomeCliente": "Mariana Costa",
+                    "telefoneCliente": null,
+                    "emailCliente": null,
                     "metodoRecebido": "Pix",
                     "valorRecebido": "R$ 150,00",
                     "dataAprovacao": "01/01/2026",
@@ -105,6 +107,8 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .dataAprovacao("01/01/2026")
                 .prazoProducao("5 dias úteis")
                 .inicioProducao("—")
+                .dataCancelamento("10/01/2026")
+                .itens(List.of())
                 .build();
 
         PdfMicroservicoPdfMultaPayload payload = pdfMapper.toPdfMultaMicroservicoPayload(dados);
@@ -115,12 +119,16 @@ class PdfMapperReciboMicroservicoPayloadTest {
                   "documento": {
                     "numeroFormatado": "9",
                     "nomeCliente": "Cliente X",
+                    "telefoneCliente": null,
+                    "emailCliente": null,
                     "motivo": "Cliente desistiu da encomenda",
                     "percentualMulta": "10%",
                     "valorMulta": "R$ 30,00",
                     "dataAprovacao": "01/01/2026",
                     "prazoProducao": "5 dias úteis",
-                    "inicioProducao": "—"
+                    "inicioProducao": "—",
+                    "dataCancelamento": "10/01/2026",
+                    "itens": []
                   }
                 }
                 """;
@@ -140,6 +148,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .dataAprovacao("—")
                 .prazoProducao("—")
                 .inicioProducao("—")
+                .itens(List.of())
                 .build();
 
         PdfMicroservicoPdfMultaPayload payload = pdfMapper.toPdfMultaMicroservicoPayload(dados);
@@ -193,6 +202,13 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .prazoProducao("15 dias úteis")
                 .inicioProducao("Assim que aprovado")
                 .dataPagamento("01/03/2026")
+                .itens(List.of(ItemPdfData.builder()
+                        .nomeProduto("Kit Convite Casamento")
+                        .customizacoes("Laminação fosca")
+                        .quantidade("3")
+                        .precoUnitario("R$ 20,00")
+                        .subtotal("R$ 60,00")
+                        .build()))
                 .build();
 
         PdfMicroservicoReciboPagamentoPayload payload = pdfMapper.toReciboPagamentoMicroservicoPayload(dados);
@@ -208,6 +224,8 @@ class PdfMapperReciboMicroservicoPayloadTest {
                   "documento": {
                     "numeroFormatado": "47",
                     "nomeCliente": "Mariana Costa",
+                    "telefoneCliente": null,
+                    "emailCliente": null,
                     "metodoPagamento": "Pix",
                     "valorTotal": "R$ 1.000,00",
                     "valorSinalPago": "R$ 200,00",
@@ -216,7 +234,16 @@ class PdfMapperReciboMicroservicoPayloadTest {
                     "dataAprovacao": "01/01/2026",
                     "prazoProducao": "15 dias úteis",
                     "inicioProducao": "Assim que aprovado",
-                    "dataPagamento": "01/03/2026"
+                    "dataPagamento": "01/03/2026",
+                    "itens": [
+                      {
+                        "nomeProduto": "Kit Convite Casamento",
+                        "customizacoes": "Laminação fosca",
+                        "quantidade": "3",
+                        "precoUnitario": "R$ 20,00",
+                        "subtotal": "R$ 60,00"
+                      }
+                    ]
                   }
                 }
                 """;

@@ -69,6 +69,7 @@ class PdfMapperMicroservicoPayloadTest {
                   },
                   "documento": {
                     "numeroFormatado": "47",
+                    "status": null,
                     "nomeCliente": "Mariana Costa",
                     "telefoneCliente": null,
                     "emailCliente": null,
