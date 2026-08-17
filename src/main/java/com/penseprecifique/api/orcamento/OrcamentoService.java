@@ -623,6 +623,7 @@ public class OrcamentoService {
         }
 
         orcamento.setStatus(StatusOrcamento.CANCELADO);
+        orcamento.setDataCancelamento(now);
         orcamento = orcamentoRepository.save(orcamento);
         return montarDetalhe(orcamento);
     }

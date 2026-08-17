@@ -96,6 +96,9 @@ public class Orcamento {
     @Column(name = "data_estorno_sinal")
     private LocalDateTime dataEstornoSinal;
 
+    @Column(name = "data_cancelamento")
+    private LocalDateTime dataCancelamento;
+
     @Column(name = "subtotal", nullable = false, precision = 10, scale = 2)
     @Builder.Default
     private BigDecimal subtotal = BigDecimal.ZERO;
