@@ -66,15 +66,7 @@ public class PdfMapper {
         PdfMicroservicoEmpresaPayload empresa =
             toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa());
 
-        List<PdfMicroservicoItemPayload> itens = dados.getItens().stream()
-            .map(item -> PdfMicroservicoItemPayload.builder()
-                .nomeProduto(item.getNomeProduto())
-                .customizacoes(semPlaceholder(item.getCustomizacoes()))
-                .quantidade(item.getQuantidade())
-                .precoUnitario(item.getPrecoUnitario())
-                .subtotal(item.getSubtotal())
-                .build())
-            .collect(Collectors.toList());
+        List<PdfMicroservicoItemPayload> itens = mapearItensPayload(dados.getItens());
 
         PdfMicroservicoDocumentoOrcamentoPayload documento = PdfMicroservicoDocumentoOrcamentoPayload.builder()
             .numeroFormatado(dados.getNumeroFormatado())
@@ -104,7 +96,14 @@ public class PdfMapper {
             .build();
     }
 
-    public ReciboPdfData toReciboPdfData(Orcamento orc, Empresa empresa) {
+    /**
+     * P-F007b — ganhou {@code itens}/{@code customizacoesPorItem} (mesma origem de dados de
+     * {@link #toOrcamentoPdfData}) para restaurar "Detalhes do pedido"/"Próximos passos" do mock,
+     * cortadas em #248 por falta de dado no schema original (ver comentário removido de
+     * {@code ReciboSinalDoc.jsx}).
+     */
+    public ReciboPdfData toReciboPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
+            Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         return ReciboPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
@@ -117,6 +116,11 @@ public class PdfMapper {
             .dataAprovacao(orc.getDataAprovacao() != null ? formatarData(orc.getDataAprovacao()) : "—")
             .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
             .inicioProducao(formatarInicio(orc))
+            .itens(mapearItens(itens, customizacoesPorItem))
+            .valorTotalPedido(formatarMoeda(orc.getTotal()))
+            .percentualSinal(orc.getPercentualSinal() != null ? orc.getPercentualSinal() + "%" : "—")
+            .restante(orc.getValorSinal() != null && orc.getTotal() != null ?
+                formatarMoeda(orc.getTotal().subtract(orc.getValorSinal())) : "—")
             .build();
     }
 
@@ -209,6 +213,10 @@ public class PdfMapper {
                 .dataAprovacao(dados.getDataAprovacao())
                 .prazoProducao(dados.getPrazoProducao())
                 .inicioProducao(dados.getInicioProducao())
+                .itens(mapearItensPayload(dados.getItens()))
+                .valorTotalPedido(dados.getValorTotalPedido())
+                .percentualSinal(dados.getPercentualSinal())
+                .restante(dados.getRestante())
                 .build())
             .build();
     }
@@ -269,6 +277,24 @@ public class PdfMapper {
                 .quantidade(item.getQuantidade() != null ? item.getQuantidade().toString() : "—")
                 .precoUnitario(item.getPrecoUnitario() != null ? formatarMoeda(item.getPrecoUnitario()) : "—")
                 .subtotal(item.getSubtotal() != null ? formatarMoeda(item.getSubtotal()) : "—")
+                .build())
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Reaproveitado por {@link #toMicroservicoPayload} (Orçamento) e
+     * {@link #toReciboSinalMicroservicoPayload} (P-F007b) — mesma tradução
+     * {@link ItemPdfData} → {@link PdfMicroservicoItemPayload}, extraída para não duplicar o
+     * stream nos dois lugares.
+     */
+    private List<PdfMicroservicoItemPayload> mapearItensPayload(List<ItemPdfData> itens) {
+        return itens.stream()
+            .map(item -> PdfMicroservicoItemPayload.builder()
+                .nomeProduto(item.getNomeProduto())
+                .customizacoes(semPlaceholder(item.getCustomizacoes()))
+                .quantidade(item.getQuantidade())
+                .precoUnitario(item.getPrecoUnitario())
+                .subtotal(item.getSubtotal())
                 .build())
             .collect(Collectors.toList());
     }

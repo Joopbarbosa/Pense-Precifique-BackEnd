@@ -2,6 +2,7 @@ package com.penseprecifique.api.pdf;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.penseprecifique.api.shared.dto.pdf.ItemPdfData;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoPdfMultaPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboEstornoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboPagamentoPayload;
@@ -9,6 +10,8 @@ import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboSinalPayload;
 import com.penseprecifique.api.shared.dto.pdf.ReciboPagamentoPdfData;
 import com.penseprecifique.api.shared.dto.pdf.ReciboPdfData;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -38,6 +41,17 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .dataAprovacao("01/01/2026")
                 .prazoProducao("15 dias úteis")
                 .inicioProducao("Assim que aprovado")
+                // P-F007b — "Detalhes do pedido"/"Próximos passos".
+                .itens(List.of(ItemPdfData.builder()
+                        .nomeProduto("Kit Convite Casamento")
+                        .customizacoes("Laminação fosca")
+                        .quantidade("3")
+                        .precoUnitario("R$ 20,00")
+                        .subtotal("R$ 60,00")
+                        .build()))
+                .valorTotalPedido("R$ 300,00")
+                .percentualSinal("50%")
+                .restante("R$ 150,00")
                 .build();
 
         PdfMicroservicoReciboSinalPayload payload = pdfMapper.toReciboSinalMicroservicoPayload(dados);
@@ -57,7 +71,19 @@ class PdfMapperReciboMicroservicoPayloadTest {
                     "valorRecebido": "R$ 150,00",
                     "dataAprovacao": "01/01/2026",
                     "prazoProducao": "15 dias úteis",
-                    "inicioProducao": "Assim que aprovado"
+                    "inicioProducao": "Assim que aprovado",
+                    "itens": [
+                      {
+                        "nomeProduto": "Kit Convite Casamento",
+                        "customizacoes": "Laminação fosca",
+                        "quantidade": "3",
+                        "precoUnitario": "R$ 20,00",
+                        "subtotal": "R$ 60,00"
+                      }
+                    ],
+                    "valorTotalPedido": "R$ 300,00",
+                    "percentualSinal": "50%",
+                    "restante": "R$ 150,00"
                   }
                 }
                 """;
