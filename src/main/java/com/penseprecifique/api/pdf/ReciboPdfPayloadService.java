@@ -75,7 +75,11 @@ public class ReciboPdfPayloadService {
         if (orcamento.getCancelamentoTipo() != TipoCancelamento.MULTA) {
             throw new BusinessException("PDF de multa só disponível para cancelamentos com multa");
         }
-        ReciboPdfData dados = pdfMapper.toReciboPdfDataMulta(orcamento, buscarEmpresa(usuario));
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem = itens.stream()
+                .collect(Collectors.toMap(OrcamentoItem::getId,
+                        item -> orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId())));
+        ReciboPdfData dados = pdfMapper.toReciboPdfDataMulta(orcamento, buscarEmpresa(usuario), itens, customizacoesPorItem);
         return pdfMapper.toPdfMultaMicroservicoPayload(dados);
     }
 

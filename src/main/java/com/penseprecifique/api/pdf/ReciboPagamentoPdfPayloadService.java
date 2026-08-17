@@ -2,6 +2,8 @@ package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.domain.entity.Empresa;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
@@ -10,6 +12,8 @@ import com.penseprecifique.api.shared.dto.pdf.ReciboPagamentoPdfData;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.empresa.EmpresaRepository;
+import com.penseprecifique.api.orcamento.OrcamentoItemCustomizacaoRepository;
+import com.penseprecifique.api.orcamento.OrcamentoItemRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
 import com.penseprecifique.api.orcamento.ReciboPagamentoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -18,7 +22,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Bean colaborador de {@link PdfService} para {@code recibo-pagamento} (última migração de #248)
@@ -38,6 +45,8 @@ import java.util.UUID;
 public class ReciboPagamentoPdfPayloadService {
 
     private final OrcamentoRepository orcamentoRepository;
+    private final OrcamentoItemRepository orcamentoItemRepository;
+    private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
@@ -57,7 +66,12 @@ public class ReciboPagamentoPdfPayloadService {
 
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuario.getId()).orElse(null);
 
-        ReciboPagamentoPdfData dados = pdfMapper.toReciboPagamentoPdfData(orcamento, recibo, empresa);
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem = itens.stream()
+                .collect(Collectors.toMap(OrcamentoItem::getId,
+                        item -> orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId())));
+
+        ReciboPagamentoPdfData dados = pdfMapper.toReciboPagamentoPdfData(orcamento, recibo, empresa, itens, customizacoesPorItem);
         return pdfMapper.toReciboPagamentoMicroservicoPayload(dados);
     }
 
