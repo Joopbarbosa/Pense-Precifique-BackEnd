@@ -115,6 +115,14 @@ public class OrcamentoController {
                 .body(pdf);
     }
 
+    @GetMapping(value = "/{id}/recibo-sinal/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtmlReciboSinal(@PathVariable UUID id) {
+        String html = pdfService.gerarPreviewHtmlReciboSinal(id);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(html);
+    }
+
     @GetMapping("/{id}/pdf-multa")
     public ResponseEntity<byte[]> downloadPdfMulta(@PathVariable UUID id) {
         byte[] pdf = pdfService.gerarPdfMulta(id);
@@ -122,6 +130,14 @@ public class OrcamentoController {
                 .header("Content-Type", "application/pdf")
                 .header("Content-Disposition", "attachment; filename=multa.pdf")
                 .body(pdf);
+    }
+
+    @GetMapping(value = "/{id}/pdf-multa/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtmlPdfMulta(@PathVariable UUID id) {
+        String html = pdfService.gerarPreviewHtmlPdfMulta(id);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(html);
     }
 
     @GetMapping("/{id}/recibo-estorno")
@@ -133,6 +149,14 @@ public class OrcamentoController {
                 .body(pdf);
     }
 
+    @GetMapping(value = "/{id}/recibo-estorno/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtmlReciboEstorno(@PathVariable UUID id) {
+        String html = pdfService.gerarPreviewHtmlReciboEstornoSinal(id);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(html);
+    }
+
     @GetMapping("/{id}/recibo-pagamento")
     public ResponseEntity<byte[]> downloadReciboPagamento(@PathVariable UUID id) {
         byte[] pdf = pdfService.gerarReciboPagamento(id);
@@ -140,5 +164,13 @@ public class OrcamentoController {
                 .header("Content-Type", "application/pdf")
                 .header("Content-Disposition", "attachment; filename=recibo-pagamento.pdf")
                 .body(pdf);
+    }
+
+    @GetMapping(value = "/{id}/recibo-pagamento/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtmlReciboPagamento(@PathVariable UUID id) {
+        String html = pdfService.gerarPreviewHtmlReciboPagamento(id);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(html);
     }
 }
