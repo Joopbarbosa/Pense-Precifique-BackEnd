@@ -22,8 +22,11 @@ public class ReciboPdfData {
     private String percentualMulta;
     private String valorMulta;
     private String motivo;
-    // Campos abaixo só populados por toReciboPdfData() (recibo-sinal) — seção "Detalhes do
-    // pedido"/"Próximos passos" do mock (P-F007b), ausentes em toReciboPdfDataMulta/Estorno.
+    private String dataCancelamento;
+    private String telefoneCliente;
+    private String emailCliente;
+    // itens populados por toReciboPdfData() (recibo-sinal) e toReciboPdfDataMulta() (P-F008,
+    // Seção 5 "Detalhes do produto") — ausente em toReciboPdfDataEstorno.
     private List<ItemPdfData> itens;
     private String valorTotalPedido;
     private String percentualSinal;

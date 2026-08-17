@@ -2,6 +2,7 @@ package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.domain.entity.*;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.dto.pdf.*;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,7 @@ public class PdfMapper {
             Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         return OrcamentoPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
+            .status(formatarStatusOrcamento(orc.getStatus()))
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
@@ -70,6 +72,7 @@ public class PdfMapper {
 
         PdfMicroservicoDocumentoOrcamentoPayload documento = PdfMicroservicoDocumentoOrcamentoPayload.builder()
             .numeroFormatado(dados.getNumeroFormatado())
+            .status(dados.getStatus())
             .nomeCliente(dados.getNomeCliente())
             .telefoneCliente(dados.getTelefoneCliente())
             .emailCliente(dados.getEmailCliente())
@@ -107,6 +110,8 @@ public class PdfMapper {
         return ReciboPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
+            .telefoneCliente(orc.getCliente() != null ? orc.getCliente().getWhatsapp() : null)
+            .emailCliente(orc.getCliente() != null ? orc.getCliente().getEmail() : null)
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
@@ -124,10 +129,13 @@ public class PdfMapper {
             .build();
     }
 
-    public ReciboPagamentoPdfData toReciboPagamentoPdfData(Orcamento orc, ReciboPagamento recibo, Empresa empresa) {
+    public ReciboPagamentoPdfData toReciboPagamentoPdfData(Orcamento orc, ReciboPagamento recibo, Empresa empresa,
+            List<OrcamentoItem> itens, Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         return ReciboPagamentoPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
+            .telefoneCliente(orc.getCliente() != null ? orc.getCliente().getWhatsapp() : null)
+            .emailCliente(orc.getCliente() != null ? orc.getCliente().getEmail() : null)
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
@@ -140,6 +148,7 @@ public class PdfMapper {
             .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
             .inicioProducao(formatarInicio(orc))
             .dataPagamento(recibo.getDataPagamento() != null ? formatarData(recibo.getDataPagamento()) : "—")
+            .itens(mapearItens(itens, customizacoesPorItem))
             .build();
     }
 
@@ -155,6 +164,8 @@ public class PdfMapper {
             .documento(PdfMicroservicoDocumentoReciboPagamentoPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
+                .telefoneCliente(dados.getTelefoneCliente())
+                .emailCliente(dados.getEmailCliente())
                 .metodoPagamento(dados.getMetodoPagamento())
                 .valorTotal(dados.getValorTotal())
                 .valorSinalPago(dados.getValorSinalPago())
@@ -164,15 +175,19 @@ public class PdfMapper {
                 .prazoProducao(dados.getPrazoProducao())
                 .inicioProducao(dados.getInicioProducao())
                 .dataPagamento(dados.getDataPagamento())
+                .itens(mapearItensPayload(dados.getItens()))
                 .build())
             .build();
     }
 
-    public ReciboPdfData toReciboPdfDataMulta(Orcamento orc, Empresa empresa) {
+    public ReciboPdfData toReciboPdfDataMulta(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
+            Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         BigDecimal valorMulta = calcularValorMulta(orc);
         return ReciboPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
+            .telefoneCliente(orc.getCliente() != null ? orc.getCliente().getWhatsapp() : null)
+            .emailCliente(orc.getCliente() != null ? orc.getCliente().getEmail() : null)
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
@@ -182,6 +197,8 @@ public class PdfMapper {
             .dataAprovacao(orc.getDataAprovacao() != null ? formatarData(orc.getDataAprovacao()) : "—")
             .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
             .inicioProducao(formatarInicio(orc))
+            .dataCancelamento(orc.getDataCancelamento() != null ? formatarData(orc.getDataCancelamento()) : "—")
+            .itens(mapearItens(itens, customizacoesPorItem))
             .build();
     }
 
@@ -208,6 +225,8 @@ public class PdfMapper {
             .documento(PdfMicroservicoDocumentoReciboSinalPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
+                .telefoneCliente(dados.getTelefoneCliente())
+                .emailCliente(dados.getEmailCliente())
                 .metodoRecebido(dados.getMetodoRecebido())
                 .valorRecebido(dados.getValorRecebido())
                 .dataAprovacao(dados.getDataAprovacao())
@@ -233,12 +252,16 @@ public class PdfMapper {
             .documento(PdfMicroservicoDocumentoPdfMultaPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
+                .telefoneCliente(dados.getTelefoneCliente())
+                .emailCliente(dados.getEmailCliente())
                 .motivo(dados.getMotivo())
                 .percentualMulta(dados.getPercentualMulta())
                 .valorMulta(dados.getValorMulta())
                 .dataAprovacao(dados.getDataAprovacao())
                 .prazoProducao(dados.getPrazoProducao())
                 .inicioProducao(dados.getInicioProducao())
+                .dataCancelamento(dados.getDataCancelamento())
+                .itens(mapearItensPayload(dados.getItens()))
                 .build())
             .build();
     }
@@ -362,6 +385,31 @@ public class PdfMapper {
             return null;
         }
         return orc.getDescontoValor() + "%";
+    }
+
+    /**
+     * P-F008 — Seção 4 ("Status do pedido") do Design aprovado do Orçamento/Preview exige o rótulo
+     * pronto no payload (templates não traduzem nada). RASCUNHO vira "Aguardando aprovação" — desvio
+     * aprovado sobre o Design original (ver DECISOES_V0.8.1.md); os demais valores usam o mesmo
+     * rótulo já exibido no frontend (STATUS_LABEL, pense-precifique-frontend/src/constants/statusOrcamento.ts)
+     * para manter as duas UIs consistentes.
+     */
+    private String formatarStatusOrcamento(StatusOrcamento status) {
+        if (status == null) {
+            return "—";
+        }
+        return switch (status) {
+            case RASCUNHO -> "Aguardando aprovação";
+            case ENVIADO -> "Enviado";
+            case APROVADO -> "Aprovado";
+            case AGUARDANDO_SINAL -> "Aguardando Sinal";
+            case SINAL_PAGO -> "Sinal Pago";
+            case EM_PRODUCAO -> "Em Produção";
+            case FINALIZADO -> "Finalizado";
+            case ENTREGUE -> "Entregue";
+            case PAGO -> "Pago";
+            case CANCELADO -> "Cancelado";
+        };
     }
 
     private String formatarInicio(Orcamento orc) {

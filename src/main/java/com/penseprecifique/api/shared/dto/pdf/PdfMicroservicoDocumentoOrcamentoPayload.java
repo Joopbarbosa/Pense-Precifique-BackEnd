@@ -9,6 +9,7 @@ import java.util.List;
 @Builder
 public class PdfMicroservicoDocumentoOrcamentoPayload {
     private String numeroFormatado;
+    private String status;
     private String nomeCliente;
     private String telefoneCliente;
     private String emailCliente;

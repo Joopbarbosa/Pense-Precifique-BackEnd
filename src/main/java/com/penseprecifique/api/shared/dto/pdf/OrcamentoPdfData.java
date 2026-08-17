@@ -8,6 +8,7 @@ import java.util.List;
 @Builder
 public class OrcamentoPdfData {
     private String numeroFormatado;
+    private String status;
     private String nomeEmpresa;
     private String emailEmpresa;
     private String telefoneEmpresa;

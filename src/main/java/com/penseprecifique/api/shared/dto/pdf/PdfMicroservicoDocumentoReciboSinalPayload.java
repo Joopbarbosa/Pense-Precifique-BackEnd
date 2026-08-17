@@ -10,6 +10,8 @@ import java.util.List;
 public class PdfMicroservicoDocumentoReciboSinalPayload {
     private String numeroFormatado;
     private String nomeCliente;
+    private String telefoneCliente;
+    private String emailCliente;
     private String metodoRecebido;
     private String valorRecebido;
     private String dataAprovacao;
