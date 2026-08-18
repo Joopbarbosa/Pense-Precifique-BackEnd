@@ -735,10 +735,15 @@ public class OrcamentoService {
             throw new BusinessException("A data de início estimada é obrigatória quando o início não é assim que aprovado");
         }
 
-        if (request.isSinalAtivo()
-                && request.getPercentualSinal() == null
-                && request.getValorSinal() == null) {
-            throw new BusinessException("Quando o sinal está ativo, o percentual ou o valor do sinal deve ser informado");
+        if (request.isSinalAtivo()) {
+            boolean percentualValido = request.getPercentualSinal() != null
+                    && request.getPercentualSinal().compareTo(BigDecimal.ZERO) > 0;
+            boolean valorValido = request.getValorSinal() != null
+                    && request.getValorSinal().compareTo(BigDecimal.ZERO) > 0;
+            if (!percentualValido && !valorValido) {
+                throw new BusinessException(
+                        "Quando o sinal está ativo, o percentual ou o valor do sinal deve ser maior que zero");
+            }
         }
     }
 
