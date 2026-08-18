@@ -26,4 +26,5 @@ public class ReciboPagamentoPdfData {
     private String inicioProducao;
     private String dataPagamento;
     private List<ItemPdfData> itens;
+    private String observacoes;
 }

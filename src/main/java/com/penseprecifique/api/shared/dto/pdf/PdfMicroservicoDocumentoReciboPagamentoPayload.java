@@ -23,4 +23,5 @@ public class PdfMicroservicoDocumentoReciboPagamentoPayload {
     private String inicioProducao;
     private String dataPagamento;
     private List<PdfMicroservicoItemPayload> itens;
+    private String observacoes;
 }

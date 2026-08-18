@@ -32,4 +32,5 @@ public class ReciboPdfData {
     private String valorTotalPedido;
     private String percentualSinal;
     private String restante;
+    private String observacoes;
 }
