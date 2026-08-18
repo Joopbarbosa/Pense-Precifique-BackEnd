@@ -38,6 +38,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .telefoneEmpresa("(11) 99999-1234")
                 .metodoRecebido("Pix")
                 .valorRecebido("R$ 150,00")
+                .dataEmissao("18/08/2026")
                 .dataAprovacao("01/01/2026")
                 .prazoProducao("15 dias úteis")
                 .inicioProducao("Assim que aprovado")
@@ -71,6 +72,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                     "emailCliente": null,
                     "metodoRecebido": "Pix",
                     "valorRecebido": "R$ 150,00",
+                    "dataEmissao": "18/08/2026",
                     "dataAprovacao": "01/01/2026",
                     "prazoProducao": "15 dias úteis",
                     "inicioProducao": "Assim que aprovado",
@@ -104,6 +106,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .motivo("Cliente desistiu da encomenda")
                 .percentualMulta("10%")
                 .valorMulta("R$ 30,00")
+                .dataEmissao("18/08/2026")
                 .dataAprovacao("01/01/2026")
                 .prazoProducao("5 dias úteis")
                 .inicioProducao("—")
@@ -124,6 +127,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                     "motivo": "Cliente desistiu da encomenda",
                     "percentualMulta": "10%",
                     "valorMulta": "R$ 30,00",
+                    "dataEmissao": "18/08/2026",
                     "dataAprovacao": "01/01/2026",
                     "prazoProducao": "5 dias úteis",
                     "inicioProducao": "—",
@@ -198,6 +202,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .valorSinalPago("R$ 200,00")
                 .valorRestantePago("R$ 800,00")
                 .totalQuitado("R$ 1.000,00")
+                .dataEmissao("18/08/2026")
                 .dataAprovacao("01/01/2026")
                 .prazoProducao("15 dias úteis")
                 .inicioProducao("Assim que aprovado")
@@ -231,6 +236,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                     "valorSinalPago": "R$ 200,00",
                     "valorRestantePago": "R$ 800,00",
                     "totalQuitado": "R$ 1.000,00",
+                    "dataEmissao": "18/08/2026",
                     "dataAprovacao": "01/01/2026",
                     "prazoProducao": "15 dias úteis",
                     "inicioProducao": "Assim que aprovado",
