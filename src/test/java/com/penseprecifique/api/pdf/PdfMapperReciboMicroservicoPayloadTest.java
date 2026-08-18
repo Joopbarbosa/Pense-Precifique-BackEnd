@@ -53,6 +53,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                 .valorTotalPedido("R$ 300,00")
                 .percentualSinal("50%")
                 .restante("R$ 150,00")
+                .observacoes("Embalar para presente")
                 .build();
 
         PdfMicroservicoReciboSinalPayload payload = pdfMapper.toReciboSinalMicroservicoPayload(dados);
@@ -87,12 +88,37 @@ class PdfMapperReciboMicroservicoPayloadTest {
                     ],
                     "valorTotalPedido": "R$ 300,00",
                     "percentualSinal": "50%",
-                    "restante": "R$ 150,00"
+                    "restante": "R$ 150,00",
+                    "observacoes": "Embalar para presente"
                   }
                 }
                 """;
 
         assertEquals(objectMapper.readTree(esperado), objectMapper.valueToTree(payload));
+    }
+
+    @Test
+    void reciboSinalPayloadEnviaObservacoesNullQuandoOrcamentoNaoTemObservacoes() {
+        ReciboPdfData dados = ReciboPdfData.builder()
+                .numeroFormatado("47")
+                .nomeCliente("Mariana Costa")
+                .nomeEmpresa("Studio da Ana")
+                .metodoRecebido("Pix")
+                .valorRecebido("R$ 150,00")
+                .dataEmissao("18/08/2026")
+                .dataAprovacao("01/01/2026")
+                .prazoProducao("15 dias úteis")
+                .inicioProducao("—")
+                .itens(List.of())
+                .valorTotalPedido("R$ 300,00")
+                .percentualSinal("50%")
+                .restante("R$ 150,00")
+                .observacoes(null)
+                .build();
+
+        PdfMicroservicoReciboSinalPayload payload = pdfMapper.toReciboSinalMicroservicoPayload(dados);
+
+        assertNull(payload.getDocumento().getObservacoes());
     }
 
     @Test
@@ -214,6 +240,7 @@ class PdfMapperReciboMicroservicoPayloadTest {
                         .precoUnitario("R$ 20,00")
                         .subtotal("R$ 60,00")
                         .build()))
+                .observacoes("Embalar para presente")
                 .build();
 
         PdfMicroservicoReciboPagamentoPayload payload = pdfMapper.toReciboPagamentoMicroservicoPayload(dados);
@@ -249,11 +276,37 @@ class PdfMapperReciboMicroservicoPayloadTest {
                         "precoUnitario": "R$ 20,00",
                         "subtotal": "R$ 60,00"
                       }
-                    ]
+                    ],
+                    "observacoes": "Embalar para presente"
                   }
                 }
                 """;
 
         assertEquals(objectMapper.readTree(esperado), objectMapper.valueToTree(payload));
+    }
+
+    @Test
+    void reciboPagamentoPayloadEnviaObservacoesNullQuandoOrcamentoNaoTemObservacoes() {
+        ReciboPagamentoPdfData dados = ReciboPagamentoPdfData.builder()
+                .numeroFormatado("47")
+                .nomeCliente("Mariana Costa")
+                .nomeEmpresa("Studio da Ana")
+                .metodoPagamento("Pix")
+                .valorTotal("R$ 1.000,00")
+                .valorSinalPago("R$ 200,00")
+                .valorRestantePago("R$ 800,00")
+                .totalQuitado("R$ 1.000,00")
+                .dataEmissao("18/08/2026")
+                .dataAprovacao("01/01/2026")
+                .prazoProducao("15 dias úteis")
+                .inicioProducao("—")
+                .dataPagamento("01/03/2026")
+                .itens(List.of())
+                .observacoes(null)
+                .build();
+
+        PdfMicroservicoReciboPagamentoPayload payload = pdfMapper.toReciboPagamentoMicroservicoPayload(dados);
+
+        assertNull(payload.getDocumento().getObservacoes());
     }
 }
