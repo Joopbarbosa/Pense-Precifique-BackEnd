@@ -127,6 +127,7 @@ public class PdfMapper {
             .percentualSinal(orc.getPercentualSinal() != null ? orc.getPercentualSinal() + "%" : "—")
             .restante(orc.getValorSinal() != null && orc.getTotal() != null ?
                 formatarMoeda(orc.getTotal().subtract(orc.getValorSinal())) : "—")
+            .observacoes(orc.getObservacoes())
             .build();
     }
 
@@ -151,6 +152,7 @@ public class PdfMapper {
             .inicioProducao(formatarInicio(orc))
             .dataPagamento(recibo.getDataPagamento() != null ? formatarData(recibo.getDataPagamento()) : "—")
             .itens(mapearItens(itens, customizacoesPorItem))
+            .observacoes(orc.getObservacoes())
             .build();
     }
 
@@ -179,6 +181,7 @@ public class PdfMapper {
                 .inicioProducao(dados.getInicioProducao())
                 .dataPagamento(dados.getDataPagamento())
                 .itens(mapearItensPayload(dados.getItens()))
+                .observacoes(dados.getObservacoes())
                 .build())
             .build();
     }
@@ -241,6 +244,7 @@ public class PdfMapper {
                 .valorTotalPedido(dados.getValorTotalPedido())
                 .percentualSinal(dados.getPercentualSinal())
                 .restante(dados.getRestante())
+                .observacoes(dados.getObservacoes())
                 .build())
             .build();
     }
