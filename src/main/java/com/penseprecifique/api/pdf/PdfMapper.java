@@ -38,7 +38,7 @@ public class PdfMapper {
             .emailCliente(orc.getCliente() != null ? orc.getCliente().getEmail() : null)
             .dataEmissao(formatarData(orc.getCreatedAt()))
             .dataValidade(orc.getDataValidade() != null ? formatarData(orc.getDataValidade()) : "Não definida")
-            .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
+            .prazoProducao(formatarPrazo(orc.getPrazoProducaoDias()))
             .inicioProducao(formatarInicio(orc))
             .metodoPagamento(formatarMetodoPagamento(orc.getMetodoPagamento()))
             .sinalAtivo(orc.getSinalAtivo() != null && orc.getSinalAtivo())
@@ -118,8 +118,9 @@ public class PdfMapper {
             .metodoRecebido(orc.getMetodoSinalRecebido() != null ?
                 formatarMetodoPagamento(orc.getMetodoSinalRecebido()) : "—")
             .valorRecebido(orc.getValorSinal() != null ? formatarMoeda(orc.getValorSinal()) : "—")
+            .dataEmissao(formatarData(LocalDateTime.now()))
             .dataAprovacao(orc.getDataAprovacao() != null ? formatarData(orc.getDataAprovacao()) : "—")
-            .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
+            .prazoProducao(formatarPrazo(orc.getPrazoProducaoDias()))
             .inicioProducao(formatarInicio(orc))
             .itens(mapearItens(itens, customizacoesPorItem))
             .valorTotalPedido(formatarMoeda(orc.getTotal()))
@@ -144,8 +145,9 @@ public class PdfMapper {
             .valorSinalPago(formatarMoeda(recibo.getValorSinalPago()))
             .valorRestantePago(formatarMoeda(recibo.getValorRestantePago()))
             .totalQuitado(formatarMoeda(recibo.getTotalQuitado()))
+            .dataEmissao(formatarData(LocalDateTime.now()))
             .dataAprovacao(orc.getDataAprovacao() != null ? formatarData(orc.getDataAprovacao()) : "—")
-            .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
+            .prazoProducao(formatarPrazo(orc.getPrazoProducaoDias()))
             .inicioProducao(formatarInicio(orc))
             .dataPagamento(recibo.getDataPagamento() != null ? formatarData(recibo.getDataPagamento()) : "—")
             .itens(mapearItens(itens, customizacoesPorItem))
@@ -171,6 +173,7 @@ public class PdfMapper {
                 .valorSinalPago(dados.getValorSinalPago())
                 .valorRestantePago(dados.getValorRestantePago())
                 .totalQuitado(dados.getTotalQuitado())
+                .dataEmissao(dados.getDataEmissao())
                 .dataAprovacao(dados.getDataAprovacao())
                 .prazoProducao(dados.getPrazoProducao())
                 .inicioProducao(dados.getInicioProducao())
@@ -194,8 +197,9 @@ public class PdfMapper {
             .percentualMulta(orc.getPercentualMulta() != null ? orc.getPercentualMulta() + "%" : "—")
             .valorMulta(valorMulta != null ? formatarMoeda(valorMulta) : "—")
             .motivo(orc.getCancelamentoMotivo())
+            .dataEmissao(formatarData(LocalDateTime.now()))
             .dataAprovacao(orc.getDataAprovacao() != null ? formatarData(orc.getDataAprovacao()) : "—")
-            .prazoProducao(orc.getPrazoProducaoDias() != null ? orc.getPrazoProducaoDias() + " dias úteis" : "—")
+            .prazoProducao(formatarPrazo(orc.getPrazoProducaoDias()))
             .inicioProducao(formatarInicio(orc))
             .dataCancelamento(orc.getDataCancelamento() != null ? formatarData(orc.getDataCancelamento()) : "—")
             .itens(mapearItens(itens, customizacoesPorItem))
@@ -229,6 +233,7 @@ public class PdfMapper {
                 .emailCliente(dados.getEmailCliente())
                 .metodoRecebido(dados.getMetodoRecebido())
                 .valorRecebido(dados.getValorRecebido())
+                .dataEmissao(dados.getDataEmissao())
                 .dataAprovacao(dados.getDataAprovacao())
                 .prazoProducao(dados.getPrazoProducao())
                 .inicioProducao(dados.getInicioProducao())
@@ -257,6 +262,7 @@ public class PdfMapper {
                 .motivo(dados.getMotivo())
                 .percentualMulta(dados.getPercentualMulta())
                 .valorMulta(dados.getValorMulta())
+                .dataEmissao(dados.getDataEmissao())
                 .dataAprovacao(dados.getDataAprovacao())
                 .prazoProducao(dados.getPrazoProducao())
                 .inicioProducao(dados.getInicioProducao())
@@ -427,6 +433,13 @@ public class PdfMapper {
             return "—";
         }
         return data.format(DATE_FORMATTER);
+    }
+
+    private String formatarPrazo(Integer dias) {
+        if (dias == null) {
+            return "—";
+        }
+        return dias + (dias == 1 ? " dia útil" : " dias úteis");
     }
 
     private BigDecimal calcularValorMulta(Orcamento orc) {
