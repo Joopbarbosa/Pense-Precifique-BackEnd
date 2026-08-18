@@ -17,6 +17,7 @@ public class PdfMicroservicoDocumentoReciboPagamentoPayload {
     private String valorSinalPago;
     private String valorRestantePago;
     private String totalQuitado;
+    private String dataEmissao;
     private String dataAprovacao;
     private String prazoProducao;
     private String inicioProducao;

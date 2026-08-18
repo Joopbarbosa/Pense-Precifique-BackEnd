@@ -15,6 +15,7 @@ public class PdfMicroservicoDocumentoPdfMultaPayload {
     private String motivo;
     private String percentualMulta;
     private String valorMulta;
+    private String dataEmissao;
     private String dataAprovacao;
     private String prazoProducao;
     private String inicioProducao;

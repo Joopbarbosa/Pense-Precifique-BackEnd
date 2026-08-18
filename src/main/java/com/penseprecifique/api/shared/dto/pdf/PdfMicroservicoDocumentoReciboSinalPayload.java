@@ -14,6 +14,7 @@ public class PdfMicroservicoDocumentoReciboSinalPayload {
     private String emailCliente;
     private String metodoRecebido;
     private String valorRecebido;
+    private String dataEmissao;
     private String dataAprovacao;
     private String prazoProducao;
     private String inicioProducao;
