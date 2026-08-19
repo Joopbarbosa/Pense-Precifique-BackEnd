@@ -599,6 +599,7 @@ public class OrcamentoService {
                 orcamento.setCancelamentoTipo(TipoCancelamento.MULTA);
                 orcamento.setPercentualMulta(request.getPercentualMulta());
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
+                orcamento.setValorMulta(calcularValorFinalMulta(orcamento));
                 if (atual == StatusOrcamento.FINALIZADO) {
                     reverterEstoque(orcamento, request.getMotivoCancelamento());
                 }
@@ -779,6 +780,25 @@ public class OrcamentoService {
                     .divide(CEM, 2, RoundingMode.HALF_UP);
         }
         return request.getValorSinal();
+    }
+
+    /**
+     * RN-NOVA-1 (V0.8.1) — valor final de multa desconta o sinal já pago, piso zero: nunca cobra
+     * valor negativo. O caso sinal_pago > valor_multa gerar devolução da diferença ao cliente
+     * ("mini-estorno") está fora deste cálculo — achado separado (CSV_ACHADOS_V0.8.1.csv), aguarda
+     * decisão de negócio própria.
+     */
+    private BigDecimal calcularValorFinalMulta(Orcamento orcamento) {
+        if (orcamento.getPercentualMulta() == null || orcamento.getTotal() == null) {
+            return null;
+        }
+        BigDecimal valorMultaBruto = orcamento.getTotal()
+                .multiply(orcamento.getPercentualMulta())
+                .divide(CEM, 2, RoundingMode.HALF_UP);
+        BigDecimal sinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
+                ? orcamento.getValorSinal()
+                : BigDecimal.ZERO;
+        return valorMultaBruto.subtract(sinalPago).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
     private OrcamentoDetalheResponse montarDetalhe(Orcamento orcamento) {

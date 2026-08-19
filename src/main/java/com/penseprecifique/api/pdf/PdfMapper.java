@@ -188,7 +188,6 @@ public class PdfMapper {
 
     public ReciboPdfData toReciboPdfDataMulta(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
             Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
-        BigDecimal valorMulta = calcularValorMulta(orc);
         return ReciboPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
@@ -198,7 +197,7 @@ public class PdfMapper {
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
             .percentualMulta(orc.getPercentualMulta() != null ? orc.getPercentualMulta() + "%" : "—")
-            .valorMulta(valorMulta != null ? formatarMoeda(valorMulta) : "—")
+            .valorMulta(orc.getValorMulta() != null ? formatarMoeda(orc.getValorMulta()) : "—")
             .motivo(orc.getCancelamentoMotivo())
             .dataEmissao(formatarData(LocalDateTime.now()))
             .dataAprovacao(orc.getDataAprovacao() != null ? formatarData(orc.getDataAprovacao()) : "—")
@@ -446,10 +445,4 @@ public class PdfMapper {
         return dias + (dias == 1 ? " dia útil" : " dias úteis");
     }
 
-    private BigDecimal calcularValorMulta(Orcamento orc) {
-        if (orc.getPercentualMulta() == null || orc.getTotal() == null) {
-            return null;
-        }
-        return orc.getTotal().multiply(orc.getPercentualMulta()).divide(BigDecimal.valueOf(100));
-    }
 }

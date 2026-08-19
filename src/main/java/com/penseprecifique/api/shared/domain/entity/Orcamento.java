@@ -90,6 +90,9 @@ public class Orcamento {
     @Column(name = "percentual_multa", precision = 5, scale = 2)
     private BigDecimal percentualMulta;
 
+    @Column(name = "valor_multa", precision = 10, scale = 2)
+    private BigDecimal valorMulta;
+
     @Column(name = "estorno_sinal")
     private Boolean estornoSinal;
 
