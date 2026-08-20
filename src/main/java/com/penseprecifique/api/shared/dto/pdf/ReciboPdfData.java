@@ -26,8 +26,8 @@ public class ReciboPdfData {
     private String dataCancelamento;
     private String telefoneCliente;
     private String emailCliente;
-    // itens populados por toReciboPdfData() (recibo-sinal) e toReciboPdfDataMulta() (P-F008,
-    // Seção 5 "Detalhes do produto") — ausente em toReciboPdfDataEstorno.
+    // itens populados por toReciboPdfData() (recibo-sinal), toReciboPdfDataMulta() e
+    // toReciboPdfDataEstorno() (P-F008/P-B004, Seção 5 "Detalhes do produto").
     private List<ItemPdfData> itens;
     private String valorTotalPedido;
     private String percentualSinal;

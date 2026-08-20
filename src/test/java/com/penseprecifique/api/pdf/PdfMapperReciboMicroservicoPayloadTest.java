@@ -191,11 +191,17 @@ class PdfMapperReciboMicroservicoPayloadTest {
         ReciboPdfData dados = ReciboPdfData.builder()
                 .numeroFormatado("9")
                 .nomeCliente("Cliente X")
+                .telefoneCliente("(11) 98888-7777")
+                .emailCliente("cliente@x.com")
                 .nomeEmpresa("Studio")
                 .emailEmpresa(null)
                 .telefoneEmpresa(null)
                 .valorRecebido("R$ 150,00")
                 .dataEstorno("05/01/2026")
+                .dataEmissao("18/08/2026")
+                .dataAprovacao("01/01/2026")
+                .motivo("Cliente desistiu da encomenda")
+                .itens(List.of())
                 .build();
 
         PdfMicroservicoReciboEstornoPayload payload = pdfMapper.toReciboEstornoMicroservicoPayload(dados);
@@ -206,13 +212,62 @@ class PdfMapperReciboMicroservicoPayloadTest {
                   "documento": {
                     "numeroFormatado": "9",
                     "nomeCliente": "Cliente X",
+                    "telefoneCliente": "(11) 98888-7777",
+                    "emailCliente": "cliente@x.com",
                     "valorRecebido": "R$ 150,00",
-                    "dataEstorno": "05/01/2026"
+                    "dataEstorno": "05/01/2026",
+                    "dataEmissao": "18/08/2026",
+                    "dataAprovacao": "01/01/2026",
+                    "motivo": "Cliente desistiu da encomenda",
+                    "itens": []
                   }
                 }
                 """;
 
         assertEquals(objectMapper.readTree(esperado), objectMapper.valueToTree(payload));
+    }
+
+    @Test
+    void reciboEstornoPayloadEnviaMotivoNullQuandoCancelamentoNaoTemMotivoRegistrado() {
+        ReciboPdfData dados = ReciboPdfData.builder()
+                .numeroFormatado("9")
+                .nomeCliente("Cliente X")
+                .nomeEmpresa("Studio")
+                .valorRecebido("R$ 150,00")
+                .dataEstorno("05/01/2026")
+                .motivo(null)
+                .itens(List.of())
+                .build();
+
+        PdfMicroservicoReciboEstornoPayload payload = pdfMapper.toReciboEstornoMicroservicoPayload(dados);
+
+        assertNull(payload.getDocumento().getMotivo());
+    }
+
+    @Test
+    void reciboEstornoPayloadPopulaItensComNomeCustomizacaoESubtotal() {
+        ItemPdfData item = ItemPdfData.builder()
+                .nomeProduto("Bolo decorado")
+                .customizacoes("Cobertura de chocolate")
+                .quantidade("2")
+                .precoUnitario("R$ 50,00")
+                .subtotal("R$ 100,00")
+                .build();
+        ReciboPdfData dados = ReciboPdfData.builder()
+                .numeroFormatado("9")
+                .nomeCliente("Cliente X")
+                .nomeEmpresa("Studio")
+                .valorRecebido("R$ 150,00")
+                .dataEstorno("05/01/2026")
+                .itens(List.of(item))
+                .build();
+
+        PdfMicroservicoReciboEstornoPayload payload = pdfMapper.toReciboEstornoMicroservicoPayload(dados);
+
+        assertEquals(1, payload.getDocumento().getItens().size());
+        assertEquals("Bolo decorado", payload.getDocumento().getItens().get(0).getNomeProduto());
+        assertEquals("Cobertura de chocolate", payload.getDocumento().getItens().get(0).getCustomizacoes());
+        assertEquals("R$ 100,00", payload.getDocumento().getItens().get(0).getSubtotal());
     }
 
     @Test

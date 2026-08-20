@@ -89,7 +89,11 @@ public class ReciboPdfPayloadService {
         if (!Boolean.TRUE.equals(orcamento.getEstornoSinal())) {
             throw new BusinessException("Recibo de estorno só disponível para cancelamentos com estorno de sinal");
         }
-        ReciboPdfData dados = pdfMapper.toReciboPdfDataEstorno(orcamento, buscarEmpresa(usuario));
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem = itens.stream()
+                .collect(Collectors.toMap(OrcamentoItem::getId,
+                        item -> orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId())));
+        ReciboPdfData dados = pdfMapper.toReciboPdfDataEstorno(orcamento, buscarEmpresa(usuario), itens, customizacoesPorItem);
         return pdfMapper.toReciboEstornoMicroservicoPayload(dados);
     }
 

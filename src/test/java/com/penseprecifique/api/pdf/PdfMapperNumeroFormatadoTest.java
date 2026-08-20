@@ -57,7 +57,8 @@ class PdfMapperNumeroFormatadoTest {
 
     @Test
     void reciboPdfDataEstornoNaoTemZeroAEsquerdaNemPrefixo() {
-        String numeroFormatado = pdfMapper.toReciboPdfDataEstorno(orcamentoComNumero(1000), null).getNumeroFormatado();
+        String numeroFormatado = pdfMapper.toReciboPdfDataEstorno(orcamentoComNumero(1000), null, List.of(), Map.of())
+                .getNumeroFormatado();
         assertEquals("1000", numeroFormatado);
     }
 }

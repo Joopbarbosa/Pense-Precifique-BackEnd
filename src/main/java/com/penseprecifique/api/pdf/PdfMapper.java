@@ -208,15 +208,22 @@ public class PdfMapper {
             .build();
     }
 
-    public ReciboPdfData toReciboPdfDataEstorno(Orcamento orc, Empresa empresa) {
+    public ReciboPdfData toReciboPdfDataEstorno(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
+            Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         return ReciboPdfData.builder()
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
+            .telefoneCliente(orc.getCliente() != null ? orc.getCliente().getWhatsapp() : null)
+            .emailCliente(orc.getCliente() != null ? orc.getCliente().getEmail() : null)
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
             .valorRecebido(orc.getValorSinal() != null ? formatarMoeda(orc.getValorSinal()) : "—")
             .dataEstorno(orc.getDataEstornoSinal() != null ? formatarData(orc.getDataEstornoSinal()) : "—")
+            .motivo(orc.getCancelamentoMotivo())
+            .dataEmissao(formatarData(LocalDateTime.now()))
+            .dataAprovacao(orc.getDataAprovacao() != null ? formatarData(orc.getDataAprovacao()) : "—")
+            .itens(mapearItens(itens, customizacoesPorItem))
             .build();
     }
 
@@ -281,8 +288,14 @@ public class PdfMapper {
             .documento(PdfMicroservicoDocumentoReciboEstornoPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
+                .telefoneCliente(dados.getTelefoneCliente())
+                .emailCliente(dados.getEmailCliente())
                 .valorRecebido(dados.getValorRecebido())
                 .dataEstorno(dados.getDataEstorno())
+                .dataEmissao(dados.getDataEmissao())
+                .dataAprovacao(dados.getDataAprovacao())
+                .motivo(dados.getMotivo())
+                .itens(mapearItensPayload(dados.getItens()))
                 .build())
             .build();
     }
