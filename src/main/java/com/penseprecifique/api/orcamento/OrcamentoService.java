@@ -584,13 +584,16 @@ public class OrcamentoService {
                 orcamento.setCancelamentoTipo(TipoCancelamento.ESTORNO);
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
                 if (request.isEstornarSinal()) {
+                    if (request.getDataEstornoSinal() == null) {
+                        throw new BusinessException("A data do estorno é obrigatória.");
+                    }
                     reciboEstornoRepository.save(ReciboEstorno.builder()
                             .orcamento(orcamento)
                             .valorEstornado(orcamento.getValorSinal())
-                            .dataEstorno(now)
+                            .dataEstorno(request.getDataEstornoSinal())
                             .build());
                     orcamento.setEstornoSinal(true);
-                    orcamento.setDataEstornoSinal(now);
+                    orcamento.setDataEstornoSinal(request.getDataEstornoSinal());
                 }
                 break;
 
