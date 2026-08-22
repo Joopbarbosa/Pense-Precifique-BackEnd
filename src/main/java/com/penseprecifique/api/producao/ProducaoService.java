@@ -41,6 +41,7 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProducaoMapper;
 import com.penseprecifique.api.util.IdentificadorFormatter;
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
@@ -146,24 +147,17 @@ public class ProducaoService {
 
     /**
      * Traduz o Sort recebido (nomes de campo voltados pro cliente) na expressão JPQL real, validando
-     * contra a allowlist. Sem Sort informado → default numero DESC (produção mais recente primeiro).
+     * contra a allowlist (#354 — validação/tradução em si extraída para PageableOrdenacaoResolver,
+     * reaproveitado também por Orçamento/Produto/Cliente/Insumo). Sem Sort informado → default
+     * numero DESC (produção mais recente primeiro).
      */
     private Pageable resolverPageableOrdenado(Pageable pageable) {
         if (pageable.getSort().isUnsorted()) {
             Sort padrao = JpaSort.unsafe(Sort.Direction.DESC, "p.numero");
             return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), padrao);
         }
-
-        Sort sortResolvido = Sort.unsorted();
-        for (Sort.Order order : pageable.getSort()) {
-            String expressao = CAMPOS_ORDENACAO_PRODUCAO.get(order.getProperty());
-            if (expressao == null) {
-                throw new BusinessException("Campo de ordenação inválido: '" + order.getProperty()
-                        + "'. Permitidos: dataInicio, estado, produto, quantidade, numero.");
-            }
-            sortResolvido = sortResolvido.and(JpaSort.unsafe(order.getDirection(), expressao));
-        }
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortResolvido);
+        return PageableOrdenacaoResolver.resolverExpressaoJpql(pageable, CAMPOS_ORDENACAO_PRODUCAO,
+                "dataInicio, estado, produto, quantidade, numero");
     }
 
     @Transactional(readOnly = true)

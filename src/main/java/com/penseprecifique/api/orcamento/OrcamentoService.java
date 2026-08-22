@@ -50,8 +50,10 @@ import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -75,6 +77,17 @@ public class OrcamentoService {
 
     private static final BigDecimal CEM = new BigDecimal("100");
     private static final int MIN_OBS_OUTRO = 30;
+
+    // #354 — allowlist explícita dos campos de ordenação aceitos em GET /orcamentos. Campo fora
+    // desta lista é rejeitado com BusinessException (400) por PageableOrdenacaoResolver, nunca mais
+    // repassado cru pro Hibernate (UnknownPathException → 500).
+    private static final Map<String, String> CAMPOS_ORDENACAO_ORCAMENTO = Map.of(
+            "total", "total",
+            "createdAt", "createdAt",
+            "status", "status",
+            "cliente.nome", "cliente.nome",
+            "numero", "numero"
+    );
 
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
@@ -107,9 +120,12 @@ public class OrcamentoService {
         LocalDateTime dataCriacaoDeInicio = dataCriacaoDe != null ? dataCriacaoDe.atStartOfDay() : null;
         LocalDateTime dataCriacaoAteFim = dataCriacaoAte != null ? dataCriacaoAte.atTime(LocalTime.MAX) : null;
 
+        Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_ORCAMENTO,
+                "total, createdAt, status, cliente.nome, numero");
         Page<Orcamento> page = orcamentoRepository.buscar(
-                usuarioId, status, buscaNormalizada, dataCriacaoDeInicio, dataCriacaoAteFim, pageable);
-        return page.map(orcamentoMapper::toResponse);
+                usuarioId, status, buscaNormalizada, dataCriacaoDeInicio, dataCriacaoAteFim, pageableOrdenado);
+        Page<OrcamentoResponse> mapeado = page.map(orcamentoMapper::toResponse);
+        return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
     }
 
     @Transactional(readOnly = true)

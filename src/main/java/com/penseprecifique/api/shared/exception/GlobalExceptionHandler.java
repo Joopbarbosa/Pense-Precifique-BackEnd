@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.penseprecifique.api.shared.dto.response.ErrorResponseDTO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -81,6 +82,23 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponseDTO(
                 ex.getMessage(),
                 HttpStatus.NOT_FOUND.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
+    /**
+     * #354 — rede de segurança adicional além da allowlist de PageableOrdenacaoResolver: qualquer
+     * caminho de query que gere este tipo de erro (ex. UnknownPathException do Hibernate por
+     * propriedade de Sort inexistente na entidade) vira 400 em vez de vazar como 500 genérico.
+     * Mensagem propositalmente genérica — não expõe detalhe interno de query/Hibernate ao cliente.
+     */
+    @ExceptionHandler(InvalidDataAccessApiUsageException.class)
+    public ResponseEntity<ErrorResponseDTO> handleInvalidDataAccessApiUsage(InvalidDataAccessApiUsageException ex) {
+        log.warn("Parâmetro de consulta inválido", ex);
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Parâmetro de consulta inválido.",
+                HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
                 null
         ));

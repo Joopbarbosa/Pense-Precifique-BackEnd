@@ -35,8 +35,10 @@ import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -62,6 +64,18 @@ public class ProdutoService {
     private static final BigDecimal CEM = new BigDecimal("100");
     private static final BigDecimal SESSENTA = new BigDecimal("60");
 
+    // #354 — allowlist explícita dos campos de ordenação aceitos em GET /produtos. Campo fora desta
+    // lista é rejeitado com BusinessException (400) por PageableOrdenacaoResolver, nunca mais
+    // repassado cru pro Hibernate (UnknownPathException → 500).
+    private static final Map<String, String> CAMPOS_ORDENACAO_PRODUTO = Map.of(
+            "nome", "nome",
+            "numero", "numero",
+            "precoVenda", "precoVenda",
+            "precoCusto", "precoCusto",
+            "estoqueAtual", "estoqueAtual",
+            "createdAt", "createdAt"
+    );
+
     private final ProdutoRepository produtoRepository;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
@@ -84,12 +98,15 @@ public class ProdutoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
         boolean filtrarSemCatalogo = Boolean.TRUE.equals(semCatalogo);
+        Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_PRODUTO,
+                "nome, numero, precoVenda, precoCusto, estoqueAtual, createdAt");
         Page<Produto> pagina = temBusca
-                ? produtoRepository.buscarComBusca(usuarioId, tipo, filtrarSemCatalogo, busca, pageable)
-                : produtoRepository.buscar(usuarioId, tipo, filtrarSemCatalogo, pageable);
+                ? produtoRepository.buscarComBusca(usuarioId, tipo, filtrarSemCatalogo, busca, pageableOrdenado)
+                : produtoRepository.buscar(usuarioId, tipo, filtrarSemCatalogo, pageableOrdenado);
 
         BigDecimal valorHora = buscarValorHora(usuarioId);
-        return pagina.map(produto -> montarResponseComCustoAoVivo(produto, valorHora));
+        Page<ProdutoResponse> mapeado = pagina.map(produto -> montarResponseComCustoAoVivo(produto, valorHora));
+        return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
     }
 
     /**
