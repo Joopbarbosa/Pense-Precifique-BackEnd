@@ -43,14 +43,14 @@ public class ClienteServiceImpl implements ClienteService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ClienteResponse> listar(String nome, Pageable pageable) {
+    public Page<ClienteResponse> listar(String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_CLIENTE,
                 "nome, numero, email, createdAt");
 
-        Page<Cliente> pagina = (nome != null && !nome.isBlank())
+        Page<Cliente> pagina = (busca != null && !busca.isBlank())
                 ? clienteRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
-                        usuarioId, nome, pageableOrdenado)
+                        usuarioId, busca, pageableOrdenado)
                 : clienteRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageableOrdenado);
 
         Page<ClienteResponse> mapeado = pagina.map(clienteMapper::toResponse);

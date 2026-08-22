@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface ClienteService {
 
-    Page<ClienteResponse> listar(String nome, Pageable pageable);
+    Page<ClienteResponse> listar(String busca, Pageable pageable);
 
     ClienteResponse buscarPorId(UUID id);
 
