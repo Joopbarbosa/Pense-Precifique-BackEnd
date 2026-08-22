@@ -159,7 +159,6 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
 
         validarRegras(request);
-        validarEstoqueSuficiente(request.getItens(), usuarioId);
 
         TipoDesconto tipoDesconto = parseTipoDesconto(request.getTipoDesconto());
 
@@ -314,10 +313,11 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-NOVA-8/9/RN-081 — critério único de "situação de estoque" para um Produto vendido em
-     * Orçamento, compartilhado entre {@link #simularAlertas} e o bloqueio pré-save de
-     * RN-NOVA-10 ({@link #validarEstoqueSuficiente}) — os dois lugares precisam concordar no
-     * mesmo critério do que conta como "insuficiente".
+     * RN-NOVA-8/9/RN-081/RN-NOVA-11 (revisada) — critério único de "situação de estoque" para um
+     * Produto vendido em Orçamento, usado por {@link #simularAlertas} (aviso ao adicionar/checkpoint
+     * ao criar, nunca bloqueante). RN-NOVA-10 (bloqueio pré-save em {@code criar()}) foi removida —
+     * o orçamento nunca é bloqueado por estoque insuficiente; a única trava real é
+     * {@link #validarEstoqueParaFinalizar}, no avanço para FINALIZADO.
      */
     private SituacaoAlertaInsumo decidirSituacaoEstoque(BigDecimal estoqueAtual, BigDecimal necessaria,
                                                           boolean permitirEstoqueNegativo) {
@@ -584,13 +584,16 @@ public class OrcamentoService {
                 orcamento.setCancelamentoTipo(TipoCancelamento.ESTORNO);
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
                 if (request.isEstornarSinal()) {
+                    if (request.getDataEstornoSinal() == null) {
+                        throw new BusinessException("A data do estorno é obrigatória.");
+                    }
                     reciboEstornoRepository.save(ReciboEstorno.builder()
                             .orcamento(orcamento)
                             .valorEstornado(orcamento.getValorSinal())
-                            .dataEstorno(now)
+                            .dataEstorno(request.getDataEstornoSinal())
                             .build());
                     orcamento.setEstornoSinal(true);
-                    orcamento.setDataEstornoSinal(now);
+                    orcamento.setDataEstornoSinal(request.getDataEstornoSinal());
                 }
                 break;
 
@@ -599,6 +602,7 @@ public class OrcamentoService {
                 orcamento.setCancelamentoTipo(TipoCancelamento.MULTA);
                 orcamento.setPercentualMulta(request.getPercentualMulta());
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
+                orcamento.setValorMulta(calcularValorFinalMulta(orcamento));
                 if (atual == StatusOrcamento.FINALIZADO) {
                     reverterEstoque(orcamento, request.getMotivoCancelamento());
                 }
@@ -623,6 +627,7 @@ public class OrcamentoService {
         }
 
         orcamento.setStatus(StatusOrcamento.CANCELADO);
+        orcamento.setDataCancelamento(now);
         orcamento = orcamentoRepository.save(orcamento);
         return montarDetalhe(orcamento);
     }
@@ -734,47 +739,15 @@ public class OrcamentoService {
             throw new BusinessException("A data de início estimada é obrigatória quando o início não é assim que aprovado");
         }
 
-        if (request.isSinalAtivo()
-                && request.getPercentualSinal() == null
-                && request.getValorSinal() == null) {
-            throw new BusinessException("Quando o sinal está ativo, o percentual ou o valor do sinal deve ser informado");
-        }
-    }
-
-    /**
-     * RN-NOVA-10 — defesa em profundidade de RN-NOVA-8: bloqueia POST /orcamentos (400) antes de
-     * qualquer persistência quando algum item tem permitirEstoqueNegativo=false e a quantidade
-     * solicitada excede o estoque atual do Produto. Mesma resolução de origem
-     * ({@link #resolverProdutoNecessario}) e mesmo critério de situação
-     * ({@link #decidirSituacaoEstoque}) do endpoint de simulação ({@link #simularAlertas}), para os
-     * dois lugares nunca divergirem no que conta como "insuficiente". Itens com
-     * permitirEstoqueNegativo=true e estoque insuficiente não são bloqueados aqui — continuam
-     * cobertos só pelo aviso informativo pós-criação de {@link #calcularAvisosEstoque}.
-     */
-    private void validarEstoqueSuficiente(List<OrcamentoItemRequest> itens, UUID usuarioId) {
-        Map<UUID, BigDecimal> necessidadePorProduto = new LinkedHashMap<>();
-        Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
-
-        for (OrcamentoItemRequest itemReq : itens) {
-            ProdutoNecessario resolvido = resolverProdutoNecessario(
-                    itemReq.getItemCatalogoId(), itemReq.getProdutoId(), itemReq.getQuantidade(), usuarioId);
-            necessidadePorProduto.merge(resolvido.produto().getId(), resolvido.necessaria(), BigDecimal::add);
-            produtosPorId.putIfAbsent(resolvido.produto().getId(), resolvido.produto());
-        }
-
-        List<String> bloqueados = new ArrayList<>();
-        for (Map.Entry<UUID, BigDecimal> entry : necessidadePorProduto.entrySet()) {
-            Produto produto = produtosPorId.get(entry.getKey());
-            boolean permitirEstoqueNegativo = Boolean.TRUE.equals(produto.getPermitirEstoqueNegativo());
-            SituacaoAlertaInsumo situacao = decidirSituacaoEstoque(produto.getEstoqueAtual(), entry.getValue(), permitirEstoqueNegativo);
-            if (situacao == SituacaoAlertaInsumo.BLOQUEIO_FUTURO) {
-                bloqueados.add(produto.getNome());
+        if (request.isSinalAtivo()) {
+            boolean percentualValido = request.getPercentualSinal() != null
+                    && request.getPercentualSinal().compareTo(BigDecimal.ZERO) > 0;
+            boolean valorValido = request.getValorSinal() != null
+                    && request.getValorSinal().compareTo(BigDecimal.ZERO) > 0;
+            if (!percentualValido && !valorValido) {
+                throw new BusinessException(
+                        "Quando o sinal está ativo, o percentual ou o valor do sinal deve ser maior que zero");
             }
-        }
-        if (!bloqueados.isEmpty()) {
-            throw new BusinessException(
-                    "Estoque insuficiente para " + String.join(", ", bloqueados)
-                            + ". Este(s) produto(s) não permite(m) estoque negativo.");
         }
     }
 
@@ -810,6 +783,25 @@ public class OrcamentoService {
                     .divide(CEM, 2, RoundingMode.HALF_UP);
         }
         return request.getValorSinal();
+    }
+
+    /**
+     * RN-NOVA-1 (V0.8.1) — valor final de multa desconta o sinal já pago, piso zero: nunca cobra
+     * valor negativo. O caso sinal_pago > valor_multa gerar devolução da diferença ao cliente
+     * ("mini-estorno") está fora deste cálculo — achado separado (CSV_ACHADOS_V0.8.1.csv), aguarda
+     * decisão de negócio própria.
+     */
+    private BigDecimal calcularValorFinalMulta(Orcamento orcamento) {
+        if (orcamento.getPercentualMulta() == null || orcamento.getTotal() == null) {
+            return null;
+        }
+        BigDecimal valorMultaBruto = orcamento.getTotal()
+                .multiply(orcamento.getPercentualMulta())
+                .divide(CEM, 2, RoundingMode.HALF_UP);
+        BigDecimal sinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
+                ? orcamento.getValorSinal()
+                : BigDecimal.ZERO;
+        return valorMultaBruto.subtract(sinalPago).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
     private OrcamentoDetalheResponse montarDetalhe(Orcamento orcamento) {

@@ -62,7 +62,7 @@ class ProdutoListagemCustoAoVivoIT {
         ProdutoDetalheResponse cadastrado = produtoService.cadastrar(request);
 
         // custoTotalLote = 5 * 2.00 = 10.00 (sem valor-hora configurado, mão de obra = 0); custoUnitario = 10.00/10 = 1.00
-        Page<ProdutoResponse> paginaAntes = produtoService.listar(null, null, PageRequest.of(0, 10));
+        Page<ProdutoResponse> paginaAntes = produtoService.listar(null, null, null, PageRequest.of(0, 10));
         ProdutoResponse respostaAntes = paginaAntes.getContent().stream()
                 .filter(p -> p.getId().equals(cadastrado.getId())).findFirst().orElseThrow();
         assertEquals(0, new BigDecimal("1.0000").compareTo(respostaAntes.getCustoUnitario()));
@@ -71,7 +71,7 @@ class ProdutoListagemCustoAoVivoIT {
         insumo.setCustoUnitario(new BigDecimal("4.00"));
         insumoRepository.save(insumo);
 
-        Page<ProdutoResponse> paginaDepois = produtoService.listar(null, null, PageRequest.of(0, 10));
+        Page<ProdutoResponse> paginaDepois = produtoService.listar(null, null, null, PageRequest.of(0, 10));
         ProdutoResponse respostaDepois = paginaDepois.getContent().stream()
                 .filter(p -> p.getId().equals(cadastrado.getId())).findFirst().orElseThrow();
         // custoTotalLote = 5 * 4.00 = 20.00; custoUnitario = 20.00/10 = 2.00

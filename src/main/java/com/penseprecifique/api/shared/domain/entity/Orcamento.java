@@ -90,11 +90,17 @@ public class Orcamento {
     @Column(name = "percentual_multa", precision = 5, scale = 2)
     private BigDecimal percentualMulta;
 
+    @Column(name = "valor_multa", precision = 10, scale = 2)
+    private BigDecimal valorMulta;
+
     @Column(name = "estorno_sinal")
     private Boolean estornoSinal;
 
     @Column(name = "data_estorno_sinal")
     private LocalDateTime dataEstornoSinal;
+
+    @Column(name = "data_cancelamento")
+    private LocalDateTime dataCancelamento;
 
     @Column(name = "subtotal", nullable = false, precision = 10, scale = 2)
     @Builder.Default

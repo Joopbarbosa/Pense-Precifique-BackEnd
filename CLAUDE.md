@@ -265,23 +265,38 @@ O endpoint `POST /producoes/lote` (lançamento múltiplo em uma sessão, fluxo a
 
 ---
 
-## PdfMapper Pattern (CRÍTICO)
+## PdfMapper Pattern (CRÍTICO — atualizado V0.8.1, migração para microsserviço)
 
-Toda formatação de dados para PDF acontece no Java — templates são "burros".
+Toda formatação de dados para PDF acontece no Java — o microsserviço (`pense-precifique-pdf`) é
+"burro" quanto a regra de negócio, só renderiza o payload que recebe. **Thymeleaf foi removido por
+completo em #262 (V0.8.1)** — não existe mais `ctx.setVariable`/templates `.html` no backend;
+qualquer menção a Thymeleaf em documentação antiga é legado, não replicar.
+
+Padrão atual: `PdfMapper` monta um DTO achatado por tipo de documento (`OrcamentoPdfData`,
+`ReciboPdfData` — reaproveitado por Sinal/Multa/Estorno, `ReciboPagamentoPdfData`), depois um
+segundo método (`toXxxMicroservicoPayload`) converte esse DTO para o payload JSON que o
+microsserviço espera (schema Zod do lado de lá, `contrato-pdf.md` seção 8):
 
 ```java
 // PdfService chama:
-ctx.setVariable("dados", pdfMapper.toOrcamentoPdfData(orc, empresa, cliente));
-
-// Template só usa:
-${dados.nomeCliente}
-${dados.numeroFormatado}
-${dados.total}
+ReciboPdfData dados = pdfMapper.toReciboPdfDataMulta(orc, empresa, itens, customizacoes);
+PdfMicroservicoDocumentoReciboMultaPayload payload = pdfMapper.toReciboSinalMicroservicoPayload(dados);
+// payload vira o corpo JSON de POST ao microsserviço — nenhuma lógica no lado de lá.
 ```
 
-**Nunca** usar SpEL complexo, `T(String)`, `#dates`, `padStart` ou navegação em relacionamentos nos templates Thymeleaf. Qualquer lógica vai no PdfMapper.
+**Paridade entre documentos do mesmo "formato" (P-B004, V0.8.1):** Multa e Estorno reusam a mesma
+assinatura de método (`Orcamento, Empresa, List<OrcamentoItem>, Map<UUID,List<OrcamentoItemCustomizacao>>`)
+e a mesma estratégia de busca de itens/customizações (`ReciboPdfPayloadService.montarPayloadXxx`) —
+ao adicionar um campo novo a um dos dois, replicar a mesma mudança no irmão em vez de resolver só
+o caso que motivou a tarefa, a menos que exista razão de negócio para divergir (documentar se for
+o caso).
 
-**Identificadores sequenciais (`INS-N`/`PRO-N`/`CLI-N`/`CTG-N`) nunca aparecem em PDF** — regra explícita do bloco Catálogo (RN-053 (ver `DECISOES_GLOBAIS.md`)). `PdfMapper` não deve expô-los em nenhum DTO de PDF.
+**Nunca** usar lógica de formatação/regra de negócio dentro do microsserviço `pense-precifique-pdf`
+— toda decisão (valor final, texto condicional, o que mostrar/ocultar) vem pronta no payload.
+
+**Identificadores sequenciais (`INS-N`/`PRO-N`/`CLI-N`/`CTG-N`) nunca aparecem em PDF** — regra
+explícita do bloco Catálogo (RN-053 (ver `DECISOES_GLOBAIS.md`)). `PdfMapper` não deve expô-los em
+nenhum DTO de PDF.
 
 ---
 
@@ -390,6 +405,8 @@ ${dados.total}
 | Campo calculado exposto em DTO pode ficar "esquecido" se o dev assumir que existe sem checar | `precoSugerido`/`custoUnitario` só têm valor real se o Service que os calcula for de fato chamado no fluxo certo — confirmar sempre via curl, não assumir pela leitura do código. |
 | **A API não tem prefixo `/api`** — base é `http://localhost:8080/auth/login`, nunca `http://localhost:8080/api/auth/login` | Armadilha de validação via curl: o backend não libera `/error` no `SecurityConfig`, então uma rota inexistente como `/api/auth/login` retorna **401** em vez de 404 — parece erro de autenticação mas é só rota errada. Confirmado: `/api/...` → 401 (mascarado); `/auth/login` → 400 (rota real, corpo inválido). Sempre conferir a rota sem `/api` antes de investigar autenticação. |
 | **Nota de backlog "decisão registrada"/"implementado" não é o mesmo que confirmado no código** — sempre conferir o payload real (curl) ou o código-fonte antes de escrever prompt/implementação em cima de uma anotação assim | Furou 3 vezes na V0.6.1.1: `identificador` ausente em `OrcamentoDetalheResponse` apesar de "registrado"; `algumInsumoNaoFracionavel` ausente na listagem de Produtos apesar de "expor... registrado 2026-07-20"; RN-051 (PDC-005) nunca implementada de verdade no backend apesar de o item aparecer marcado como backend fechado. Todos os 3 só foram pegos porque alguém validou ao vivo antes de seguir em frente. |
+| **Desconto sobre valor já pago: sempre piso zero (`BigDecimal.max(ZERO, ...)` ou equivalente), nunca permitir negativo** | Padrão de `P-B002` (V0.8.1) — `OrcamentoService.calcularValorFinalMulta()`: multa final = `max(multaBruta − sinalPago, ZERO)`. Se o valor descontado supera o valor bruto, o resultado correto é zero (nem cobrança nem devolução), nunca um número negativo persistido/exibido. Reaproveitar este padrão para qualquer cálculo futuro de "desconta X de Y" (ex.: o achado ainda pendente de decisão de negócio "sinal pago > valor da multa" — mini-estorno — registrado em CSV, não implementado). |
+| **Campo `LocalDateTime` em request vindo do frontend: o frontend manda no formato certo, ou o Jackson rejeita com 400 antes do Service** | Causa raiz de `P-B003` (RECONCILIA-005) — `AvancaStatusRequest.dataEstornoSinal` é `LocalDateTime`, mas o frontend enviava só a data (`"2026-08-19"`, de um `<input type="date">`), sem componente de hora. Jackson rejeita a desserialização com 400 antes de qualquer validação do Service — o erro nem chega no código de negócio, então debugar pelo Service sozinho não mostra nada. Ao expor um campo `LocalDateTime` num request DTO alimentado por um input HTML `date` (não `datetime-local`), documentar explicitamente o formato esperado (`contrato-orcamento.md`) e decidir de quem é a responsabilidade de completar a hora (frontend, como decidido aqui — hora fixa meio-dia, evita ambiguidade de fuso). |
 
 ---
 

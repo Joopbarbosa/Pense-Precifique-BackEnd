@@ -69,7 +69,10 @@ class PdfMapperMicroservicoPayloadTest {
                   },
                   "documento": {
                     "numeroFormatado": "47",
+                    "status": null,
                     "nomeCliente": "Mariana Costa",
+                    "telefoneCliente": null,
+                    "emailCliente": null,
                     "dataEmissao": "10/08/2026",
                     "dataValidade": "20/08/2026",
                     "prazoProducao": "15 dias úteis",
@@ -78,8 +81,10 @@ class PdfMapperMicroservicoPayloadTest {
                     "sinalAtivo": true,
                     "valorSinal": "R$ 150,00",
                     "restanteAposSinal": "R$ 150,00",
+                    "percentualSinal": null,
                     "subtotal": "R$ 320,00",
                     "desconto": "R$ 20,00",
+                    "percentualDesconto": null,
                     "total": "R$ 300,00",
                     "observacoes": "Embalagem para presente incluída.",
                     "itens": [
@@ -135,5 +140,39 @@ class PdfMapperMicroservicoPayloadTest {
 
         assertNull(payload.getDocumento().getItens().get(0).getCustomizacoes(),
                 "customizacoes deveria virar null pro microsserviço, nunca o placeholder '—'");
+    }
+
+    /**
+     * Frente B (#248) — telefoneCliente/emailCliente/percentualSinal/percentualDesconto passam
+     * direto de {@link OrcamentoPdfData} para o payload, sem transformação adicional (a formatação
+     * já aconteceu em {@code PdfMapper.toOrcamentoPdfData}).
+     */
+    @Test
+    void frenteBPopulaOs4CamposPendentesQuandoPresentesEmOrcamentoPdfData() {
+        OrcamentoPdfData dados = OrcamentoPdfData.builder()
+                .numeroFormatado("1")
+                .nomeEmpresa("Studio")
+                .nomeCliente("Cliente")
+                .telefoneCliente("(11) 98888-7777")
+                .emailCliente("cliente@teste.com")
+                .dataEmissao("—")
+                .dataValidade("Não definida")
+                .prazoProducao("—")
+                .inicioProducao("—")
+                .metodoPagamento("Pix")
+                .sinalAtivo(true)
+                .percentualSinal("50%")
+                .subtotal("R$ 100,00")
+                .percentualDesconto("15%")
+                .total("R$ 85,00")
+                .itens(List.of())
+                .build();
+
+        PdfMicroservicoOrcamentoPayload payload = pdfMapper.toMicroservicoPayload(dados);
+
+        assertEquals("(11) 98888-7777", payload.getDocumento().getTelefoneCliente());
+        assertEquals("cliente@teste.com", payload.getDocumento().getEmailCliente());
+        assertEquals("50%", payload.getDocumento().getPercentualSinal());
+        assertEquals("15%", payload.getDocumento().getPercentualDesconto());
     }
 }

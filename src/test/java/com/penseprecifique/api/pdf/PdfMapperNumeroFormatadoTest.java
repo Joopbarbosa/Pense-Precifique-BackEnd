@@ -33,7 +33,8 @@ class PdfMapperNumeroFormatadoTest {
 
     @Test
     void reciboPdfDataNaoTemZeroAEsquerdaNemPrefixo() {
-        String numeroFormatado = pdfMapper.toReciboPdfData(orcamentoComNumero(7), null).getNumeroFormatado();
+        String numeroFormatado = pdfMapper.toReciboPdfData(orcamentoComNumero(7), null, List.of(), Map.of())
+                .getNumeroFormatado();
         assertEquals("7", numeroFormatado);
     }
 
@@ -42,19 +43,22 @@ class PdfMapperNumeroFormatadoTest {
         ReciboPagamento recibo = ReciboPagamento.builder()
                 .valorTotal(BigDecimal.ZERO).valorSinalPago(BigDecimal.ZERO)
                 .valorRestantePago(BigDecimal.ZERO).totalQuitado(BigDecimal.ZERO).build();
-        String numeroFormatado = pdfMapper.toReciboPagamentoPdfData(orcamentoComNumero(123), recibo, null).getNumeroFormatado();
+        String numeroFormatado = pdfMapper.toReciboPagamentoPdfData(orcamentoComNumero(123), recibo, null, List.of(), Map.of())
+                .getNumeroFormatado();
         assertEquals("123", numeroFormatado);
     }
 
     @Test
     void reciboPdfDataMultaNaoTemZeroAEsquerdaNemPrefixo() {
-        String numeroFormatado = pdfMapper.toReciboPdfDataMulta(orcamentoComNumero(9), null).getNumeroFormatado();
+        String numeroFormatado = pdfMapper.toReciboPdfDataMulta(orcamentoComNumero(9), null, List.of(), Map.of())
+                .getNumeroFormatado();
         assertEquals("9", numeroFormatado);
     }
 
     @Test
     void reciboPdfDataEstornoNaoTemZeroAEsquerdaNemPrefixo() {
-        String numeroFormatado = pdfMapper.toReciboPdfDataEstorno(orcamentoComNumero(1000), null).getNumeroFormatado();
+        String numeroFormatado = pdfMapper.toReciboPdfDataEstorno(orcamentoComNumero(1000), null, List.of(), Map.of())
+                .getNumeroFormatado();
         assertEquals("1000", numeroFormatado);
     }
 }

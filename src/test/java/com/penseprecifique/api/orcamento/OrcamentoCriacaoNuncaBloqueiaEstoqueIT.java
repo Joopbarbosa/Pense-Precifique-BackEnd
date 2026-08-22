@@ -12,7 +12,6 @@ import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.response.orcamento.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
-import com.penseprecifique.api.shared.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,20 +23,20 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * #218/RN-NOVA-10 — POST /orcamentos passa a bloquear (400) quando algum item tem
- * permitirEstoqueNegativo=false e a quantidade solicitada excede o estoque atual do Produto —
- * defesa em profundidade do bloqueio de tela (RN-NOVA-8), mesmo critério do endpoint de simulação
- * (ver {@link OrcamentoSimularAlertasIT}). Muda o contrato documentado em contrato-orcamento.md
- * (V0.6.1.1): antes deste RN, o endpoint nunca bloqueava por estoque, só retornava
- * avisosEstoque informativo — esse comportamento continua existindo para os casos que não
- * bloqueiam (permitirEstoqueNegativo=true).
+ * OpenProject #246/#245 (RN-NOVA-11, revisada) — POST /orcamentos nunca bloqueia por estoque
+ * insuficiente, independente de permitirEstoqueNegativo. Substitui
+ * OrcamentoRnNova10BloqueioEstoqueIT (removido): RN-NOVA-10 (bloqueio pré-save quando
+ * permitirEstoqueNegativo=false) foi revertida — a validação original do usuário concluiu que a
+ * única trava real de negócio é no avanço para FINALIZADO (RN-059, ver
+ * {@link OrcamentoRn052EstoqueNegativoIT}), nunca na criação. calcularAvisosEstoque continua
+ * informativo pós-criação (avisosEstoque na resposta), agora para qualquer item insuficiente,
+ * também independente de permitirEstoqueNegativo.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-class OrcamentoRnNova10BloqueioEstoqueIT {
+class OrcamentoCriacaoNuncaBloqueiaEstoqueIT {
 
     @Autowired OrcamentoService orcamentoService;
     @Autowired UsuarioRepository usuarioRepository;
@@ -50,12 +49,12 @@ class OrcamentoRnNova10BloqueioEstoqueIT {
 
     private void seedUsuarioECliente() {
         usuario = usuarioRepository.save(Usuario.builder()
-                .email("orc-rnnova10-" + UUID.randomUUID() + "@test.com")
+                .email("orc-nunca-bloqueia-" + UUID.randomUUID() + "@test.com")
                 .senhaHash("x").ativo(true).build());
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
         cliente = clienteRepository.save(Cliente.builder()
-                .usuario(usuario).numero(1).nome("Cliente RN-NOVA-10").ativa(true).build());
+                .usuario(usuario).numero(1).nome("Cliente RN-NOVA-11").ativa(true).build());
     }
 
     private Produto novoProduto(String nome, int numero, BigDecimal estoqueAtual, boolean permitirEstoqueNegativo) {
@@ -81,21 +80,23 @@ class OrcamentoRnNova10BloqueioEstoqueIT {
     }
 
     @Test
-    void permitirEstoqueNegativoFalseEInsuficienteBloqueiaSemPersistir() {
+    void permitirEstoqueNegativoFalseEInsuficienteNaoBloqueiaEPersiste() {
         seedUsuarioECliente();
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("3"), false);
-        long antes = orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId());
 
         OrcamentoRequest req = requestComItem(produto.getId(), 10);
+        OrcamentoDetalheResponse resultado = orcamentoService.criar(req);
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> orcamentoService.criar(req));
-        assertTrue(ex.getMessage().contains("Kit Convite"), "mensagem deve identificar o produto bloqueado");
+        assertEquals(1, orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId()),
+                "orçamento deve ter sido persistido — criação nunca bloqueia por estoque, mesmo com permitirEstoqueNegativo=false");
 
-        long depois = orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId());
-        assertEquals(antes, depois, "nada deve ter sido persistido quando o bloqueio ocorre");
+        List<AvisoEstoqueResponse> avisos = resultado.getAvisosEstoque();
+        assertEquals(1, avisos.size());
+        assertEquals(produto.getId(), avisos.get(0).getProdutoId());
 
         Produto inalterado = produtoRepository.findById(produto.getId()).orElseThrow();
-        assertEquals(0, new BigDecimal("3").compareTo(inalterado.getEstoqueAtual()), "estoque não deve ter sido alterado");
+        assertEquals(0, new BigDecimal("3").compareTo(inalterado.getEstoqueAtual()),
+                "estoque não é baixado na criação — baixa só acontece no avanço EM_PRODUCAO -> FINALIZADO");
     }
 
     @Test
@@ -104,11 +105,9 @@ class OrcamentoRnNova10BloqueioEstoqueIT {
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("3"), true);
 
         OrcamentoRequest req = requestComItem(produto.getId(), 10);
-
         OrcamentoDetalheResponse resultado = orcamentoService.criar(req);
 
-        assertEquals(1, orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId()),
-                "orçamento deve ter sido persistido, já que permitirEstoqueNegativo=true não bloqueia");
+        assertEquals(1, orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId()));
 
         List<AvisoEstoqueResponse> avisos = resultado.getAvisosEstoque();
         assertEquals(1, avisos.size());
@@ -117,12 +116,11 @@ class OrcamentoRnNova10BloqueioEstoqueIT {
     }
 
     @Test
-    void estoqueSuficienteNaoBloqueiaNemAvisa() {
+    void estoqueSuficienteNaoAvisa() {
         seedUsuarioECliente();
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("100"), false);
 
         OrcamentoRequest req = requestComItem(produto.getId(), 10);
-
         OrcamentoDetalheResponse resultado = orcamentoService.criar(req);
 
         assertEquals(1, orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId()));
@@ -130,10 +128,10 @@ class OrcamentoRnNova10BloqueioEstoqueIT {
     }
 
     @Test
-    void doisItensMesmoProdutoAcumulaNecessidadeAntesDeBloquear() {
+    void doisItensMesmoProdutoAcumulaNecessidadeSemBloquear() {
         seedUsuarioECliente();
-        // #218 — mesmo critério de acumulação de calcularAvisosEstoque/validarEstoqueParaFinalizar:
-        // cada item isolado (4) não excede o estoque (7), mas a soma (8) excede.
+        // Mesmo critério de acumulação de calcularAvisosEstoque/validarEstoqueParaFinalizar: cada
+        // item isolado (4) não excede o estoque (7), mas a soma (8) excede — ainda assim não bloqueia.
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("7"), false);
 
         OrcamentoItemRequest item1 = new OrcamentoItemRequest();
@@ -154,8 +152,11 @@ class OrcamentoRnNova10BloqueioEstoqueIT {
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item1, item2));
 
-        long antes = orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId());
-        assertThrows(BusinessException.class, () -> orcamentoService.criar(req));
-        assertEquals(antes, orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId()));
+        OrcamentoDetalheResponse resultado = orcamentoService.criar(req);
+
+        assertEquals(1, orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(usuario.getId()));
+        List<AvisoEstoqueResponse> avisos = resultado.getAvisosEstoque();
+        assertEquals(1, avisos.size());
+        assertEquals(0, new BigDecimal("8").compareTo(avisos.get(0).getQuantidadeNecessaria()));
     }
 }

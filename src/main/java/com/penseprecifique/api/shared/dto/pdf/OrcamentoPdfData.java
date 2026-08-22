@@ -8,10 +8,13 @@ import java.util.List;
 @Builder
 public class OrcamentoPdfData {
     private String numeroFormatado;
+    private String status;
     private String nomeEmpresa;
     private String emailEmpresa;
     private String telefoneEmpresa;
     private String nomeCliente;
+    private String telefoneCliente;
+    private String emailCliente;
     private String dataEmissao;
     private String dataValidade;
     private String prazoProducao;
@@ -20,8 +23,10 @@ public class OrcamentoPdfData {
     private boolean sinalAtivo;
     private String valorSinal;
     private String restanteAposSinal;
+    private String percentualSinal;
     private String subtotal;
     private String desconto;
+    private String percentualDesconto;
     private String total;
     private String observacoes;
     private List<ItemPdfData> itens;

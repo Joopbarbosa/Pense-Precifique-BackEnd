@@ -7,25 +7,22 @@ import java.util.List;
 
 @Data
 @Builder
-public class PdfMicroservicoDocumentoOrcamentoPayload {
+public class PdfMicroservicoDocumentoReciboSinalPayload {
     private String numeroFormatado;
-    private String status;
     private String nomeCliente;
     private String telefoneCliente;
     private String emailCliente;
+    private String metodoRecebido;
+    private String valorRecebido;
     private String dataEmissao;
-    private String dataValidade;
+    private String dataAprovacao;
     private String prazoProducao;
     private String inicioProducao;
-    private String metodoPagamento;
-    private boolean sinalAtivo;
-    private String valorSinal;
-    private String restanteAposSinal;
-    private String percentualSinal;
-    private String subtotal;
-    private String desconto;
-    private String percentualDesconto;
-    private String total;
-    private String observacoes;
+    // P-F007b — restaura "Detalhes do pedido"/"Próximos passos" do mock, cortadas em #248 por
+    // falta de dado no schema original.
     private List<PdfMicroservicoItemPayload> itens;
+    private String valorTotalPedido;
+    private String percentualSinal;
+    private String restante;
+    private String observacoes;
 }

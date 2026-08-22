@@ -7,14 +7,11 @@ import java.util.List;
 
 @Data
 @Builder
-public class ReciboPagamentoPdfData {
+public class PdfMicroservicoDocumentoReciboPagamentoPayload {
     private String numeroFormatado;
     private String nomeCliente;
     private String telefoneCliente;
     private String emailCliente;
-    private String nomeEmpresa;
-    private String emailEmpresa;
-    private String telefoneEmpresa;
     private String metodoPagamento;
     private String valorTotal;
     private String valorSinalPago;
@@ -25,6 +22,6 @@ public class ReciboPagamentoPdfData {
     private String prazoProducao;
     private String inicioProducao;
     private String dataPagamento;
-    private List<ItemPdfData> itens;
+    private List<PdfMicroservicoItemPayload> itens;
     private String observacoes;
 }
