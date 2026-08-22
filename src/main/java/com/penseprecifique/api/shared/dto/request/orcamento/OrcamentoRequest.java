@@ -30,7 +30,9 @@ public class OrcamentoRequest {
 
     private String metodoPagamentoObs;
 
-    @NotNull(message = "O prazo de produção é obrigatório")
+    @NotNull(message = "É obrigatório informar se o orçamento vai ter prazo de produção")
+    private Boolean temPrazoProducao;
+
     @Min(value = 1, message = "O prazo deve ser de pelo menos 1 dia útil")
     private Integer prazoProducaoDias;
 

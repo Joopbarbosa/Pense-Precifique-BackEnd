@@ -76,6 +76,7 @@ class OrcamentoMiniEstornoMultaIT {
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
         req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
         req.setSinalAtivo(sinalAtivo);

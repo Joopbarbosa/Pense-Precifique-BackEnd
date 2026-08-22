@@ -326,13 +326,16 @@ public class OrcamentoService {
      * aprovação/sinal-pago/cancelamento. Datas ({@code dataInicioEstimada}/{@code dataValidade})
      * sempre limpas — por isso {@code inicioAssimQueAprovado} é forçado para {@code true} na
      * duplicata (mesmo quando o original é {@code false}), já que copiar {@code false} sem uma data
-     * de início específica violaria {@link #validarRegras}.
+     * de início específica violaria {@link #validarRegras}. {@code temPrazoProducao} (RN-NOVA-3,
+     * V0.8.2) é derivado de {@code prazoProducaoDias != null} do original — não existe como campo
+     * próprio na entidade, só no request.
      */
     private OrcamentoRequest montarRequestDuplicacao(Orcamento original) {
         OrcamentoRequest request = new OrcamentoRequest();
         request.setClienteId(original.getCliente().getId());
         request.setMetodoPagamento(original.getMetodoPagamento());
         request.setMetodoPagamentoObs(original.getMetodoPagamentoObs());
+        request.setTemPrazoProducao(original.getPrazoProducaoDias() != null);
         request.setPrazoProducaoDias(original.getPrazoProducaoDias());
         request.setInicioAssimQueAprovado(true);
         request.setDataInicioEstimada(null);
@@ -721,6 +724,32 @@ public class OrcamentoService {
                 break;
 
             case ENVIADO:
+                // RN-NOVA-2 (V0.8.2) — atalho: sinal inativo + sem prazo de produção + estoque
+                // suficiente pula APROVADO/AGUARDANDO_SINAL/SINAL_PAGO/EM_PRODUCAO e vai direto pra
+                // FINALIZADO, reaproveitando a mesma checagem/baixa de estoque de EM_PRODUCAO→FINALIZADO.
+                // Exceção deliberada ao invariante de ORC-005 (fluxo unidirecional, um passo por vez).
+                if (elegivelParaAtalhoAprovacaoDireta(orcamento)) {
+                    List<OrcamentoItem> itensAtalho = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+                    List<UUID> confirmadosAtalho = request.getConfirmarEstoqueNegativoProdutoIds() != null
+                            ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
+                    ResultadoValidacaoEstoque resultadoAtalho = validarEstoqueParaFinalizar(itensAtalho, confirmadosAtalho);
+                    if (resultadoAtalho.bloqueados().isEmpty()) {
+                        if (!resultadoAtalho.avisosPendentes().isEmpty()) {
+                            ConfirmacaoEstoqueNegativoResponse respostaAtalho = new ConfirmacaoEstoqueNegativoResponse();
+                            respostaAtalho.setAvisos(resultadoAtalho.avisosPendentes());
+                            return respostaAtalho;
+                        }
+                        // RN-033/ORC-019 — data de aprovação é registrada mesmo pulando o status
+                        // APROVADO persistido: o orçamento passou pela aprovação conceitualmente, e
+                        // essa data aparece nos PDFs de recibo/multa gerados depois de FINALIZADO.
+                        orcamento.setDataAprovacao(LocalDateTime.now());
+                        baixarEstoque(orcamento, itensAtalho);
+                        orcamento.setStatus(StatusOrcamento.FINALIZADO);
+                        break;
+                    }
+                    // bloqueio duro (produto sem permitirEstoqueNegativo e insuficiente) — atalho não
+                    // se aplica, sem erro (RN-NOVA-2), segue para a transição normal abaixo.
+                }
                 orcamento.setStatus(StatusOrcamento.APROVADO);
                 orcamento.setDataAprovacao(LocalDateTime.now());
                 break;
@@ -760,35 +789,20 @@ public class OrcamentoService {
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                 List<UUID> confirmados = request.getConfirmarEstoqueNegativoProdutoIds() != null
                         ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
-                List<AvisoEstoqueNegativoResponse> avisos = validarEstoqueParaFinalizar(itensParaBaixa, confirmados);
+                ResultadoValidacaoEstoque resultado = validarEstoqueParaFinalizar(itensParaBaixa, confirmados);
+                if (!resultado.bloqueados().isEmpty()) {
+                    throw new BusinessException(
+                            "Estoque insuficiente para " + String.join(", ", resultado.bloqueados())
+                                    + ". Este(s) produto(s) não permite(m) estoque negativo.");
+                }
                 // RN-052 — algum produto ficaria negativo e ainda não foi confirmado: nada foi baixado,
                 // devolve o aviso para o usuário confirmar antes de reenviar.
-                if (!avisos.isEmpty()) {
+                if (!resultado.avisosPendentes().isEmpty()) {
                     ConfirmacaoEstoqueNegativoResponse resposta = new ConfirmacaoEstoqueNegativoResponse();
-                    resposta.setAvisos(avisos);
+                    resposta.setAvisos(resultado.avisosPendentes());
                     return resposta;
                 }
-                for (OrcamentoItem item : itensParaBaixa) {
-                    Produto produto = item.getProdutoVendido();
-                    BigDecimal quantidadeBaixa = calcularQuantidadeMovimentacao(item);
-                    produto.setEstoqueAtual(produto.getEstoqueAtual()
-                            .subtract(quantidadeBaixa));
-                    produtoRepository.save(produto);
-
-                    movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
-                            .produto(produto)
-                            .tipo(TipoMovimentacaoProduto.SAIDA)
-                            .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
-                            .quantidade(quantidadeBaixa)
-                            // RN-050: snapshot do catálogo (ou "venda sem catálogo") e do preço vendido no
-                            // orçamento (nunca o valor atual)
-                            .catalogoReferencia(catalogoReferenciaMovimentacao(item))
-                            .precoVendido(item.getPrecoUnitario())
-                            .referenciaId(orcamento.getId())
-                            .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
-                            .estornada(false)
-                            .build());
-                }
+                baixarEstoque(orcamento, itensParaBaixa);
                 orcamento.setStatus(StatusOrcamento.FINALIZADO);
                 break;
 
@@ -856,6 +870,51 @@ public class OrcamentoService {
         if (!orcamentoProducaoRepository.existsByOrcamentoId(orcamentoId)) {
             throw new BusinessException(
                     "O orçamento precisa estar vinculado a pelo menos uma produção antes de avançar para Em Produção.");
+        }
+    }
+
+    /**
+     * RN-NOVA-2 (V0.8.2) — checagem barata (sem consulta ao banco além do orçamento já carregado) das
+     * duas primeiras condições de habilitação do atalho ENVIADO→FINALIZADO: sinal inativo e nenhum
+     * prazo de produção informado. {@code prazoProducaoDias == null} é o único sinal confiável de "sem
+     * prazo" garantido por {@link #validarRegras} no momento da escrita (RN-NOVA-3). A terceira
+     * condição (estoque suficiente para todos os produtos) é mais cara — só verificada em
+     * {@link #avancarStatus} quando estas duas primeiras já passaram. Não checa
+     * {@link #validarVinculoProducao} de propósito: RN-NOVA-6 se aplica só às duas transições que
+     * persistem {@code status=EM_PRODUCAO}, e o atalho nunca passa por esse status — o atalho existe
+     * justamente para quando a produção não é necessária.
+     */
+    private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento) {
+        return !Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getPrazoProducaoDias() == null;
+    }
+
+    /**
+     * RN-049/RN-050 — baixa de estoque + registro de movimentação para os itens de um orçamento.
+     * Reaproveitada tanto pela transição normal EM_PRODUCAO→FINALIZADO quanto pelo atalho de
+     * RN-NOVA-2 (ENVIADO direto pra FINALIZADO) — assume que o chamador já obteve um
+     * {@link ResultadoValidacaoEstoque} sem bloqueios nem avisos pendentes antes de chamar este método.
+     */
+    private void baixarEstoque(Orcamento orcamento, List<OrcamentoItem> itens) {
+        for (OrcamentoItem item : itens) {
+            Produto produto = item.getProdutoVendido();
+            BigDecimal quantidadeBaixa = calcularQuantidadeMovimentacao(item);
+            produto.setEstoqueAtual(produto.getEstoqueAtual()
+                    .subtract(quantidadeBaixa));
+            produtoRepository.save(produto);
+
+            movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                    .produto(produto)
+                    .tipo(TipoMovimentacaoProduto.SAIDA)
+                    .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
+                    .quantidade(quantidadeBaixa)
+                    // RN-050: snapshot do catálogo (ou "venda sem catálogo") e do preço vendido no
+                    // orçamento (nunca o valor atual)
+                    .catalogoReferencia(catalogoReferenciaMovimentacao(item))
+                    .precoVendido(item.getPrecoUnitario())
+                    .referenciaId(orcamento.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
+                    .estornada(false)
+                    .build());
         }
     }
 
@@ -954,14 +1013,19 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-059 — produto com permitirEstoqueNegativo=false bloqueia o avanço para FINALIZADO
-     * incondicionalmente (tudo ou nada, antes de qualquer baixa), sem opção de forçar. Quantidade é
-     * acumulada por produto caso o mesmo produto apareça em mais de um item do orçamento, para refletir
-     * o efeito real da baixa sequencial. RN-052 — produto com permitirEstoqueNegativo=true cujo resultado
-     * ficaria negativo e cujo id não está em idsConfirmados vira aviso pendente na lista retornada, sem
-     * bloquear (chamador decide: se a lista vier não-vazia, nada foi baixado ainda).
+     * RN-059 — produto com permitirEstoqueNegativo=false e estoque insuficiente vira bloqueio duro
+     * (tudo ou nada, antes de qualquer baixa), sem opção de forçar. Quantidade é acumulada por produto
+     * caso o mesmo produto apareça em mais de um item do orçamento, para refletir o efeito real da
+     * baixa sequencial. RN-052 — produto com permitirEstoqueNegativo=true cujo resultado ficaria
+     * negativo e cujo id não está em idsConfirmados vira aviso pendente, sem bloquear.
+     *
+     * Devolve um {@link ResultadoValidacaoEstoque} em vez de lançar exceção no bloqueio duro — os dois
+     * chamadores (V0.8.2) dão tratamento diferente ao mesmo bloqueio: em EM_PRODUCAO→FINALIZADO é erro
+     * real (o chamador lança {@link BusinessException}, preservando o comportamento anterior deste
+     * método); no atalho de RN-NOVA-2 (ENVIADO→FINALIZADO) é só "atalho não se aplica", sem erro
+     * (Caso 6) — usar exceção para os dois misturaria essas duas semânticas na mesma chamada.
      */
-    private List<AvisoEstoqueNegativoResponse> validarEstoqueParaFinalizar(List<OrcamentoItem> itens, List<UUID> idsConfirmados) {
+    private ResultadoValidacaoEstoque validarEstoqueParaFinalizar(List<OrcamentoItem> itens, List<UUID> idsConfirmados) {
         Map<UUID, BigDecimal> quantidadeAcumulada = new LinkedHashMap<>();
         Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
         for (OrcamentoItem item : itens) {
@@ -971,7 +1035,7 @@ public class OrcamentoService {
         }
 
         List<String> bloqueados = new ArrayList<>();
-        List<AvisoEstoqueNegativoResponse> avisos = new ArrayList<>();
+        List<AvisoEstoqueNegativoResponse> avisosPendentes = new ArrayList<>();
         for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumulada.entrySet()) {
             Produto produto = produtosPorId.get(entry.getKey());
             BigDecimal necessaria = entry.getValue();
@@ -990,15 +1054,18 @@ public class OrcamentoService {
                 aviso.setMensagem("A baixa de " + necessaria.stripTrailingZeros().toPlainString()
                         + " de " + produto.getNome() + " deixará o estoque negativo (atual: "
                         + produto.getEstoqueAtual().stripTrailingZeros().toPlainString() + "). Confirme para prosseguir.");
-                avisos.add(aviso);
+                avisosPendentes.add(aviso);
             }
         }
-        if (!bloqueados.isEmpty()) {
-            throw new BusinessException(
-                    "Estoque insuficiente para " + String.join(", ", bloqueados)
-                            + ". Este(s) produto(s) não permite(m) estoque negativo.");
-        }
-        return avisos;
+        return new ResultadoValidacaoEstoque(bloqueados, avisosPendentes);
+    }
+
+    /**
+     * Resultado de {@link #validarEstoqueParaFinalizar}. {@code bloqueados} são nomes de produtos com
+     * {@code permitirEstoqueNegativo=false} e estoque insuficiente; {@code avisosPendentes} são
+     * produtos que ficariam negativos mas permitem, ainda sem confirmação do chamador.
+     */
+    private record ResultadoValidacaoEstoque(List<String> bloqueados, List<AvisoEstoqueNegativoResponse> avisosPendentes) {
     }
 
     /**
@@ -1024,7 +1091,27 @@ public class OrcamentoService {
         return IdentificadorFormatter.formatar("PRO", item.getProduto().getNumero()) + " - Venda sem catálogo";
     }
 
+    /**
+     * RN-NOVA-3 (V0.8.2) — substitui ORC-018: prazo de produção deixa de ser obrigatório
+     * incondicionalmente, passa a depender da resposta a "Vai ter prazo de produção?"
+     * ({@code temPrazoProducao}, obrigatório via {@code @NotNull} no DTO). "Sim" preserva o
+     * comportamento antigo de ORC-018 (mínimo 1 dia, obrigatório); "Não" exige
+     * {@code prazoProducaoDias} ausente — rejeitado como inconsistência se vier preenchido mesmo
+     * assim, em vez de ignorado silenciosamente (evita persistir um valor que o front nunca deveria
+     * ter mandado). {@code prazoProducaoDias == null} na entidade é, a partir daqui, o único sinal
+     * confiável de "sem prazo" em todo o resto do código (ver {@link #avancarStatus}), garantido por
+     * esta validação no momento da escrita.
+     */
     private void validarRegras(OrcamentoRequest request) {
+        if (Boolean.TRUE.equals(request.getTemPrazoProducao())) {
+            if (request.getPrazoProducaoDias() == null) {
+                throw new BusinessException("O prazo de produção é obrigatório quando há prazo de produção");
+            }
+        } else if (request.getPrazoProducaoDias() != null) {
+            throw new BusinessException(
+                    "O prazo de produção deve ficar vazio quando a resposta for 'Não terá prazo de produção'");
+        }
+
         if (request.getMetodoPagamento() == MetodoPagamento.OUTRO) {
             String obs = request.getMetodoPagamentoObs();
             if (obs == null || obs.trim().length() < MIN_OBS_OUTRO) {
