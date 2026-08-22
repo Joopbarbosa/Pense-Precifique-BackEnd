@@ -67,6 +67,13 @@ public class OrcamentoController {
         return ResponseEntity.status(201).body(orcamentoService.criar(request));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<OrcamentoDetalheResponse> editar(
+            @PathVariable UUID id,
+            @Valid @RequestBody OrcamentoRequest request) {
+        return ResponseEntity.ok(orcamentoService.editar(id, request));
+    }
+
     @PostMapping("/simular-alertas")
     public ResponseEntity<List<SimulacaoEstoqueProdutoResponse>> simularAlertas(
             @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {

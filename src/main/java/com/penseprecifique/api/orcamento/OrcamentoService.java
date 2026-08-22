@@ -185,69 +185,7 @@ public class OrcamentoService {
 
         for (OrcamentoItemRequest itemReq : request.getItens()) {
             validarOrigemItem(itemReq);
-
-            OrcamentoItem item;
-            BigDecimal subtotalItem;
-
-            if (itemReq.getItemCatalogoId() != null) {
-                // RN-045 + RN-046 — item só entra no orçamento se produto e catálogo estiverem ativos.
-                ItemCatalogo itemCatalogo = buscarItemCatalogoParaVenda(itemReq.getItemCatalogoId(), usuarioId);
-
-                // RN-048 — snapshot do preço de venda no momento exato da adição. Por ser uma cópia
-                // (não referência viva), nenhuma edição futura no catálogo/produto/margem altera este valor.
-                BigDecimal precoUnitario = itemCatalogo.getPrecoVenda();
-                subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
-
-                item = OrcamentoItem.builder()
-                        .orcamento(orcamento)
-                        .itemCatalogo(itemCatalogo)
-                        .quantidade(itemReq.getQuantidade())
-                        .precoUnitario(precoUnitario)
-                        .subtotal(subtotalItem)
-                        .build();
-                item = orcamentoItemRepository.save(item);
-
-                // RN-048 — customizações fixas do pacote entram automaticamente (sem ação da artesã),
-                // cada uma com snapshot do preço de venda do produto CUSTOMIZACAO correspondente.
-                for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(itemCatalogo.getId())) {
-                    int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
-                    subtotalItem = subtotalItem.add(salvarCustomizacao(item, fixa.getProduto(), quantidade));
-                }
-            } else {
-                // RN-054 — produto avulso (sem Catálogo): preco_unitario é o snapshot definitivo informado
-                // na hora, nunca recalculado depois mesmo que margem_padrao das Configurações mude.
-                Produto produtoAvulso = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(itemReq.getProdutoId(), usuarioId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
-
-                BigDecimal precoUnitario = itemReq.getPrecoUnitario();
-                subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
-
-                item = OrcamentoItem.builder()
-                        .orcamento(orcamento)
-                        .produto(produtoAvulso)
-                        .margemAplicada(itemReq.getMargemAplicada())
-                        .quantidade(itemReq.getQuantidade())
-                        .precoUnitario(precoUnitario)
-                        .subtotal(subtotalItem)
-                        .build();
-                item = orcamentoItemRepository.save(item);
-            }
-
-            // RN-030 (inalterado) — customizações ad-hoc adicionadas manualmente coexistem com as fixas.
-            for (OrcamentoItemCustomizacaoRequest custReq : itemReq.getCustomizacoes()) {
-                Produto custProduto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(custReq.getProdutoId(), usuarioId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Customização não encontrada"));
-                if (custProduto.getTipo() != TipoProduto.CUSTOMIZACAO) {
-                    throw new BusinessException("O item '" + custProduto.getNome() + "' não é uma customização válida");
-                }
-                subtotalItem = subtotalItem.add(salvarCustomizacao(item, custProduto, custReq.getQuantidade()));
-            }
-
-            // Atualiza o subtotal do item para incluir customizações (fixas + ad-hoc)
-            item.setSubtotal(subtotalItem);
-            orcamentoItemRepository.save(item);
-
-            subtotalOrcamento = subtotalOrcamento.add(subtotalItem);
+            subtotalOrcamento = subtotalOrcamento.add(criarItem(orcamento, itemReq, usuarioId));
         }
 
         validarDesconto(subtotalOrcamento, tipoDesconto, orcamento.getDescontoValor());
@@ -266,6 +204,223 @@ public class OrcamentoService {
         List<OrcamentoItem> itensGravados = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         response.setAvisosEstoque(calcularAvisosEstoque(itensGravados));
         return response;
+    }
+
+    /**
+     * RN-NOVA-4 (V0.8.2) — edição de orçamento em status RASCUNHO. Reaproveita os validadores de
+     * {@link #criar()} (XOR de origem — ORC-020, desconto — ORC-002/ORC-017) e a criação de item
+     * ({@link #criarItem}). A lista de itens enviada é comparada (diff) contra a persistida — nunca
+     * apaga e recria tudo: item que casa por origem+quantidade+customizações ad-hoc mantém o
+     * snapshot de preço original, sem recálculo (ORC-001); item sem par no request é removido; item
+     * do request sem par na lista persistida é criado como item novo, com snapshot atual (mesma
+     * lógica de item recém-adicionado — troca de produto é modelada como remover+adicionar, nunca
+     * mutação in-place do mesmo item, para não colidir com ORC-001).
+     */
+    public OrcamentoDetalheResponse editar(UUID id, OrcamentoRequest request) {
+        Usuario usuario = getUsuarioAutenticado();
+        UUID usuarioId = usuario.getId();
+
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        // Guard de status primeiro (fail fast) — ORC-004: fora de RASCUNHO, edição é bloqueada.
+        if (orcamento.getStatus() != StatusOrcamento.RASCUNHO) {
+            throw new BusinessException("Só é possível editar um orçamento em Rascunho.");
+        }
+
+        Cliente cliente = clienteRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(request.getClienteId(), usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
+
+        validarRegras(request);
+        for (OrcamentoItemRequest itemReq : request.getItens()) {
+            validarOrigemItem(itemReq);
+        }
+
+        TipoDesconto tipoDesconto = parseTipoDesconto(request.getTipoDesconto());
+        BigDecimal descontoValor = request.getDescontoValor() != null ? request.getDescontoValor() : BigDecimal.ZERO;
+
+        // Diff item a item: casamento guloso 1:1 entre itens persistidos e itens do request.
+        List<OrcamentoItem> disponiveis = new ArrayList<>(orcamentoItemRepository.findByOrcamentoId(orcamento.getId()));
+        record Pareamento(OrcamentoItemRequest request, OrcamentoItem casado) {
+        }
+        List<Pareamento> pareamentos = new ArrayList<>();
+        for (OrcamentoItemRequest itemReq : request.getItens()) {
+            OrcamentoItem casado = disponiveis.stream().filter(p -> mesmoItem(p, itemReq)).findFirst().orElse(null);
+            if (casado != null) {
+                disponiveis.remove(casado);
+            }
+            pareamentos.add(new Pareamento(itemReq, casado));
+        }
+
+        // Sobrou em "disponiveis" = não bateu com nenhum item do request → removido.
+        for (OrcamentoItem removido : disponiveis) {
+            orcamentoItemCustomizacaoRepository.deleteByOrcamentoItemId(removido.getId());
+            orcamentoItemRepository.delete(removido);
+        }
+
+        BigDecimal subtotalOrcamento = BigDecimal.ZERO;
+        for (Pareamento par : pareamentos) {
+            if (par.casado() != null) {
+                // Item mantido — snapshot intocado, sem recálculo (ORC-001).
+                subtotalOrcamento = subtotalOrcamento.add(par.casado().getSubtotal());
+            } else {
+                // Item novo (adição real ou resultado de troca de produto) — snapshot atual.
+                subtotalOrcamento = subtotalOrcamento.add(criarItem(orcamento, par.request(), usuarioId));
+            }
+        }
+
+        validarDesconto(subtotalOrcamento, tipoDesconto, descontoValor);
+        BigDecimal total = calcularTotal(subtotalOrcamento, tipoDesconto, descontoValor);
+
+        orcamento.setCliente(cliente);
+        orcamento.setMetodoPagamento(request.getMetodoPagamento());
+        orcamento.setMetodoPagamentoObs(request.getMetodoPagamentoObs());
+        orcamento.setPrazoProducaoDias(request.getPrazoProducaoDias());
+        orcamento.setInicioAssimQueAprovado(request.isInicioAssimQueAprovado());
+        orcamento.setDataInicioEstimada(request.getDataInicioEstimada());
+        orcamento.setSinalAtivo(request.isSinalAtivo());
+        orcamento.setPercentualSinal(request.getPercentualSinal());
+        orcamento.setDescontoTipo(tipoDesconto);
+        orcamento.setDescontoValor(descontoValor);
+        orcamento.setObservacoes(request.getObservacoes());
+        orcamento.setDataValidade(request.getDataValidade());
+        orcamento.setSubtotal(subtotalOrcamento);
+        orcamento.setTotal(total);
+        orcamento.setValorSinal(orcamento.getSinalAtivo() ? calcularValorSinal(total, request) : null);
+
+        orcamento = orcamentoRepository.save(orcamento);
+
+        OrcamentoDetalheResponse response = montarDetalhe(orcamento);
+        List<OrcamentoItem> itensGravados = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        response.setAvisosEstoque(calcularAvisosEstoque(itensGravados));
+        return response;
+    }
+
+    /**
+     * RN-NOVA-4 — critério de "mesmo item" no diff de edição: mesma origem (itemCatalogoId ou
+     * produtoId), mesma quantidade e mesmas customizações ad-hoc (ver {@link #mesmasCustomizacoesAdHoc}).
+     * Preço/margem informados no request são ignorados para efeito de casamento — só decidem o
+     * snapshot de um item novo, nunca "desempatam" um item já existente.
+     */
+    private boolean mesmoItem(OrcamentoItem persistido, OrcamentoItemRequest req) {
+        boolean mesmaOrigemCatalogo = persistido.getItemCatalogo() != null && req.getItemCatalogoId() != null
+                && persistido.getItemCatalogo().getId().equals(req.getItemCatalogoId());
+        boolean mesmaOrigemAvulsa = persistido.getItemCatalogo() == null && req.getItemCatalogoId() == null
+                && persistido.getProduto() != null && req.getProdutoId() != null
+                && persistido.getProduto().getId().equals(req.getProdutoId());
+        if (!mesmaOrigemCatalogo && !mesmaOrigemAvulsa) {
+            return false;
+        }
+        if (!persistido.getQuantidade().equals(req.getQuantidade())) {
+            return false;
+        }
+        return mesmasCustomizacoesAdHoc(persistido, req.getCustomizacoes());
+    }
+
+    /**
+     * Compara as customizações ad-hoc (RN-030) do item persistido contra as do request. O request só
+     * carrega customizações ad-hoc (as fixas do catálogo — RN-048 — nunca aparecem nele, são geradas
+     * automaticamente); para isolar a parcela ad-hoc do item persistido, subtrai do total persistido
+     * o conjunto fixo recalculado ao vivo a partir do ItemCatalogo (mesma fórmula de arredondamento
+     * de {@link #criarItem}). Item avulso não tem customização fixa — a subtração não roda, o total
+     * persistido já é 100% ad-hoc.
+     */
+    private boolean mesmasCustomizacoesAdHoc(OrcamentoItem persistido, List<OrcamentoItemCustomizacaoRequest> customizacoesRequest) {
+        Map<UUID, Integer> adHocPersistido = new LinkedHashMap<>();
+        for (OrcamentoItemCustomizacao c : orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(persistido.getId())) {
+            adHocPersistido.merge(c.getProduto().getId(), c.getQuantidade(), Integer::sum);
+        }
+        if (persistido.getItemCatalogo() != null) {
+            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(persistido.getItemCatalogo().getId())) {
+                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
+                adHocPersistido.merge(fixa.getProduto().getId(), -quantidade, Integer::sum);
+            }
+        }
+        adHocPersistido.values().removeIf(q -> q == 0);
+        // Conjunto fixo mudou desde a criação do item (catálogo editado depois) — não dá pra confirmar
+        // igualdade com segurança; trata como item diferente (vira remover+adicionar).
+        if (adHocPersistido.values().stream().anyMatch(q -> q < 0)) {
+            return false;
+        }
+
+        Map<UUID, Integer> adHocRequest = new LinkedHashMap<>();
+        for (OrcamentoItemCustomizacaoRequest c : customizacoesRequest) {
+            adHocRequest.merge(c.getProdutoId(), c.getQuantidade(), Integer::sum);
+        }
+
+        return adHocPersistido.equals(adHocRequest);
+    }
+
+    /**
+     * Cria um {@link OrcamentoItem} novo (origem Catálogo ou avulsa, RN-054/ORC-020) com snapshot de
+     * preço no momento da criação (ORC-001/ORC-024) e suas customizações (fixas do pacote + ad-hoc,
+     * RN-048/RN-030). Extraído de {@link #criar()} para reaproveitar em {@link #editar()} — item novo
+     * na edição (adição real ou resultado de troca de produto) segue exatamente a mesma lógica de um
+     * item recém-adicionado na criação.
+     */
+    private BigDecimal criarItem(Orcamento orcamento, OrcamentoItemRequest itemReq, UUID usuarioId) {
+        OrcamentoItem item;
+        BigDecimal subtotalItem;
+
+        if (itemReq.getItemCatalogoId() != null) {
+            // RN-045 + RN-046 — item só entra no orçamento se produto e catálogo estiverem ativos.
+            ItemCatalogo itemCatalogo = buscarItemCatalogoParaVenda(itemReq.getItemCatalogoId(), usuarioId);
+
+            // RN-048 — snapshot do preço de venda no momento exato da adição. Por ser uma cópia
+            // (não referência viva), nenhuma edição futura no catálogo/produto/margem altera este valor.
+            BigDecimal precoUnitario = itemCatalogo.getPrecoVenda();
+            subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
+
+            item = OrcamentoItem.builder()
+                    .orcamento(orcamento)
+                    .itemCatalogo(itemCatalogo)
+                    .quantidade(itemReq.getQuantidade())
+                    .precoUnitario(precoUnitario)
+                    .subtotal(subtotalItem)
+                    .build();
+            item = orcamentoItemRepository.save(item);
+
+            // RN-048 — customizações fixas do pacote entram automaticamente (sem ação da artesã),
+            // cada uma com snapshot do preço de venda do produto CUSTOMIZACAO correspondente.
+            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(itemCatalogo.getId())) {
+                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
+                subtotalItem = subtotalItem.add(salvarCustomizacao(item, fixa.getProduto(), quantidade));
+            }
+        } else {
+            // RN-054 — produto avulso (sem Catálogo): preco_unitario é o snapshot definitivo informado
+            // na hora, nunca recalculado depois mesmo que margem_padrao das Configurações mude.
+            Produto produtoAvulso = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(itemReq.getProdutoId(), usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+
+            BigDecimal precoUnitario = itemReq.getPrecoUnitario();
+            subtotalItem = precoUnitario.multiply(BigDecimal.valueOf(itemReq.getQuantidade()));
+
+            item = OrcamentoItem.builder()
+                    .orcamento(orcamento)
+                    .produto(produtoAvulso)
+                    .margemAplicada(itemReq.getMargemAplicada())
+                    .quantidade(itemReq.getQuantidade())
+                    .precoUnitario(precoUnitario)
+                    .subtotal(subtotalItem)
+                    .build();
+            item = orcamentoItemRepository.save(item);
+        }
+
+        // RN-030 (inalterado) — customizações ad-hoc adicionadas manualmente coexistem com as fixas.
+        for (OrcamentoItemCustomizacaoRequest custReq : itemReq.getCustomizacoes()) {
+            Produto custProduto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(custReq.getProdutoId(), usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Customização não encontrada"));
+            if (custProduto.getTipo() != TipoProduto.CUSTOMIZACAO) {
+                throw new BusinessException("O item '" + custProduto.getNome() + "' não é uma customização válida");
+            }
+            subtotalItem = subtotalItem.add(salvarCustomizacao(item, custProduto, custReq.getQuantidade()));
+        }
+
+        // Atualiza o subtotal do item para incluir customizações (fixas + ad-hoc)
+        item.setSubtotal(subtotalItem);
+        orcamentoItemRepository.save(item);
+
+        return subtotalItem;
     }
 
     /**
