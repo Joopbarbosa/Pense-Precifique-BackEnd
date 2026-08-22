@@ -2,8 +2,10 @@ package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
@@ -12,6 +14,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -43,6 +46,7 @@ class OrcamentoRn052EstoqueNegativoIT {
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired ProducaoRepository producaoRepository;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -81,6 +85,11 @@ class OrcamentoRn052EstoqueNegativoIT {
         // RASCUNHO -> ENVIADO -> APROVADO -> EM_PRODUCAO (sinal inativo por padrão)
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
+        Producao producao = producaoRepository.save(Producao.builder().usuario(usuario).numero(1).build());
+        VincularProducaoRequest vincularReq = new VincularProducaoRequest();
+        vincularReq.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, vincularReq);
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
         return orcamentoId;
     }

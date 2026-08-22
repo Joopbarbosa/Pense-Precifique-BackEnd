@@ -4,10 +4,12 @@ import com.penseprecifique.api.catalogo.CatalogoRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
+import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
@@ -15,6 +17,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemResponse;
 import org.junit.jupiter.api.Test;
@@ -46,6 +49,7 @@ class OrcamentoDuplicarIT {
     @Autowired ProdutoRepository produtoRepository;
     @Autowired CatalogoRepository catalogoRepository;
     @Autowired ItemCatalogoRepository itemCatalogoRepository;
+    @Autowired ProducaoRepository producaoRepository;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -164,6 +168,11 @@ class OrcamentoDuplicarIT {
         sinalReq.setMetodoSinalRecebido(MetodoPagamento.PIX);
         orcamentoService.avancarStatus(original.getId(), sinalReq); // APROVADO -> AGUARDANDO_SINAL
         orcamentoService.avancarStatus(original.getId(), sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
+        // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
+        Producao producao = producaoRepository.save(Producao.builder().usuario(usuario).numero(1).build());
+        VincularProducaoRequest vincularReq = new VincularProducaoRequest();
+        vincularReq.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(original.getId(), vincularReq);
         orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
         orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // EM_PRODUCAO -> FINALIZADO
 

@@ -4,9 +4,11 @@ import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoqueProdutoResponse;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
@@ -83,6 +85,13 @@ public class OrcamentoController {
     public ResponseEntity<List<SimulacaoEstoqueProdutoResponse>> simularAlertas(
             @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {
         return ResponseEntity.ok(orcamentoService.simularAlertas(itens));
+    }
+
+    @PostMapping("/{id}/vincular-producao")
+    public ResponseEntity<List<OrcamentoProducaoResponse>> vincularProducao(
+            @PathVariable UUID id,
+            @Valid @RequestBody VincularProducaoRequest request) {
+        return ResponseEntity.status(201).body(orcamentoService.vincularProducao(id, request));
     }
 
     @PostMapping("/{id}/avancar-status")

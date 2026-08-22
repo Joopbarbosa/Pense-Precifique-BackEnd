@@ -2,8 +2,10 @@ package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
@@ -11,6 +13,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +42,7 @@ class OrcamentoMiniEstornoMultaIT {
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired ProducaoRepository producaoRepository;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -82,6 +86,14 @@ class OrcamentoMiniEstornoMultaIT {
         return orcamentoService.criar(req).getId();
     }
 
+    /** RN-NOVA-6 — vincula uma produção nova ao orçamento (pré-requisito de avancarStatus() -> EM_PRODUCAO). */
+    private void vincularNovaProducao(UUID orcamentoId) {
+        Producao producao = producaoRepository.save(Producao.builder().usuario(usuario).numero(1).build());
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+    }
+
     /** RASCUNHO -> ... -> EM_PRODUCAO, passando por SINAL_PAGO quando sinalAtivo=true. */
     private void avancarAteEmProducao(UUID orcamentoId, boolean sinalAtivo) {
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
@@ -92,6 +104,7 @@ class OrcamentoMiniEstornoMultaIT {
             orcamentoService.avancarStatus(orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
             orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
         }
+        vincularNovaProducao(orcamentoId); // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // (SINAL_PAGO|APROVADO) -> EM_PRODUCAO
     }
 

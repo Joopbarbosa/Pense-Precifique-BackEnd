@@ -8,7 +8,9 @@ import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ReciboEstorno;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -26,10 +28,12 @@ import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemCustomi
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoqueProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemResponse;
@@ -43,6 +47,7 @@ import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
@@ -82,6 +87,8 @@ public class OrcamentoService {
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final ReciboEstornoRepository reciboEstornoRepository;
+    private final OrcamentoProducaoRepository orcamentoProducaoRepository;
+    private final ProducaoRepository producaoRepository;
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
 
@@ -722,6 +729,7 @@ public class OrcamentoService {
                 if (Boolean.TRUE.equals(orcamento.getSinalAtivo())) {
                     orcamento.setStatus(StatusOrcamento.AGUARDANDO_SINAL);
                 } else {
+                    validarVinculoProducao(orcamento.getId());
                     orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
                 }
                 break;
@@ -744,6 +752,7 @@ public class OrcamentoService {
                 break;
 
             case SINAL_PAGO:
+                validarVinculoProducao(orcamento.getId());
                 orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
                 break;
 
@@ -810,6 +819,44 @@ public class OrcamentoService {
 
         orcamento = orcamentoRepository.save(orcamento);
         return montarDetalhe(orcamento);
+    }
+
+    /**
+     * RN-NOVA-6 (V0.8.2) — vincula uma produção existente do usuário a um orçamento (N:N, tabela de
+     * junção {@code orcamento_producoes}). Idempotente: vincular a mesma produção duas vezes não cria
+     * linha duplicada (`UNIQUE(orcamento_id, producao_id)` no banco), só devolve a lista atual sem
+     * efeito colateral. Não exige nenhum status específico do orçamento — o vínculo pode ser
+     * estabelecido a qualquer momento antes da transição que o exige (ver {@link #validarVinculoProducao}).
+     */
+    public List<OrcamentoProducaoResponse> vincularProducao(UUID id, VincularProducaoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        Producao producao = producaoRepository.findByIdAndUsuarioId(request.getProducaoId(), usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producao.getId()).isEmpty()) {
+            orcamentoProducaoRepository.save(OrcamentoProducao.builder()
+                    .orcamento(orcamento)
+                    .producao(producao)
+                    .build());
+        }
+
+        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
+                .map(orcamentoMapper::toOrcamentoProducaoResponse)
+                .toList();
+    }
+
+    /**
+     * RN-NOVA-6 — bloqueia (fail fast, antes de qualquer mutação de status) a transição para
+     * EM_PRODUCAO quando o orçamento não tem nenhuma produção vinculada. Chamado pelos dois caminhos
+     * possíveis em {@link #avancarStatus}: {@code APROVADO} sem sinal e {@code SINAL_PAGO}.
+     */
+    private void validarVinculoProducao(UUID orcamentoId) {
+        if (!orcamentoProducaoRepository.existsByOrcamentoId(orcamentoId)) {
+            throw new BusinessException(
+                    "O orçamento precisa estar vinculado a pelo menos uma produção antes de avançar para Em Produção.");
+        }
     }
 
     public OrcamentoDetalheResponse cancelar(UUID id, AvancaStatusRequest request) {

@@ -4,11 +4,13 @@ import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemCustomizacaoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ReciboPagamentoResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
@@ -130,6 +132,16 @@ public class OrcamentoMapper {
         response.setValorRestantePago(recibo.getValorRestantePago());
         response.setTotalQuitado(recibo.getTotalQuitado());
         response.setCreatedAt(recibo.getCreatedAt());
+        return response;
+    }
+
+    /** RN-NOVA-6 (V0.8.2) — vínculo Orçamento↔Produção. */
+    public OrcamentoProducaoResponse toOrcamentoProducaoResponse(OrcamentoProducao vinculo) {
+        OrcamentoProducaoResponse response = new OrcamentoProducaoResponse();
+        response.setId(vinculo.getId());
+        response.setProducaoId(vinculo.getProducao().getId());
+        response.setIdentificadorProducao(IdentificadorFormatter.formatar("PRD", vinculo.getProducao().getNumero()));
+        response.setCreatedAt(vinculo.getCreatedAt());
         return response;
     }
 }
