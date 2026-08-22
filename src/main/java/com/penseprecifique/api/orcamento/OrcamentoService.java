@@ -603,7 +603,9 @@ public class OrcamentoService {
                 orcamento.setCancelamentoTipo(TipoCancelamento.MULTA);
                 orcamento.setPercentualMulta(request.getPercentualMulta());
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
-                orcamento.setValorMulta(calcularValorFinalMulta(orcamento));
+                ResultadoMulta resultadoMulta = calcularResultadoMulta(orcamento);
+                orcamento.setValorMulta(resultadoMulta.valorMulta());
+                orcamento.setValorDevolvidoMulta(resultadoMulta.valorDevolvido());
                 if (atual == StatusOrcamento.FINALIZADO) {
                     reverterEstoque(orcamento, request.getMotivoCancelamento());
                 }
@@ -800,15 +802,20 @@ public class OrcamentoService {
         return request.getValorSinal();
     }
 
+    /** RN-NOVA-1 (V0.8.2) — resultado do cálculo de multa: valor final cobrado + valor devolvido (mini-estorno). */
+    private record ResultadoMulta(BigDecimal valorMulta, BigDecimal valorDevolvido) {
+    }
+
     /**
-     * RN-NOVA-1 (V0.8.1) — valor final de multa desconta o sinal já pago, piso zero: nunca cobra
-     * valor negativo. O caso sinal_pago > valor_multa gerar devolução da diferença ao cliente
-     * ("mini-estorno") está fora deste cálculo — achado separado (CSV_ACHADOS_V0.8.1.csv), aguarda
-     * decisão de negócio própria.
+     * RN-NOVA-1 (V0.8.1, estendida em V0.8.2) — valor final de multa desconta o sinal já pago,
+     * piso zero: nunca cobra valor negativo. Desde V0.8.2, quando o sinal pago excede o valor
+     * bruto da multa, a diferença é devolvida ao cliente ("mini-estorno") em vez de simplesmente
+     * zerar a cobrança sem devolução — {@code valorDevolvido} vem preenchido só nesse caso,
+     * {@code null} nos demais (sinal <= multa bruta, ou sem sinal pago — comportamento inalterado).
      */
-    private BigDecimal calcularValorFinalMulta(Orcamento orcamento) {
+    private ResultadoMulta calcularResultadoMulta(Orcamento orcamento) {
         if (orcamento.getPercentualMulta() == null || orcamento.getTotal() == null) {
-            return null;
+            return new ResultadoMulta(null, null);
         }
         BigDecimal valorMultaBruto = orcamento.getTotal()
                 .multiply(orcamento.getPercentualMulta())
@@ -816,7 +823,12 @@ public class OrcamentoService {
         BigDecimal sinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
                 ? orcamento.getValorSinal()
                 : BigDecimal.ZERO;
-        return valorMultaBruto.subtract(sinalPago).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal diferenca = sinalPago.subtract(valorMultaBruto).setScale(2, RoundingMode.HALF_UP);
+        if (diferenca.compareTo(BigDecimal.ZERO) > 0) {
+            return new ResultadoMulta(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), diferenca);
+        }
+        BigDecimal valorMultaFinal = valorMultaBruto.subtract(sinalPago).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        return new ResultadoMulta(valorMultaFinal, null);
     }
 
     private OrcamentoDetalheResponse montarDetalhe(Orcamento orcamento) {

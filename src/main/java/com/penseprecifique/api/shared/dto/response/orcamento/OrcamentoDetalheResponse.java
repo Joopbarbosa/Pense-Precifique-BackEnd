@@ -42,6 +42,7 @@ public class OrcamentoDetalheResponse {
     private TipoCancelamento cancelamentoTipo;
     private BigDecimal percentualMulta;
     private BigDecimal valorMulta;
+    private BigDecimal valorDevolvidoMulta;
     private Boolean estornoSinal;
     private LocalDateTime dataEstornoSinal;
     private List<OrcamentoItemResponse> itens;
