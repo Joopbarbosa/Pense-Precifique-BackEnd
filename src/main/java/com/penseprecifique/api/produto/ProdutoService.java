@@ -22,7 +22,6 @@ import com.penseprecifique.api.shared.dto.request.produto.SubstituicaoVinculoPro
 import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ComponenteVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
-import com.penseprecifique.api.shared.dto.response.produto.PrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoResponse;
@@ -544,19 +543,6 @@ public class ProdutoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
         produto.setAtivo(true);
         produtoRepository.save(produto);
-    }
-
-    /**
-     * RN-054 — preço sugerido de um produto avulso (sem Catálogo) dada uma margem informada na hora.
-     * Reaproveita o custo_unitario já calculado e persistido no produto (RN-039) — não recalcula ficha técnica.
-     */
-    @Transactional(readOnly = true)
-    public PrecoSugeridoResponse calcularPrecoSugeridoAvulso(UUID produtoId, BigDecimal margem) {
-        UUID usuarioId = getUsuarioIdAutenticado();
-        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
-                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
-        BigDecimal precoSugerido = calcularPrecoSugerido(produto.getPrecoCusto(), margem);
-        return new PrecoSugeridoResponse(produto.getPrecoCusto(), margem, precoSugerido);
     }
 
     @Transactional(readOnly = true)

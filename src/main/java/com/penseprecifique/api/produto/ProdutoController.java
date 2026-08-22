@@ -7,7 +7,6 @@ import com.penseprecifique.api.shared.dto.request.produto.ResolverVinculosProdut
 import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ComponenteVinculadoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.MovimentacaoProdutoResponse;
-import com.penseprecifique.api.shared.dto.response.produto.PrecoSugeridoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.produto.ProdutoResponse;
@@ -19,7 +18,6 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -109,12 +107,5 @@ public class ProdutoController {
             @PathVariable UUID id,
             @Valid @RequestBody BaixaManualProdutoRequest request) {
         return ResponseEntity.status(201).body(produtoService.baixaManual(id, request));
-    }
-
-    @GetMapping("/{id}/preco-sugerido")
-    public ResponseEntity<PrecoSugeridoResponse> precoSugerido(
-            @PathVariable UUID id,
-            @RequestParam BigDecimal margem) {
-        return ResponseEntity.ok(produtoService.calcularPrecoSugeridoAvulso(id, margem));
     }
 }
