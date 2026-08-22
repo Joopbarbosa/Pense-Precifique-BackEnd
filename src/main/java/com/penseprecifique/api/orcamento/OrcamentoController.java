@@ -46,11 +46,20 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.listar(status, busca, dataCriacaoDe, dataCriacaoAte, pageable));
     }
 
+    /**
+     * P-B008/#353 — {@code Pageable} passado ao Service/Repository para limitar o tamanho da
+     * consulta (tech debt, base de itens de catálogo crescendo sem bound); contrato HTTP
+     * inalterado — resposta continua array simples (não expõe metadados de paginação), decisão
+     * confirmada no Passo 0 para não quebrar o consumidor atual (`ItemSearch`/`orcamentoService.ts`,
+     * que espera `Promise<ItemCatalogoBuscaResponse[]>`), já que não há tarefa de Frontend neste
+     * pocket para ajustar esse contrato.
+     */
     @GetMapping("/itens-catalogo")
     public ResponseEntity<List<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
             @RequestParam(required = false) UUID catalogoId,
-            @RequestParam(required = false) String busca) {
-        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId, busca));
+            @RequestParam(required = false) String busca,
+            @PageableDefault(size = 8) Pageable pageable) {
+        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId, busca, pageable));
     }
 
     @GetMapping("/{id}")

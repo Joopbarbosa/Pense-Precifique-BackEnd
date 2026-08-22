@@ -11,6 +11,8 @@ import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaRes
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -69,7 +71,7 @@ class ItemCatalogoBuscaOrcamentoIT {
         novoItem("Kit Convite Floral", 1);
         novoItem("Laço Decorativo", 2);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null);
+        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
 
         assertEquals(2, resultado.size());
     }
@@ -79,7 +81,7 @@ class ItemCatalogoBuscaOrcamentoIT {
         seedUsuarioECatalogo();
         ItemCatalogo item = novoItem("Kit Convite Floral", 1);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null);
+        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
 
         assertEquals(1, resultado.size());
         assertEquals(item.getProduto().getId(), resultado.get(0).getProdutoId(),
@@ -92,7 +94,7 @@ class ItemCatalogoBuscaOrcamentoIT {
         novoItem("Kit Convite Floral", 1);
         novoItem("Laço Decorativo", 2);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "convite");
+        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "convite", Pageable.unpaged());
 
         assertEquals(1, resultado.size());
         assertEquals("Kit Convite Floral", resultado.get(0).getNomeProduto());
@@ -104,7 +106,7 @@ class ItemCatalogoBuscaOrcamentoIT {
         novoItem("Kit Convite Floral", 1);
         novoItem("Laço Decorativo", 2);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "   ");
+        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "   ", Pageable.unpaged());
 
         assertEquals(2, resultado.size(), "busca em branco deve equivaler a nenhuma busca (listagem completa)");
     }
@@ -117,7 +119,7 @@ class ItemCatalogoBuscaOrcamentoIT {
         // Regressão do bug "function lower(bytea) does not exist" (bind de parâmetro nulo) —
         // aqui o parâmetro é não-nulo mas sem match; o ponto crítico já está coberto pelo teste
         // "semBuscaRetornaTodosOsItensDisponiveis" (busca=null) não lançar exceção.
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "zzz-nao-existe");
+        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "zzz-nao-existe", Pageable.unpaged());
 
         assertTrue(resultado.isEmpty());
     }
@@ -137,9 +139,47 @@ class ItemCatalogoBuscaOrcamentoIT {
                 .precoVenda(new BigDecimal("10.00")).build());
 
         List<ItemCatalogoBuscaResponse> resultado =
-                itemCatalogoService.buscarParaOrcamento(catalogo.getId(), "convite");
+                itemCatalogoService.buscarParaOrcamento(catalogo.getId(), "convite", Pageable.unpaged());
 
         assertEquals(1, resultado.size());
         assertEquals("Kit Convite Floral", resultado.get(0).getNomeProduto());
+    }
+
+    /**
+     * P-B008/#353 — mais itens que o {@code size} da página, confirma que só a página pedida volta
+     * (a consulta passa a ter bound, em vez de servir a base inteira sem limite).
+     */
+    @Test
+    void primeiraPaginaRespeitaOSizePedidoQuandoHaMaisItensQueOSize() {
+        seedUsuarioECatalogo();
+        for (int i = 1; i <= 10; i++) {
+            novoItem(String.format("Item %02d", i), i);
+        }
+
+        List<ItemCatalogoBuscaResponse> resultado =
+                itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(0, 8));
+
+        assertEquals(8, resultado.size());
+        assertEquals("Item 01", resultado.get(0).getNomeProduto());
+        assertEquals("Item 08", resultado.get(7).getNomeProduto());
+    }
+
+    /**
+     * P-B008/#353 — segunda página traz os itens restantes (não os mesmos da primeira), confirmando
+     * que o parâmetro de página é de fato repassado ao repositório, não só o tamanho.
+     */
+    @Test
+    void segundaPaginaTrazOsItensRestantesSemSobreporAPrimeira() {
+        seedUsuarioECatalogo();
+        for (int i = 1; i <= 10; i++) {
+            novoItem(String.format("Item %02d", i), i);
+        }
+
+        List<ItemCatalogoBuscaResponse> segundaPagina =
+                itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(1, 8));
+
+        assertEquals(2, segundaPagina.size());
+        assertEquals("Item 09", segundaPagina.get(0).getNomeProduto());
+        assertEquals("Item 10", segundaPagina.get(1).getNomeProduto());
     }
 }

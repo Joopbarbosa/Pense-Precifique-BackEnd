@@ -20,6 +20,8 @@ import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,14 +66,17 @@ public class ItemCatalogoService {
      * aqui o bloqueio é aplicado como filtro de listagem: o item simplesmente não aparece na busca.
      * RN-NOVA-6 (#217) — `busca` filtra por nome do produto, server-side (mesmo padrão de
      * ProdutoService#listar); em branco/nulo, retorna a listagem completa.
+     * P-B008/#353 — {@code Pageable} passado ao repositório para limitar o tamanho da consulta
+     * (tech debt, base de itens de catálogo crescendo sem bound); só o conteúdo da página é
+     * devolvido (contrato HTTP inalterado, ainda array simples — ver {@code OrcamentoController}).
      */
     @Transactional(readOnly = true)
-    public List<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca) {
+    public List<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
-        List<ItemCatalogo> itens = temBusca
-                ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim())
-                : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId);
+        Page<ItemCatalogo> itens = temBusca
+                ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim(), pageable)
+                : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId, pageable);
         return itens.stream()
                 .map(item -> itemCatalogoMapper.toBuscaResponse(item,
                         fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId())))
