@@ -74,6 +74,11 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.editar(id, request));
     }
 
+    @PostMapping("/{id}/duplicar")
+    public ResponseEntity<OrcamentoDetalheResponse> duplicar(@PathVariable UUID id) {
+        return ResponseEntity.status(201).body(orcamentoService.duplicar(id));
+    }
+
     @PostMapping("/simular-alertas")
     public ResponseEntity<List<SimulacaoEstoqueProdutoResponse>> simularAlertas(
             @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {

@@ -297,6 +297,66 @@ public class OrcamentoService {
     }
 
     /**
+     * RN-NOVA-5 (V0.8.2) — duplica um orçamento existente (qualquer status de origem) para um
+     * RASCUNHO novo e independente. Monta um {@link OrcamentoRequest} sintético a partir da entidade
+     * original e delega para {@link #criar}, reaproveitando toda a validação/cálculo de lá sem
+     * duplicar lógica — inclusive o preço dos itens, sempre recalculado pelo valor atual (nunca o
+     * snapshot antigo), tanto para item de Catálogo quanto avulso.
+     */
+    public OrcamentoDetalheResponse duplicar(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento original = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        return criar(montarRequestDuplicacao(original));
+    }
+
+    /**
+     * RN-NOVA-5 — campos copiados diretamente: cliente, pagamento (+obs), prazo, sinal
+     * (percentualSinal — valorSinal é sempre recalculado por {@link #calcularValorSinal} dentro de
+     * {@link #criar}, nunca copiado do original), desconto, observações. Campos resetados (deixados
+     * de fora do request, {@code criar()} já os trata como novo): usuário, número, status, dados de
+     * aprovação/sinal-pago/cancelamento. Datas ({@code dataInicioEstimada}/{@code dataValidade})
+     * sempre limpas — por isso {@code inicioAssimQueAprovado} é forçado para {@code true} na
+     * duplicata (mesmo quando o original é {@code false}), já que copiar {@code false} sem uma data
+     * de início específica violaria {@link #validarRegras}.
+     */
+    private OrcamentoRequest montarRequestDuplicacao(Orcamento original) {
+        OrcamentoRequest request = new OrcamentoRequest();
+        request.setClienteId(original.getCliente().getId());
+        request.setMetodoPagamento(original.getMetodoPagamento());
+        request.setMetodoPagamentoObs(original.getMetodoPagamentoObs());
+        request.setPrazoProducaoDias(original.getPrazoProducaoDias());
+        request.setInicioAssimQueAprovado(true);
+        request.setDataInicioEstimada(null);
+        request.setSinalAtivo(Boolean.TRUE.equals(original.getSinalAtivo()));
+        request.setPercentualSinal(original.getPercentualSinal());
+        request.setTipoDesconto(original.getDescontoTipo() != null ? original.getDescontoTipo().name() : null);
+        request.setDescontoValor(original.getDescontoValor());
+        request.setObservacoes(original.getObservacoes());
+        request.setDataValidade(null);
+
+        List<OrcamentoItemRequest> itensRequest = new ArrayList<>();
+        for (OrcamentoItem itemOriginal : orcamentoItemRepository.findByOrcamentoId(original.getId())) {
+            OrcamentoItemRequest itemReq = new OrcamentoItemRequest();
+            itemReq.setQuantidade(itemOriginal.getQuantidade());
+            itemReq.setCustomizacoes(customizacoesAdHocRequest(itemOriginal));
+            if (itemOriginal.getItemCatalogo() != null) {
+                itemReq.setItemCatalogoId(itemOriginal.getItemCatalogo().getId());
+            } else {
+                itemReq.setProdutoId(itemOriginal.getProduto().getId());
+                itemReq.setMargemAplicada(itemOriginal.getMargemAplicada());
+                // RN-NOVA-5 — preço recalculado: preco_venda ATUAL do cadastro do produto, não o
+                // snapshot antigo do item (criarItem() não lê isso sozinho para origem avulsa).
+                itemReq.setPrecoUnitario(itemOriginal.getProduto().getPrecoVenda());
+            }
+            itensRequest.add(itemReq);
+        }
+        request.setItens(itensRequest);
+        return request;
+    }
+
+    /**
      * RN-NOVA-4 — critério de "mesmo item" no diff de edição: mesma origem (itemCatalogoId ou
      * produtoId), mesma quantidade e mesmas customizações ad-hoc (ver {@link #mesmasCustomizacoesAdHoc}).
      * Preço/margem informados no request são ignorados para efeito de casamento — só decidem o
@@ -326,16 +386,7 @@ public class OrcamentoService {
      * persistido já é 100% ad-hoc.
      */
     private boolean mesmasCustomizacoesAdHoc(OrcamentoItem persistido, List<OrcamentoItemCustomizacaoRequest> customizacoesRequest) {
-        Map<UUID, Integer> adHocPersistido = new LinkedHashMap<>();
-        for (OrcamentoItemCustomizacao c : orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(persistido.getId())) {
-            adHocPersistido.merge(c.getProduto().getId(), c.getQuantidade(), Integer::sum);
-        }
-        if (persistido.getItemCatalogo() != null) {
-            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(persistido.getItemCatalogo().getId())) {
-                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
-                adHocPersistido.merge(fixa.getProduto().getId(), -quantidade, Integer::sum);
-            }
-        }
+        Map<UUID, Integer> adHocPersistido = customizacoesAdHocPersistidas(persistido);
         adHocPersistido.values().removeIf(q -> q == 0);
         // Conjunto fixo mudou desde a criação do item (catálogo editado depois) — não dá pra confirmar
         // igualdade com segurança; trata como item diferente (vira remover+adicionar).
@@ -349,6 +400,48 @@ public class OrcamentoService {
         }
 
         return adHocPersistido.equals(adHocRequest);
+    }
+
+    /**
+     * Multiset (produtoId -> quantidade) das customizações ad-hoc de um item persistido — total de
+     * customizações gravadas menos o conjunto fixo do catálogo recalculado ao vivo (quando a origem é
+     * Catálogo). Compartilhado por {@link #mesmasCustomizacoesAdHoc} (diff de edição, RN-NOVA-4) e
+     * {@link #customizacoesAdHocRequest} (reconstrução para duplicação, RN-NOVA-5) — mesma extração,
+     * dois usos diferentes do resultado.
+     */
+    private Map<UUID, Integer> customizacoesAdHocPersistidas(OrcamentoItem persistido) {
+        Map<UUID, Integer> adHoc = new LinkedHashMap<>();
+        for (OrcamentoItemCustomizacao c : orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(persistido.getId())) {
+            adHoc.merge(c.getProduto().getId(), c.getQuantidade(), Integer::sum);
+        }
+        if (persistido.getItemCatalogo() != null) {
+            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(persistido.getItemCatalogo().getId())) {
+                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
+                adHoc.merge(fixa.getProduto().getId(), -quantidade, Integer::sum);
+            }
+        }
+        return adHoc;
+    }
+
+    /**
+     * RN-NOVA-5 — reconstrói a lista de customizações ad-hoc de um item persistido no formato de
+     * request, para alimentar {@link #criarItem} na duplicação (que readiciona as fixas do catálogo
+     * automaticamente — só a parcela ad-hoc precisa vir explícita). Entradas com quantidade <= 0
+     * (customização fixa cobre tudo, ou catálogo mudou desde a criação do item) são descartadas.
+     */
+    private List<OrcamentoItemCustomizacaoRequest> customizacoesAdHocRequest(OrcamentoItem persistido) {
+        Map<UUID, Integer> adHoc = customizacoesAdHocPersistidas(persistido);
+        List<OrcamentoItemCustomizacaoRequest> resultado = new ArrayList<>();
+        for (Map.Entry<UUID, Integer> entry : adHoc.entrySet()) {
+            if (entry.getValue() <= 0) {
+                continue;
+            }
+            OrcamentoItemCustomizacaoRequest custReq = new OrcamentoItemCustomizacaoRequest();
+            custReq.setProdutoId(entry.getKey());
+            custReq.setQuantidade(entry.getValue());
+            resultado.add(custReq);
+        }
+        return resultado;
     }
 
     /**
