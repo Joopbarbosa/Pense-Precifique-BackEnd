@@ -250,6 +250,7 @@ public class OrcamentoService {
             subtotalOrcamento = subtotalOrcamento.add(subtotalItem);
         }
 
+        validarDesconto(subtotalOrcamento, tipoDesconto, orcamento.getDescontoValor());
         BigDecimal total = calcularTotal(subtotalOrcamento, tipoDesconto, orcamento.getDescontoValor());
 
         orcamento.setSubtotal(subtotalOrcamento);
@@ -762,6 +763,23 @@ public class OrcamentoService {
         }
     }
 
+    /**
+     * RN-NOVA-8 (V0.8.2) — bloqueia desconto negativo e desconto (percentual ou em valor) que
+     * excede o subtotal do orçamento, em vez de aplicar piso zero silencioso em {@link #calcularTotal}.
+     */
+    private void validarDesconto(BigDecimal subtotal, TipoDesconto tipoDesconto, BigDecimal descontoValor) {
+        BigDecimal desconto = descontoValor != null ? descontoValor : BigDecimal.ZERO;
+        if (desconto.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("O desconto não pode ser negativo");
+        }
+        BigDecimal descontoEmValor = tipoDesconto == TipoDesconto.PERCENTUAL
+                ? subtotal.multiply(desconto).divide(CEM, 6, RoundingMode.HALF_UP)
+                : desconto;
+        if (descontoEmValor.compareTo(subtotal) > 0) {
+            throw new BusinessException("O desconto não pode ser maior que o subtotal do orçamento");
+        }
+    }
+
     private BigDecimal calcularTotal(BigDecimal subtotal, TipoDesconto tipoDesconto, BigDecimal descontoValor) {
         BigDecimal desconto = descontoValor != null ? descontoValor : BigDecimal.ZERO;
         BigDecimal total;
@@ -770,9 +788,6 @@ public class OrcamentoService {
             total = subtotal.multiply(fator);
         } else {
             total = subtotal.subtract(desconto);
-        }
-        if (total.compareTo(BigDecimal.ZERO) < 0) {
-            total = BigDecimal.ZERO;
         }
         return total.setScale(2, RoundingMode.HALF_UP);
     }
