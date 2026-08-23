@@ -31,4 +31,10 @@ public class AvancaStatusRequest {
     // avançar EM_PRODUCAO → FINALIZADO: ids dos produtos cujo estoque resultaria negativo
     // (permitirEstoqueNegativo=true) e cuja baixa o usuário já confirmou.
     private List<UUID> confirmarEstoqueNegativoProdutoIds;
+
+    // RN-NOVA-2 (revisada, V0.8.2, P-B012) — permite ao chamador recusar o atalho de aprovação
+    // direta mesmo quando as 3 condições batem: true força o case ENVIADO a seguir para APROVADO
+    // (fluxo normal), ignorando a checagem de elegibilidade. Default false/ausente preserva o
+    // comportamento existente (atalho aplica automaticamente quando elegível).
+    private boolean ignorarAtalhoAprovacaoDireta;
 }

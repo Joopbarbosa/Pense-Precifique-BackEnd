@@ -38,6 +38,7 @@ import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoquePro
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoItemResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoAvancoStatusResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.OrcamentoMapper;
@@ -744,7 +745,9 @@ public class OrcamentoService {
                 // suficiente pula APROVADO/AGUARDANDO_SINAL/SINAL_PAGO/EM_PRODUCAO e vai direto pra
                 // FINALIZADO, reaproveitando a mesma checagem/baixa de estoque de EM_PRODUCAO→FINALIZADO.
                 // Exceção deliberada ao invariante de ORC-005 (fluxo unidirecional, um passo por vez).
-                if (elegivelParaAtalhoAprovacaoDireta(orcamento)) {
+                // RN-NOVA-2 (revisada, P-B012) — ignorarAtalhoAprovacaoDireta=true força o fluxo normal
+                // mesmo elegível: usuário recusou o atalho na modal de confirmação do frontend.
+                if (!request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento)) {
                     List<OrcamentoItem> itensAtalho = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                     List<UUID> confirmadosAtalho = request.getConfirmarEstoqueNegativoProdutoIds() != null
                             ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
@@ -849,6 +852,55 @@ public class OrcamentoService {
 
         orcamento = orcamentoRepository.save(orcamento);
         return montarDetalhe(orcamento);
+    }
+
+    /**
+     * RN-NOVA-2 (revisada, V0.8.2, P-B012) — simula o resultado de {@link #avancarStatus} para o
+     * caso {@code ENVIADO} sem persistir nada, para o frontend decidir se mostra a modal de
+     * confirmação do atalho antes de aplicar de verdade. Reaproveita
+     * {@link #elegivelParaAtalhoAprovacaoDireta} e {@link #validarEstoqueParaFinalizar} por chamada
+     * direta — os dois já são puros (só leem a entidade já carregada, nenhum {@code save()}) — e
+     * nunca chama {@link #baixarEstoque}. Só suporta status {@code ENVIADO}, que é o único onde
+     * RN-NOVA-2 se aplica; outros status não têm o que simular para este fim.
+     */
+    @Transactional(readOnly = true)
+    public SimulacaoAvancoStatusResponse simularAvancarStatus(UUID id, AvancaStatusRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        if (orcamento.getStatus() != StatusOrcamento.ENVIADO) {
+            throw new BusinessException("Simulação de atalho só é aplicável a orçamentos em ENVIADO.");
+        }
+
+        SimulacaoAvancoStatusResponse resposta = new SimulacaoAvancoStatusResponse();
+        resposta.setStatusAtual(StatusOrcamento.ENVIADO);
+
+        boolean elegivel = !request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento);
+        if (!elegivel) {
+            resposta.setAtalhoAplicavel(false);
+            resposta.setStatusResultante(StatusOrcamento.APROVADO);
+            resposta.setAvisosEstoque(List.of());
+            return resposta;
+        }
+
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        List<UUID> confirmados = request.getConfirmarEstoqueNegativoProdutoIds() != null
+                ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
+        ResultadoValidacaoEstoque resultado = validarEstoqueParaFinalizar(itens, confirmados);
+
+        if (!resultado.bloqueados().isEmpty()) {
+            // bloqueio duro — mesmo critério do avancarStatus real: atalho não se aplica, sem erro.
+            resposta.setAtalhoAplicavel(false);
+            resposta.setStatusResultante(StatusOrcamento.APROVADO);
+            resposta.setAvisosEstoque(List.of());
+            return resposta;
+        }
+
+        resposta.setAtalhoAplicavel(true);
+        resposta.setStatusResultante(StatusOrcamento.FINALIZADO);
+        resposta.setAvisosEstoque(resultado.avisosPendentes());
+        return resposta;
     }
 
     /**

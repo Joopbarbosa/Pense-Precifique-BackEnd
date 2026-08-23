@@ -10,6 +10,7 @@ import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueRespo
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
+import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoAvancoStatusResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoEstoqueProdutoResponse;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.pdf.PdfService;
@@ -108,6 +109,14 @@ public class OrcamentoController {
             @PathVariable UUID id,
             @Valid @RequestBody(required = false) AvancaStatusRequest request) {
         return ResponseEntity.ok(orcamentoService.avancarStatus(id,
+                request != null ? request : new AvancaStatusRequest()));
+    }
+
+    @PostMapping("/{id}/simular-avancar-status")
+    public ResponseEntity<SimulacaoAvancoStatusResponse> simularAvancarStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) AvancaStatusRequest request) {
+        return ResponseEntity.ok(orcamentoService.simularAvancarStatus(id,
                 request != null ? request : new AvancaStatusRequest()));
     }
 
