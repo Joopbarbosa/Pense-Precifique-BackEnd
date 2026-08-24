@@ -181,4 +181,38 @@ class OrcamentoVincularProducaoIT {
         OrcamentoDetalheResponse orcamento = orcamentoService.buscarPorId(orcamentoId);
         assertEquals(StatusOrcamento.SINAL_PAGO, orcamento.getStatus());
     }
+
+    /** P-B013/#320 — GET /orcamentos/{id} (buscarPorId) passa a expor os vínculos já existentes. */
+    @Test
+    void buscarPorIdExpoeProducoesVinculadas() {
+        seedUsuarioECliente();
+        UUID orcamentoId = criarOrcamento(false);
+
+        Producao producaoA = novaProducao();
+        Producao producaoB = novaProducao();
+        VincularProducaoRequest reqA = new VincularProducaoRequest();
+        reqA.setProducaoId(producaoA.getId());
+        orcamentoService.vincularProducao(orcamentoId, reqA);
+        VincularProducaoRequest reqB = new VincularProducaoRequest();
+        reqB.setProducaoId(producaoB.getId());
+        orcamentoService.vincularProducao(orcamentoId, reqB);
+
+        List<OrcamentoProducaoResponse> vinculos = orcamentoService.buscarPorId(orcamentoId).getProducoesVinculadas();
+
+        assertEquals(2, vinculos.size());
+        assertTrue(vinculos.stream().anyMatch(v -> v.getProducaoId().equals(producaoA.getId())));
+        assertTrue(vinculos.stream().anyMatch(v -> v.getProducaoId().equals(producaoB.getId())));
+        assertTrue(vinculos.stream().allMatch(v -> v.getIdentificadorProducao() != null && v.getId() != null));
+    }
+
+    /** P-B013/#320 — sem nenhum vínculo, a lista vem vazia, nunca null. */
+    @Test
+    void buscarPorIdSemVinculoDevolveListaVazia() {
+        seedUsuarioECliente();
+        UUID orcamentoId = criarOrcamento(false);
+
+        List<OrcamentoProducaoResponse> vinculos = orcamentoService.buscarPorId(orcamentoId).getProducoesVinculadas();
+
+        assertEquals(0, vinculos.size());
+    }
 }

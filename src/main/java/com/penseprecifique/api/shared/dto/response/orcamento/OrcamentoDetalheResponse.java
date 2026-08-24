@@ -50,4 +50,7 @@ public class OrcamentoDetalheResponse {
     private LocalDateTime updatedAt;
     /** UC-037/#126 — avisos informativos de estoque insuficiente, calculados só na criação (POST /orcamentos). */
     private List<AvisoEstoqueResponse> avisosEstoque;
+    /** RN-NOVA-6/ORC-040/#320 (P-B013) — produções já vinculadas (N:N via orcamento_producoes), pra a
+     * UI saber mostrar o vínculo sem depender de guardar em memória a resposta de vincular-producao. */
+    private List<OrcamentoProducaoResponse> producoesVinculadas;
 }

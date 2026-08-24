@@ -1293,6 +1293,9 @@ public class OrcamentoService {
         }
         OrcamentoDetalheResponse response = orcamentoMapper.toDetalheResponse(orcamento, itens);
         response.setItens(itensResponse);
+        response.setProducoesVinculadas(orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
+                .map(orcamentoMapper::toOrcamentoProducaoResponse)
+                .toList());
         return response;
     }
 
