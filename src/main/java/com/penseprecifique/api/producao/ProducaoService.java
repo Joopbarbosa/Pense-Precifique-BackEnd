@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
+import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
 import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
@@ -19,6 +20,7 @@ import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.TipoOrigemProducao;
+import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
 import com.penseprecifique.api.shared.dto.request.producao.AgruparProducoesRequest;
 import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ConsumoRealRequest;
@@ -1131,6 +1133,58 @@ public class ProducaoService {
                     .build()));
         }
         return gravados;
+    }
+
+    /**
+     * RN-PROD-VINC-01/02 (V0.8.2, #320) — chamado por {@code OrcamentoService.vincularProducao()}
+     * quando um orçamento vincula produtos a uma produção existente. A validação de estado
+     * (RN-PROD-VINC-02) vive aqui, não em OrcamentoService — é regra do ciclo de vida de Produção,
+     * mesmo padrão já usado em {@link #editarProducao}. Produto já presente na produção tem a
+     * quantidade somada (merge, nunca duplica {@code ProducaoProduto}) — mesmo espírito de
+     * agrupamento de PDC-001, agora também contra o que já está persistido, não só duplicatas dentro
+     * do mesmo request. Grava 1 linha {@code ITEM_ADICIONADO} por produto (não agregada): a
+     * rastreabilidade de origem (RN-PROD-HIST-01) precisa de produto_id/quantidade por linha para o
+     * desvincular futuro conseguir reverter exatamente o que aquele orçamento adicionou.
+     */
+    public List<ProducaoProduto> adicionarProdutosDeOrcamento(UUID producaoId, List<ProducaoProdutoRequest> produtos,
+                                                                UUID usuarioId, Orcamento referenciaOrcamento) {
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Essa produção já começou e não pode receber novos itens");
+        }
+
+        ProdutosValidados validados = validarEResolverProdutos(produtos, usuarioId);
+
+        List<ProducaoProduto> resultado = new ArrayList<>();
+        for (Produto produto : validados.produtos()) {
+            BigDecimal quantidade = validados.quantidades().get(produto.getId());
+
+            ProducaoProduto producaoProduto = producaoProdutoRepository
+                    .findByProducaoIdAndProdutoId(producao.getId(), produto.getId())
+                    .map(existente -> {
+                        existente.setQuantidade(existente.getQuantidade().add(quantidade));
+                        return producaoProdutoRepository.save(existente);
+                    })
+                    .orElseGet(() -> producaoProdutoRepository.save(ProducaoProduto.builder()
+                            .producao(producao)
+                            .produto(produto)
+                            .quantidade(quantidade)
+                            .build()));
+            resultado.add(producaoProduto);
+
+            historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                    .producao(producao)
+                    .tipoEvento(TipoEventoHistoricoProducao.ITEM_ADICIONADO)
+                    .produto(produto)
+                    .quantidade(quantidade)
+                    .referenciaOrcamento(referenciaOrcamento)
+                    .origem(OrigemHistoricoStatus.USUARIO)
+                    .build());
+        }
+
+        return resultado;
     }
 
     /**

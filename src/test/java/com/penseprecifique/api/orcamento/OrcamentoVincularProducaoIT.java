@@ -1,13 +1,23 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.producao.ProducaoProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
+import com.penseprecifique.api.producao.HistoricoStatusProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
+import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
@@ -29,6 +39,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,7 +55,11 @@ class OrcamentoVincularProducaoIT {
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired InsumoRepository insumoRepository;
+    @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
     @Autowired ProducaoRepository producaoRepository;
+    @Autowired ProducaoProdutoRepository producaoProdutoRepository;
+    @Autowired HistoricoStatusProducaoRepository historicoStatusProducaoRepository;
     @Autowired OrcamentoProducaoRepository orcamentoProducaoRepository;
 
     private Usuario usuario;
@@ -62,18 +77,27 @@ class OrcamentoVincularProducaoIT {
                 .usuario(usuario).numero(1).nome("Cliente Vincular Produção").ativa(true).build());
     }
 
+    /** RN-PROD-VINC-01 exige ficha técnica + rendimento válidos — mesma regra de criarProducao(). */
     private Produto novoProduto() {
         int numero = proximoNumeroProduto++;
-        return produtoRepository.save(Produto.builder()
+        Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome("Produto " + numero).tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(new BigDecimal("100"))
-                .permitirEstoqueNegativo(true)
+                .permitirEstoqueNegativo(true).rendimento(new BigDecimal("10"))
                 .precoVenda(new BigDecimal("50.00")).build());
+
+        Insumo insumo = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida("g")
+                .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
+                .build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produto).insumo(insumo).quantidade(new BigDecimal("1")).build());
+        return produto;
     }
 
     private Producao novaProducao() {
         return producaoRepository.save(Producao.builder()
-                .usuario(usuario).numero(proximoNumeroProducao++).build());
+                .usuario(usuario).numero(proximoNumeroProducao++).estado(EstadoProducao.AGUARDANDO_INICIO).build());
     }
 
     private UUID criarOrcamento(boolean sinalAtivo) {
@@ -214,5 +238,103 @@ class OrcamentoVincularProducaoIT {
         List<OrcamentoProducaoResponse> vinculos = orcamentoService.buscarPorId(orcamentoId).getProducoesVinculadas();
 
         assertEquals(0, vinculos.size());
+    }
+
+    private UUID criarOrcamentoComProduto(Produto produto, int quantidade) {
+        OrcamentoItemRequest item = new OrcamentoItemRequest();
+        item.setProdutoId(produto.getId());
+        item.setMargemAplicada(BigDecimal.ZERO);
+        item.setPrecoUnitario(new BigDecimal("50.00"));
+        item.setQuantidade(quantidade);
+
+        OrcamentoRequest req = new OrcamentoRequest();
+        req.setClienteId(cliente.getId());
+        req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(false);
+        req.setItens(List.of(item));
+        req.setSinalAtivo(false);
+        return orcamentoService.criar(req).getId();
+    }
+
+    /** RN-PROD-VINC-01 — produto ainda não presente na produção: cria ProducaoProduto novo. */
+    @Test
+    void vincularProducaoAdicionaProdutoNovoNaProducao() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 3);
+        Producao producao = novaProducao();
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        assertEquals(1, produtos.size());
+        assertEquals(produto.getId(), produtos.get(0).getProduto().getId());
+        assertEquals(0, new BigDecimal("3").compareTo(produtos.get(0).getQuantidade()));
+    }
+
+    /** RN-PROD-VINC-01 — produto já presente na produção: soma quantidade, nunca duplica linha. */
+    @Test
+    void vincularProducaoSomaQuantidadeQuandoProdutoJaExisteNaProducao() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        Producao producao = novaProducao();
+        producaoProdutoRepository.save(ProducaoProduto.builder()
+                .producao(producao).produto(produto).quantidade(new BigDecimal("2")).build());
+
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 5);
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        assertEquals(1, produtos.size(), "não pode duplicar a linha do produto já existente");
+        assertEquals(0, new BigDecimal("7").compareTo(produtos.get(0).getQuantidade()));
+    }
+
+    /** RN-PROD-VINC-02 — produção fora de AGUARDANDO_INICIO bloqueia o vínculo, sem gravar nada. */
+    @Test
+    void vincularProducaoEmProducaoForaDeAguardandoInicioBloqueia() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 1);
+        Producao producao = producaoRepository.save(Producao.builder()
+                .usuario(usuario).numero(proximoNumeroProducao++).estado(EstadoProducao.EM_ANDAMENTO).build());
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> orcamentoService.vincularProducao(orcamentoId, req));
+        assertTrue(ex.getMessage().toLowerCase().contains("já começou"));
+
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamentoId, producao.getId()).isEmpty(),
+                "vínculo não pode ser gravado quando a produção está bloqueada");
+        assertEquals(0, producaoProdutoRepository.findByProducaoId(producao.getId()).size());
+    }
+
+    /** RN-PROD-HIST-01 — vincular grava histórico ITEM_ADICIONADO com produto/quantidade/origem corretos. */
+    @Test
+    void vincularProducaoGravaHistoricoItemAdicionado() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 4);
+        Producao producao = novaProducao();
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        List<HistoricoStatusProducao> historico =
+                historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
+        HistoricoStatusProducao linha = historico.stream()
+                .filter(h -> h.getTipoEvento() == TipoEventoHistoricoProducao.ITEM_ADICIONADO)
+                .findFirst().orElseThrow(() -> new AssertionError("linha ITEM_ADICIONADO não encontrada"));
+
+        assertNotNull(linha.getProduto());
+        assertEquals(produto.getId(), linha.getProduto().getId());
+        assertEquals(0, new BigDecimal("4").compareTo(linha.getQuantidade()));
+        assertNotNull(linha.getReferenciaOrcamento());
+        assertEquals(orcamentoId, linha.getReferenciaOrcamento().getId());
     }
 }

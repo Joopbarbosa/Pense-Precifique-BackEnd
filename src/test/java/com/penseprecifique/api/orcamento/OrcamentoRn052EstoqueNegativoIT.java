@@ -1,10 +1,14 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -46,6 +50,8 @@ class OrcamentoRn052EstoqueNegativoIT {
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired InsumoRepository insumoRepository;
+    @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
     @Autowired ProducaoRepository producaoRepository;
 
     private Usuario usuario;
@@ -61,11 +67,20 @@ class OrcamentoRn052EstoqueNegativoIT {
                 .usuario(usuario).numero(1).nome("Cliente RN-052").ativa(true).build());
     }
 
+    /** RN-PROD-VINC-01 exige ficha técnica + rendimento válidos — mesma regra de criarProducao(). */
     private Produto novoProduto(String nome, int numero, BigDecimal estoqueAtual, boolean permitirEstoqueNegativo) {
-        return produtoRepository.save(Produto.builder()
+        Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(estoqueAtual).permitirEstoqueNegativo(permitirEstoqueNegativo)
-                .precoVenda(new BigDecimal("10.00")).build());
+                .rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
+
+        Insumo insumo = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida("g")
+                .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
+                .build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produto).insumo(insumo).quantidade(new BigDecimal("1")).build());
+        return produto;
     }
 
     private UUID criarOrcamentoAteEmProducao(Produto produto, int quantidade) {

@@ -29,6 +29,7 @@ import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
@@ -49,6 +50,7 @@ import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
+import com.penseprecifique.api.producao.ProducaoService;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
@@ -103,6 +105,7 @@ public class OrcamentoService {
     private final ReciboEstornoRepository reciboEstornoRepository;
     private final OrcamentoProducaoRepository orcamentoProducaoRepository;
     private final ProducaoRepository producaoRepository;
+    private final ProducaoService producaoService;
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
 
@@ -904,11 +907,16 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-NOVA-6 (V0.8.2) — vincula uma produção existente do usuário a um orçamento (N:N, tabela de
-     * junção {@code orcamento_producoes}). Idempotente: vincular a mesma produção duas vezes não cria
-     * linha duplicada (`UNIQUE(orcamento_id, producao_id)` no banco), só devolve a lista atual sem
-     * efeito colateral. Não exige nenhum status específico do orçamento — o vínculo pode ser
-     * estabelecido a qualquer momento antes da transição que o exige (ver {@link #validarVinculoProducao}).
+     * RN-NOVA-6/RN-PROD-VINC-01/02 (V0.8.2) — vincula uma produção existente do usuário a um
+     * orçamento (N:N, tabela de junção {@code orcamento_producoes}) e, na primeira vez que o vínculo
+     * é criado, adiciona de verdade os produtos do orçamento à produção (soma quantidade se o produto
+     * já estiver lá) via {@link ProducaoService#adicionarProdutosDeOrcamento} — que também aplica a
+     * restrição RN-PROD-VINC-02 (só {@code AGUARDANDO_INICIO} aceita vínculo novo; produção em outro
+     * estado lança BusinessException antes de qualquer gravação, inclusive de {@code orcamento_producoes}).
+     * Idempotente: vincular a mesma produção duas vezes não cria linha duplicada nem readiciona
+     * produtos (`UNIQUE(orcamento_id, producao_id)` no banco) — só devolve a lista atual. Não exige
+     * nenhum status específico do orçamento — o vínculo pode ser estabelecido a qualquer momento antes
+     * da transição que o exige (ver {@link #validarVinculoProducao}).
      */
     public List<OrcamentoProducaoResponse> vincularProducao(UUID id, VincularProducaoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
@@ -918,6 +926,17 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
 
         if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producao.getId()).isEmpty()) {
+            List<ProducaoProdutoRequest> produtosDoOrcamento = orcamentoItemRepository.findByOrcamentoId(orcamento.getId())
+                    .stream()
+                    .map(item -> {
+                        ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
+                        produtoRequest.setProdutoId(item.getProdutoVendido().getId());
+                        produtoRequest.setQuantidade(BigDecimal.valueOf(item.getQuantidade()));
+                        return produtoRequest;
+                    })
+                    .toList();
+            producaoService.adicionarProdutosDeOrcamento(producao.getId(), produtosDoOrcamento, usuarioId, orcamento);
+
             orcamentoProducaoRepository.save(OrcamentoProducao.builder()
                     .orcamento(orcamento)
                     .producao(producao)
