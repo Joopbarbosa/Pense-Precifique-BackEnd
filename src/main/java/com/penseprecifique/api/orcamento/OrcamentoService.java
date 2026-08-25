@@ -30,6 +30,7 @@ import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
@@ -926,16 +927,8 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
 
         if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producao.getId()).isEmpty()) {
-            List<ProducaoProdutoRequest> produtosDoOrcamento = orcamentoItemRepository.findByOrcamentoId(orcamento.getId())
-                    .stream()
-                    .map(item -> {
-                        ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
-                        produtoRequest.setProdutoId(item.getProdutoVendido().getId());
-                        produtoRequest.setQuantidade(BigDecimal.valueOf(item.getQuantidade()));
-                        return produtoRequest;
-                    })
-                    .toList();
-            producaoService.adicionarProdutosDeOrcamento(producao.getId(), produtosDoOrcamento, usuarioId, orcamento);
+            producaoService.adicionarProdutosDeOrcamento(
+                    producao.getId(), produtosDoOrcamentoComoRequest(orcamento.getId()), usuarioId, orcamento);
 
             orcamentoProducaoRepository.save(OrcamentoProducao.builder()
                     .orcamento(orcamento)
@@ -945,6 +938,36 @@ public class OrcamentoService {
 
         return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
                 .map(orcamentoMapper::toOrcamentoProducaoResponse)
+                .toList();
+    }
+
+    /**
+     * RN-PROD-VINC-03 (V0.8.2, #320) — preview do alerta combinado de insumo/rendimento antes de
+     * confirmar {@link #vincularProducao}: soma dos produtos já persistidos na produção com os
+     * produtos do orçamento, não cada um isoladamente. Não persiste nada — delega o cálculo a
+     * {@link ProducaoService#calcularAlertasComAdicao}, que também aplica a mesma restrição de estado
+     * (RN-PROD-VINC-02) do vínculo real, para o preview nunca prometer um vínculo que a confirmação
+     * não vai conseguir efetivar.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertaInsumoResponse> simularVincularProducao(UUID id, VincularProducaoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        return producaoService.calcularAlertasComAdicao(
+                request.getProducaoId(), produtosDoOrcamentoComoRequest(orcamento.getId()));
+    }
+
+    private List<ProducaoProdutoRequest> produtosDoOrcamentoComoRequest(UUID orcamentoId) {
+        return orcamentoItemRepository.findByOrcamentoId(orcamentoId)
+                .stream()
+                .map(item -> {
+                    ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
+                    produtoRequest.setProdutoId(item.getProdutoVendido().getId());
+                    produtoRequest.setQuantidade(BigDecimal.valueOf(item.getQuantidade()));
+                    return produtoRequest;
+                })
                 .toList();
     }
 

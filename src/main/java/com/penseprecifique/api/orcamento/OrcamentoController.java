@@ -6,6 +6,7 @@ import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
+import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ItemSemEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoProducaoResponse;
@@ -102,6 +103,13 @@ public class OrcamentoController {
             @PathVariable UUID id,
             @Valid @RequestBody VincularProducaoRequest request) {
         return ResponseEntity.status(201).body(orcamentoService.vincularProducao(id, request));
+    }
+
+    @PostMapping("/{id}/simular-vincular-producao")
+    public ResponseEntity<List<AlertaInsumoResponse>> simularVincularProducao(
+            @PathVariable UUID id,
+            @Valid @RequestBody VincularProducaoRequest request) {
+        return ResponseEntity.ok(orcamentoService.simularVincularProducao(id, request));
     }
 
     @PostMapping("/{id}/avancar-status")

@@ -221,6 +221,39 @@ public class ProducaoService {
         return calcularAlertas(validados);
     }
 
+    /**
+     * RN-PROD-VINC-03 (V0.8.2, #320) — alerta de insumo/rendimento do vínculo Orçamento↔Produção,
+     * considerando a soma dos produtos já persistidos na produção com os produtos novos vindos do
+     * orçamento (não cada um isoladamente). Reaproveita {@link #validarEResolverProdutos}, que já
+     * mescla quantidades duplicadas do mesmo produto por {@code Map.merge()}, então basta concatenar
+     * as duas listas antes de validar — nenhuma lógica de soma nova aqui, e {@link #calcularAlertas}
+     * (motor existente) não é duplicado. Mesma checagem de estado (RN-PROD-VINC-02) de
+     * {@link #adicionarProdutosDeOrcamento} — falha rápido em vez de mostrar um alerta que a
+     * confirmação real não vai conseguir persistir.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertaInsumoResponse> calcularAlertasComAdicao(UUID producaoId, List<ProducaoProdutoRequest> produtosNovos) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Essa produção já começou e não pode receber novos itens");
+        }
+
+        List<ProducaoProdutoRequest> combinados = new ArrayList<>();
+        for (ProducaoProduto existente : producaoProdutoRepository.findByProducaoId(producao.getId())) {
+            ProducaoProdutoRequest request = new ProducaoProdutoRequest();
+            request.setProdutoId(existente.getProduto().getId());
+            request.setQuantidade(existente.getQuantidade());
+            combinados.add(request);
+        }
+        combinados.addAll(produtosNovos);
+
+        ProdutosValidados validados = validarEResolverProdutos(combinados, usuarioId);
+        return calcularAlertas(validados);
+    }
+
     /** RN-061/062/064/077 — cria produção com N produtos, sem movimentação de estoque. Nasce AGUARDANDO_INICIO. */
     public ProducaoDetalheResponse criarProducao(CriarProducaoRequest request) {
         Usuario usuario = getUsuarioAutenticado();
