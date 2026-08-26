@@ -906,16 +906,23 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-NOVA-6/RN-PROD-VINC-01/02 (V0.8.2) — vincula uma produção existente do usuário a um
-     * orçamento (N:N, tabela de junção {@code orcamento_producoes}) e, na primeira vez que o vínculo
-     * é criado, adiciona de verdade os produtos do orçamento à produção (soma quantidade se o produto
-     * já estiver lá) via {@link ProducaoService#adicionarProdutosDeOrcamento} — que também aplica a
-     * restrição RN-PROD-VINC-02 (só {@code AGUARDANDO_INICIO} aceita vínculo novo; produção em outro
-     * estado lança BusinessException antes de qualquer gravação, inclusive de {@code orcamento_producoes}).
-     * Idempotente: vincular a mesma produção duas vezes não cria linha duplicada nem readiciona
-     * produtos (`UNIQUE(orcamento_id, producao_id)` no banco) — só devolve a lista atual. Não exige
-     * nenhum status específico do orçamento — o vínculo nunca mais é pré-requisito de nenhuma
-     * transição (RN-ORC-VINC-01, P-B017) — pode ser estabelecido a qualquer momento, ou nunca.
+     * RN-NOVA-6/RN-PROD-VINC-01/02/RN-ORC-VINC-03 (V0.8.2) — vincula uma produção existente do
+     * usuário a um orçamento (N:N, tabela de junção {@code orcamento_producoes}) e sincroniza de
+     * verdade os produtos do orçamento com a produção via {@link ProducaoService#adicionarProdutosDeOrcamento}
+     * — que também aplica a restrição RN-PROD-VINC-02 (só {@code AGUARDANDO_INICIO} aceita item novo;
+     * produção em outro estado lança BusinessException antes de qualquer gravação). Não exige nenhum
+     * status específico do orçamento — o vínculo pode ser estabelecido a qualquer momento, mesmo sem
+     * nunca chegar a bloquear nenhuma transição (RN-ORC-VINC-01).
+     *
+     * <p><b>Re-sincronização (P-B017, achado de P-B015):</b> vincular a mesma produção mais de uma vez
+     * não é mais um no-op puro depois da primeira chamada — {@link #produtosPendentesDeSincronizacao}
+     * compara os itens atuais do orçamento contra o que já foi registrado em histórico
+     * ({@code ITEM_ADICIONADO}) para aquele par orçamento+produção e só passa adiante a diferença
+     * (delta positivo) de cada produto. Item novo desde o último vínculo entra pela primeira vez; item
+     * cuja quantidade aumentou entra só pela diferença; item inalterado não gera chamada nenhuma a
+     * {@code adicionarProdutosDeOrcamento} (nunca re-soma o que já foi sincronizado). Quantidade que
+     * <em>diminuiu</em> no orçamento não decrementa nada aqui — vincular só adiciona, nunca remove;
+     * remover é responsabilidade explícita de {@link #desvincularProducao}.
      */
     public List<OrcamentoProducaoResponse> vincularProducao(UUID id, VincularProducaoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
@@ -924,10 +931,12 @@ public class OrcamentoService {
         Producao producao = producaoRepository.findByIdAndUsuarioId(request.getProducaoId(), usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
 
-        if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producao.getId()).isEmpty()) {
-            producaoService.adicionarProdutosDeOrcamento(
-                    producao.getId(), produtosDoOrcamentoComoRequest(orcamento.getId()), usuarioId, orcamento);
+        List<ProducaoProdutoRequest> pendentes = produtosPendentesDeSincronizacao(orcamento.getId(), producao.getId());
+        if (!pendentes.isEmpty()) {
+            producaoService.adicionarProdutosDeOrcamento(producao.getId(), pendentes, usuarioId, orcamento);
+        }
 
+        if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producao.getId()).isEmpty()) {
             orcamentoProducaoRepository.save(OrcamentoProducao.builder()
                     .orcamento(orcamento)
                     .producao(producao)
@@ -937,6 +946,35 @@ public class OrcamentoService {
         return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
                 .map(orcamentoMapper::toOrcamentoProducaoResponse)
                 .toList();
+    }
+
+    /**
+     * P-B017 (#320) — diferença entre os itens atuais do orçamento e o que já foi registrado como
+     * {@code ITEM_ADICIONADO} para o par orçamento+produção (via {@link ProducaoService#produtosJaAdicionadosPeloOrcamento}).
+     * Mescla duplicatas do orçamento por {@code produtoId} antes de comparar (mesmo produto pode
+     * vir de mais de um {@code OrcamentoItem}). Delta zero ou negativo (quantidade não mudou ou
+     * diminuiu) não entra na lista — só delta positivo é considerado "pendente".
+     */
+    private List<ProducaoProdutoRequest> produtosPendentesDeSincronizacao(UUID orcamentoId, UUID producaoId) {
+        Map<UUID, BigDecimal> jaSincronizado = producaoService.produtosJaAdicionadosPeloOrcamento(producaoId, orcamentoId);
+
+        Map<UUID, BigDecimal> atual = new LinkedHashMap<>();
+        for (ProducaoProdutoRequest item : produtosDoOrcamentoComoRequest(orcamentoId)) {
+            atual.merge(item.getProdutoId(), item.getQuantidade(), BigDecimal::add);
+        }
+
+        List<ProducaoProdutoRequest> pendentes = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> entry : atual.entrySet()) {
+            BigDecimal sincronizado = jaSincronizado.getOrDefault(entry.getKey(), BigDecimal.ZERO);
+            BigDecimal delta = entry.getValue().subtract(sincronizado);
+            if (delta.compareTo(BigDecimal.ZERO) > 0) {
+                ProducaoProdutoRequest pendente = new ProducaoProdutoRequest();
+                pendente.setProdutoId(entry.getKey());
+                pendente.setQuantidade(delta);
+                pendentes.add(pendente);
+            }
+        }
+        return pendentes;
     }
 
     /**
@@ -975,9 +1013,10 @@ public class OrcamentoService {
      * prazo de produção informado. {@code prazoProducaoDias == null} é o único sinal confiável de "sem
      * prazo" garantido por {@link #validarRegras} no momento da escrita (RN-NOVA-3). A terceira
      * condição (estoque suficiente para todos os produtos) é mais cara — só verificada em
-     * {@link #avancarStatus} quando estas duas primeiras já passaram. RN-NOVA-6 (vínculo obrigatório
-     * para EM_PRODUCAO) foi removida em P-B017/RN-ORC-VINC-01 — o atalho nunca chegou a checá-la
-     * mesmo antes da remoção, já que ele pula direto pra FINALIZADO sem passar por EM_PRODUCAO.
+     * {@link #avancarStatus} quando estas duas primeiras já passaram. Não checa
+     * {@link #validarVinculoProducao} de propósito: RN-NOVA-6 se aplica só às duas transições que
+     * persistem {@code status=EM_PRODUCAO}, e o atalho nunca passa por esse status — o atalho existe
+     * justamente para quando a produção não é necessária.
      */
     private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento) {
         return !Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getPrazoProducaoDias() == null;

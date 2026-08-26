@@ -1221,6 +1221,25 @@ public class ProducaoService {
     }
 
     /**
+     * P-B017 (#320) — soma, por produto, as linhas {@code ITEM_ADICIONADO} já registradas para um
+     * par orçamento+produção específico. Usado por {@code OrcamentoService.vincularProducao()} para
+     * calcular o que falta sincronizar (RN-ORC-VINC-03, achado de re-sincronização de P-B015): vincular
+     * a mesma produção mais de uma vez só reenvia o delta (produto novo ou quantidade aumentada), nunca
+     * re-soma o que já está registrado. Soma por produto porque uma re-sincronização anterior pode ter
+     * gravado mais de 1 linha para o mesmo produto (1 por chamada de {@link #adicionarProdutosDeOrcamento}).
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, BigDecimal> produtosJaAdicionadosPeloOrcamento(UUID producaoId, UUID referenciaOrcamentoId) {
+        Map<UUID, BigDecimal> jaSincronizado = new HashMap<>();
+        for (HistoricoStatusProducao linha : historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento(
+                        producaoId, referenciaOrcamentoId, TipoEventoHistoricoProducao.ITEM_ADICIONADO)) {
+            jaSincronizado.merge(linha.getProduto().getId(), linha.getQuantidade(), BigDecimal::add);
+        }
+        return jaSincronizado;
+    }
+
+    /**
      * RN-064 — alertas informativos de estoque, nunca bloqueiam a criação/edição. Consumo de cada
      * insumo é somado entre todos os produtos da produção antes de comparar com o estoque atual.
      */

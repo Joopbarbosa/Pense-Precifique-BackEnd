@@ -337,4 +337,104 @@ class OrcamentoVincularProducaoIT {
         assertNotNull(linha.getReferenciaOrcamento());
         assertEquals(orcamentoId, linha.getReferenciaOrcamento().getId());
     }
+
+    private OrcamentoItemRequest itemDe(Produto produto, int quantidade) {
+        OrcamentoItemRequest item = new OrcamentoItemRequest();
+        item.setProdutoId(produto.getId());
+        item.setMargemAplicada(BigDecimal.ZERO);
+        item.setPrecoUnitario(new BigDecimal("50.00"));
+        item.setQuantidade(quantidade);
+        return item;
+    }
+
+    private OrcamentoRequest requestComItens(List<OrcamentoItemRequest> itens) {
+        OrcamentoRequest req = new OrcamentoRequest();
+        req.setClienteId(cliente.getId());
+        req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(false);
+        req.setItens(itens);
+        req.setSinalAtivo(false);
+        return req;
+    }
+
+    /**
+     * P-B017 (#320, achado de P-B015) — vincular de novo à mesma produção depois de adicionar um item
+     * novo ao orçamento (ainda em RASCUNHO, único status que permite editar() — ORC-004) sincroniza só
+     * o item novo, sem re-somar o que já tinha entrado no 1º vínculo.
+     */
+    @Test
+    void vincularDeNovoAdicionaSoItemNovoSemReSomarOQueJaFoiSincronizado() {
+        seedUsuarioECliente();
+        Produto produtoA = novoProduto();
+        Produto produtoB = novoProduto();
+        UUID orcamentoId = orcamentoService.criar(requestComItens(List.of(itemDe(produtoA, 3)))).getId();
+        Producao producao = novaProducao();
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        orcamentoService.editar(orcamentoId, requestComItens(List.of(itemDe(produtoA, 3), itemDe(produtoB, 2))));
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        assertEquals(2, produtos.size());
+        ProducaoProduto pa = produtos.stream().filter(p -> p.getProduto().getId().equals(produtoA.getId()))
+                .findFirst().orElseThrow();
+        ProducaoProduto pb = produtos.stream().filter(p -> p.getProduto().getId().equals(produtoB.getId()))
+                .findFirst().orElseThrow();
+        assertEquals(0, new BigDecimal("3").compareTo(pa.getQuantidade()),
+                "produtoA não pode ter sido re-somado no 2º vínculo");
+        assertEquals(0, new BigDecimal("2").compareTo(pb.getQuantidade()));
+    }
+
+    /** P-B017 (#320) — quantidade de um item já sincronizado aumenta: só o delta (aumento) é somado de novo. */
+    @Test
+    void vincularDeNovoSomaSoDeltaQuandoQuantidadeDoItemAumenta() {
+        seedUsuarioECliente();
+        Produto produtoA = novoProduto();
+        UUID orcamentoId = orcamentoService.criar(requestComItens(List.of(itemDe(produtoA, 3)))).getId();
+        Producao producao = novaProducao();
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        orcamentoService.editar(orcamentoId, requestComItens(List.of(itemDe(produtoA, 5))));
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        assertEquals(1, produtos.size());
+        assertEquals(0, new BigDecimal("5").compareTo(produtos.get(0).getQuantidade()));
+
+        List<HistoricoStatusProducao> itensAdicionados = historicoStatusProducaoRepository
+                .findByProducaoIdOrderByDataTransicaoAsc(producao.getId()).stream()
+                .filter(h -> h.getTipoEvento() == TipoEventoHistoricoProducao.ITEM_ADICIONADO)
+                .toList();
+        assertEquals(2, itensAdicionados.size(),
+                "2 linhas de histórico: 3 na 1ª sincronização, 2 (delta) na 2ª");
+    }
+
+    /** P-B017 (#320) — vincular de novo sem nenhuma mudança no orçamento não gera histórico nem soma de novo. */
+    @Test
+    void vincularDeNovoSemMudancaNoOrcamentoNaoGeraHistoricoNovo() {
+        seedUsuarioECliente();
+        Produto produtoA = novoProduto();
+        UUID orcamentoId = orcamentoService.criar(requestComItens(List.of(itemDe(produtoA, 3)))).getId();
+        Producao producao = novaProducao();
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+        orcamentoService.vincularProducao(orcamentoId, req);
+
+        List<HistoricoStatusProducao> itensAdicionados = historicoStatusProducaoRepository
+                .findByProducaoIdOrderByDataTransicaoAsc(producao.getId()).stream()
+                .filter(h -> h.getTipoEvento() == TipoEventoHistoricoProducao.ITEM_ADICIONADO)
+                .toList();
+        assertEquals(1, itensAdicionados.size());
+
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
+        assertEquals(0, new BigDecimal("3").compareTo(produtos.get(0).getQuantidade()));
+    }
 }
