@@ -137,18 +137,18 @@ class OrcamentoVincularProducaoIT {
         orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
     }
 
+    /** RN-ORC-VINC-01 (P-B017) — vínculo deixou de ser obrigatório: sem nenhuma produção vinculada, o avanço acontece normalmente. */
     @Test
-    void avancarSemVinculoBloqueiaComBusinessException() {
+    void avancarSemVinculoNaoBloqueiaMais() {
         seedUsuarioECliente();
         UUID orcamentoId = criarOrcamento(false);
         avancarAteAprovadoSemSinal(orcamentoId);
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
-        assertTrue(ex.getMessage().toLowerCase().contains("produção"));
+        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
 
-        OrcamentoDetalheResponse orcamento = orcamentoService.buscarPorId(orcamentoId);
-        assertEquals(StatusOrcamento.APROVADO, orcamento.getStatus());
+        assertTrue(resultado instanceof OrcamentoDetalheResponse);
+        assertEquals(StatusOrcamento.EM_PRODUCAO, ((OrcamentoDetalheResponse) resultado).getStatus());
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).isEmpty());
     }
 
     @Test
@@ -192,18 +192,18 @@ class OrcamentoVincularProducaoIT {
         assertEquals(StatusOrcamento.EM_PRODUCAO, ((OrcamentoDetalheResponse) resultado).getStatus());
     }
 
+    /** RN-ORC-VINC-01 (P-B017) — mesma ausência de bloqueio no caminho SINAL_PAGO → EM_PRODUCAO. */
     @Test
-    void caminhoSinalPagoAplicaMesmoBloqueioSemVinculo() {
+    void caminhoSinalPagoNaoBloqueiaMaisSemVinculo() {
         seedUsuarioECliente();
         UUID orcamentoId = criarOrcamento(true);
         avancarAteSinalPago(orcamentoId);
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
-        assertTrue(ex.getMessage().toLowerCase().contains("produção"));
+        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
 
-        OrcamentoDetalheResponse orcamento = orcamentoService.buscarPorId(orcamentoId);
-        assertEquals(StatusOrcamento.SINAL_PAGO, orcamento.getStatus());
+        assertTrue(resultado instanceof OrcamentoDetalheResponse);
+        assertEquals(StatusOrcamento.EM_PRODUCAO, ((OrcamentoDetalheResponse) resultado).getStatus());
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).isEmpty());
     }
 
     /** P-B013/#320 — GET /orcamentos/{id} (buscarPorId) passa a expor os vínculos já existentes. */

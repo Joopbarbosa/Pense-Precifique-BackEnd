@@ -781,7 +781,6 @@ public class OrcamentoService {
                 if (Boolean.TRUE.equals(orcamento.getSinalAtivo())) {
                     orcamento.setStatus(StatusOrcamento.AGUARDANDO_SINAL);
                 } else {
-                    validarVinculoProducao(orcamento.getId());
                     orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
                 }
                 break;
@@ -804,7 +803,6 @@ public class OrcamentoService {
                 break;
 
             case SINAL_PAGO:
-                validarVinculoProducao(orcamento.getId());
                 orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
                 break;
 
@@ -916,8 +914,8 @@ public class OrcamentoService {
      * estado lança BusinessException antes de qualquer gravação, inclusive de {@code orcamento_producoes}).
      * Idempotente: vincular a mesma produção duas vezes não cria linha duplicada nem readiciona
      * produtos (`UNIQUE(orcamento_id, producao_id)` no banco) — só devolve a lista atual. Não exige
-     * nenhum status específico do orçamento — o vínculo pode ser estabelecido a qualquer momento antes
-     * da transição que o exige (ver {@link #validarVinculoProducao}).
+     * nenhum status específico do orçamento — o vínculo nunca mais é pré-requisito de nenhuma
+     * transição (RN-ORC-VINC-01, P-B017) — pode ser estabelecido a qualquer momento, ou nunca.
      */
     public List<OrcamentoProducaoResponse> vincularProducao(UUID id, VincularProducaoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
@@ -972,27 +970,14 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-NOVA-6 — bloqueia (fail fast, antes de qualquer mutação de status) a transição para
-     * EM_PRODUCAO quando o orçamento não tem nenhuma produção vinculada. Chamado pelos dois caminhos
-     * possíveis em {@link #avancarStatus}: {@code APROVADO} sem sinal e {@code SINAL_PAGO}.
-     */
-    private void validarVinculoProducao(UUID orcamentoId) {
-        if (!orcamentoProducaoRepository.existsByOrcamentoId(orcamentoId)) {
-            throw new BusinessException(
-                    "O orçamento precisa estar vinculado a pelo menos uma produção antes de avançar para Em Produção.");
-        }
-    }
-
-    /**
      * RN-NOVA-2 (V0.8.2) — checagem barata (sem consulta ao banco além do orçamento já carregado) das
      * duas primeiras condições de habilitação do atalho ENVIADO→FINALIZADO: sinal inativo e nenhum
      * prazo de produção informado. {@code prazoProducaoDias == null} é o único sinal confiável de "sem
      * prazo" garantido por {@link #validarRegras} no momento da escrita (RN-NOVA-3). A terceira
      * condição (estoque suficiente para todos os produtos) é mais cara — só verificada em
-     * {@link #avancarStatus} quando estas duas primeiras já passaram. Não checa
-     * {@link #validarVinculoProducao} de propósito: RN-NOVA-6 se aplica só às duas transições que
-     * persistem {@code status=EM_PRODUCAO}, e o atalho nunca passa por esse status — o atalho existe
-     * justamente para quando a produção não é necessária.
+     * {@link #avancarStatus} quando estas duas primeiras já passaram. RN-NOVA-6 (vínculo obrigatório
+     * para EM_PRODUCAO) foi removida em P-B017/RN-ORC-VINC-01 — o atalho nunca chegou a checá-la
+     * mesmo antes da remoção, já que ele pula direto pra FINALIZADO sem passar por EM_PRODUCAO.
      */
     private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento) {
         return !Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getPrazoProducaoDias() == null;

@@ -9,8 +9,6 @@ import java.util.UUID;
 
 public interface OrcamentoProducaoRepository extends JpaRepository<OrcamentoProducao, UUID> {
 
-    boolean existsByOrcamentoId(UUID orcamentoId);
-
     List<OrcamentoProducao> findByOrcamentoId(UUID orcamentoId);
 
     Optional<OrcamentoProducao> findByOrcamentoIdAndProducaoId(UUID orcamentoId, UUID producaoId);
