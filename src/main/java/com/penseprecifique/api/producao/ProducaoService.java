@@ -6,6 +6,7 @@ import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
 import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
@@ -49,6 +50,7 @@ import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.orcamento.OrcamentoProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -90,6 +92,7 @@ public class ProducaoService {
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProducaoMapper producaoMapper;
+    private final OrcamentoProducaoRepository orcamentoProducaoRepository;
 
     // #158/RN-NOVA-6 (+ item avulso P-BE-NUMERO-SORT) — allowlist explícita dos 5 critérios de
     // ordenação aceitos em GET /producoes. "produto" e "quantidade" são agregados (MIN/SUM sobre
@@ -624,9 +627,12 @@ public class ProducaoService {
         return response;
     }
 
-    /** Cria uma produção filha (DIVISAO/AGRUPAMENTO) copiando dataInicio/dataTerminoPrevista/observacoes
-     *  da origem e gravando os ProducaoProduto informados. Nasce sem histórico — quem chama transiciona
-     *  via registrarNascimento()/transicionar(). */
+    /** Cria uma produção filha (DIVISAO) copiando dataInicio/dataTerminoPrevista/observacoes da origem
+     *  e gravando os ProducaoProduto informados. Nasce sem histórico de status — quem chama transiciona
+     *  via registrarNascimento()/transicionar(). RN-PROD-VINC-04 (P-B018, #320) — também propaga, para
+     *  cada produto que a filha recebe, o histórico de origem (ITEM_ADICIONADO) e o vínculo
+     *  (orcamento_producoes) dos orçamentos que efetivamente contribuíram, via
+     *  {@link #propagarOrigemParaFilha}. */
     private Producao criarProducaoFilha(Producao origem, List<ProducaoProduto> produtosOrigem, TipoOrigemProducao tipo) {
         Producao filha = Producao.builder()
                 .usuario(origem.getUsuario())
@@ -647,7 +653,73 @@ public class ProducaoService {
                     .quantidade(producaoProduto.getQuantidade())
                     .build());
         }
+
+        propagarOrigemParaFilha(origem, filha, produtosOrigem);
         return filha;
+    }
+
+    /**
+     * RN-PROD-VINC-04 (P-B018, #320) — como {@code dividir()} nunca fraciona a quantidade de um
+     * produto entre as duas filhas (cada {@link ProducaoProduto}, com sua quantidade inteira, vai
+     * para uma única filha — {@code UNIQUE(producao_id, produto_id)}, P-B015), propagar histórico não
+     * exige matemática de proporção: a filha que recebe o produto recebe também <b>todo</b> o
+     * histórico de origem daquele produto, de todos os orçamentos que já contribuíram para ele.
+     *
+     * <p>Para cada produto, calcula o <b>saldo líquido por orçamento</b>
+     * ({@code ITEM_ADICIONADO} − {@code ITEM_REMOVIDO}, agrupado por {@code referencia_orcamento_id})
+     * em vez de copiar cegamente todo {@code ITEM_ADICIONADO} já gravado — um orçamento pode ter sido
+     * parcial ou totalmente desvinculado (P-B017) antes desta divisão, e copiar a quantidade bruta
+     * original ressuscitaria uma reversão já efetivada. Só orçamentos com saldo positivo são
+     * propagados, com a quantidade líquida (não a bruta).
+     *
+     * <p>Cada linha propagada é uma {@code ITEM_ADICIONADO} nova na filha (histórico append-only,
+     * nunca reaproveita/move a linha original da produção-mãe) com {@code origem=SISTEMA} (a artesã
+     * não pediu para adicionar nada — é efeito automático da divisão). Cada orçamento com saldo
+     * positivo em pelo menos um produto da filha ganha um vínculo novo em {@code orcamento_producoes}
+     * para a filha — o vínculo da produção-mãe original (que vira {@code NAO_REALIZADA}) permanece
+     * intocado, nunca removido (mesmo padrão append-only: a divisão não é um desvincular).
+     */
+    private void propagarOrigemParaFilha(Producao origem, Producao filha, List<ProducaoProduto> produtosOrigem) {
+        Map<UUID, Orcamento> orcamentosParaVincular = new LinkedHashMap<>();
+
+        for (ProducaoProduto producaoProduto : produtosOrigem) {
+            UUID produtoId = producaoProduto.getProduto().getId();
+            Map<UUID, BigDecimal> saldoPorOrcamento = new LinkedHashMap<>();
+            Map<UUID, Orcamento> orcamentosDoProduto = new LinkedHashMap<>();
+
+            for (HistoricoStatusProducao linha : historicoStatusProducaoRepository
+                    .findByProducaoIdAndProdutoIdAndTipoEventoIn(origem.getId(), produtoId,
+                            List.of(TipoEventoHistoricoProducao.ITEM_ADICIONADO, TipoEventoHistoricoProducao.ITEM_REMOVIDO))) {
+                UUID orcamentoId = linha.getReferenciaOrcamento().getId();
+                BigDecimal delta = linha.getTipoEvento() == TipoEventoHistoricoProducao.ITEM_ADICIONADO
+                        ? linha.getQuantidade() : linha.getQuantidade().negate();
+                saldoPorOrcamento.merge(orcamentoId, delta, BigDecimal::add);
+                orcamentosDoProduto.putIfAbsent(orcamentoId, linha.getReferenciaOrcamento());
+            }
+
+            for (Map.Entry<UUID, BigDecimal> entry : saldoPorOrcamento.entrySet()) {
+                if (entry.getValue().compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                Orcamento orcamento = orcamentosDoProduto.get(entry.getKey());
+                historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                        .producao(filha)
+                        .tipoEvento(TipoEventoHistoricoProducao.ITEM_ADICIONADO)
+                        .produto(producaoProduto.getProduto())
+                        .quantidade(entry.getValue())
+                        .referenciaOrcamento(orcamento)
+                        .origem(OrigemHistoricoStatus.SISTEMA)
+                        .build());
+                orcamentosParaVincular.putIfAbsent(orcamento.getId(), orcamento);
+            }
+        }
+
+        for (Orcamento orcamento : orcamentosParaVincular.values()) {
+            orcamentoProducaoRepository.save(OrcamentoProducao.builder()
+                    .orcamento(orcamento)
+                    .producao(filha)
+                    .build());
+        }
     }
 
     /** Registra o "nascimento" de uma produção filha diretamente em um estado — statusAnterior null,

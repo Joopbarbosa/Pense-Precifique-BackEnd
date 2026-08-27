@@ -16,4 +16,10 @@ public interface HistoricoStatusProducaoRepository extends JpaRepository<Histori
     // (re-sincronização em vincularProducao() e reversão em desvincularProducao()).
     List<HistoricoStatusProducao> findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento(
             UUID producaoId, UUID referenciaOrcamentoId, TipoEventoHistoricoProducao tipoEvento);
+
+    // P-B018 (#320) — todas as linhas ITEM_ADICIONADO/ITEM_REMOVIDO de um produto específico numa
+    // produção, de todos os orçamentos que já contribuíram — usado por dividir()/criarProducaoFilha()
+    // para calcular o saldo líquido por orçamento (ITEM_ADICIONADO - ITEM_REMOVIDO) antes de propagar.
+    List<HistoricoStatusProducao> findByProducaoIdAndProdutoIdAndTipoEventoIn(
+            UUID producaoId, UUID produtoId, List<TipoEventoHistoricoProducao> tiposEvento);
 }
