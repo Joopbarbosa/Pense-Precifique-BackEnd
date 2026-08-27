@@ -949,6 +949,30 @@ public class OrcamentoService {
     }
 
     /**
+     * RN-ORC-VINC-03 (V0.8.2, #320) — desfaz o vínculo entre um orçamento e uma produção, revertendo
+     * de verdade o que foi adicionado (delegado a {@link ProducaoService#removerProdutosDeOrcamento},
+     * mesma divisão de responsabilidade de {@link #vincularProducao} — a regra de estado/reversão de
+     * produto é de Produção, não de Orçamento). Restrição de estado simétrica ao vincular
+     * (RN-PROD-VINC-02): só aceito com a produção em {@code AGUARDANDO_INICIO} — decisão fechada em
+     * chat (não estava na Spec original), ver {@code DECISOES_V0.8.2.md}. A reversão roda primeiro
+     * (fail fast — nada é removido se a produção não estiver no estado certo); a linha de
+     * {@code orcamento_producoes} só é apagada depois de a reversão ter sucesso.
+     */
+    public void desvincularProducao(UUID id, UUID producaoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        OrcamentoProducao vinculo = orcamentoProducaoRepository
+                .findByOrcamentoIdAndProducaoId(orcamento.getId(), producaoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Vínculo não encontrado"));
+
+        producaoService.removerProdutosDeOrcamento(producaoId, orcamento.getId(), usuarioId);
+
+        orcamentoProducaoRepository.delete(vinculo);
+    }
+
+    /**
      * P-B017 (#320) — diferença entre os itens atuais do orçamento e o que já foi registrado como
      * {@code ITEM_ADICIONADO} para o par orçamento+produção (via {@link ProducaoService#produtosJaAdicionadosPeloOrcamento}).
      * Mescla duplicatas do orçamento por {@code produtoId} antes de comparar (mesmo produto pode

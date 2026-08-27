@@ -112,6 +112,14 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.simularVincularProducao(id, request));
     }
 
+    @DeleteMapping("/{id}/vincular-producao/{producaoId}")
+    public ResponseEntity<Void> desvincularProducao(
+            @PathVariable UUID id,
+            @PathVariable UUID producaoId) {
+        orcamentoService.desvincularProducao(id, producaoId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/avancar-status")
     public ResponseEntity<Object> avancarStatus(
             @PathVariable UUID id,

@@ -1240,6 +1240,66 @@ public class ProducaoService {
     }
 
     /**
+     * RN-ORC-VINC-03 (V0.8.2, #320) — chamado por {@code OrcamentoService.desvincularProducao()} para
+     * reverter o que aquele orçamento adicionou à produção. Mesma restrição de estado de
+     * {@link #adicionarProdutosDeOrcamento} (RN-PROD-VINC-02, decisão de simetria — desvincular só é
+     * aceito com a produção ainda em {@code AGUARDANDO_INICIO}, mesmo motivo: depois que a produção
+     * começa, insumo pode já ter sido baixado e o trabalho físico já está em andamento).
+     *
+     * <p>Itera <b>linha por linha do histórico</b> {@code ITEM_ADICIONADO} daquele orçamento naquela
+     * produção — nunca pelo total agregado do produto — porque o mesmo {@link ProducaoProduto} pode
+     * ter recebido contribuição de mais de uma origem (2+ orçamentos vinculados à mesma produção,
+     * somando no mesmo produto). Decrementar pelo total do produto zeraria também a contribuição de
+     * outro orçamento; decrementar linha a linha (já filtrada por {@code referencia_orcamento_id})
+     * nunca toca no que outro orçamento adicionou.
+     *
+     * <p>Piso em zero (nunca negativo) — mesmo padrão de "desconta X de Y" já usado no projeto em
+     * {@code OrcamentoService.calcularValorFinalMulta()} — cobre o caso raro de a produção ter sido
+     * editada manualmente depois do vínculo, perdendo rastreabilidade exata. Quando a quantidade
+     * chega a zero, a linha de {@link ProducaoProduto} é removida (não fica um produto "fantasma" com
+     * quantidade zero na produção) — a próxima sincronização (se houver) recria a linha do zero.
+     *
+     * <p>Grava 1 linha {@code ITEM_REMOVIDO} por linha revertida (mesma granularidade de
+     * {@code ITEM_ADICIONADO}), nunca apaga/edita a linha original — histórico é append-only.
+     */
+    public void removerProdutosDeOrcamento(UUID producaoId, UUID referenciaOrcamentoId, UUID usuarioId) {
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Essa produção já começou e não pode ter itens removidos");
+        }
+
+        List<HistoricoStatusProducao> adicionados = historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento(
+                        producaoId, referenciaOrcamentoId, TipoEventoHistoricoProducao.ITEM_ADICIONADO);
+
+        for (HistoricoStatusProducao linha : adicionados) {
+            Produto produto = linha.getProduto();
+            producaoProdutoRepository.findByProducaoIdAndProdutoId(producaoId, produto.getId())
+                    .ifPresent(producaoProduto -> {
+                        BigDecimal restante = producaoProduto.getQuantidade().subtract(linha.getQuantidade())
+                                .max(BigDecimal.ZERO);
+                        if (restante.compareTo(BigDecimal.ZERO) == 0) {
+                            producaoProdutoRepository.delete(producaoProduto);
+                        } else {
+                            producaoProduto.setQuantidade(restante);
+                            producaoProdutoRepository.save(producaoProduto);
+                        }
+                    });
+
+            historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                    .producao(producao)
+                    .tipoEvento(TipoEventoHistoricoProducao.ITEM_REMOVIDO)
+                    .produto(produto)
+                    .quantidade(linha.getQuantidade())
+                    .referenciaOrcamento(linha.getReferenciaOrcamento())
+                    .origem(OrigemHistoricoStatus.USUARIO)
+                    .build());
+        }
+    }
+
+    /**
      * RN-064 — alertas informativos de estoque, nunca bloqueiam a criação/edição. Consumo de cada
      * insumo é somado entre todos os produtos da produção antes de comparar com o estoque atual.
      */
