@@ -24,6 +24,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.CriarProducaoVinculadaRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
@@ -1017,6 +1018,43 @@ public class OrcamentoService {
 
         return producaoService.calcularAlertasComAdicao(
                 request.getProducaoId(), produtosDoOrcamentoComoRequest(orcamento.getId()));
+    }
+
+    /**
+     * RN-ORC-VINC-05 (V0.8.2, #320, P-B020) — cria uma produção nova já vinculada ao orçamento, numa
+     * única operação, sem o risco de duplicar quantidade que existiria se o frontend criasse a
+     * produção com os itens do orçamento e depois chamasse {@link #vincularProducao} por cima (que
+     * sempre soma). A produção nasce sem nenhum {@code ProducaoProduto} ({@link ProducaoService#criarProducaoBase})
+     * e só então recebe os produtos via {@link ProducaoService#adicionarProdutosDeOrcamento} — o
+     * mesmo método usado por {@link #vincularProducao}, sem nenhuma lógica de gravação duplicada: como
+     * a produção acabou de nascer, o merge-por-produto daquele método nunca encontra nada pré-existente,
+     * então todo produto entra pela primeira vez (nunca soma). Produtos vêm sempre do orçamento (não do
+     * request) — mesma decisão de {@link #vincularProducao}, sem edição pelo usuário neste momento.
+     * Não exige nenhum status específico do orçamento, mesmo critério de {@link #vincularProducao}
+     * (RN-ORC-VINC-01 — vínculo é sempre opcional, em qualquer status).
+     */
+    public List<OrcamentoProducaoResponse> criarProducaoVinculada(UUID id, CriarProducaoVinculadaRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        List<ProducaoProdutoRequest> produtos = produtosDoOrcamentoComoRequest(orcamento.getId());
+        if (produtos.isEmpty()) {
+            throw new BusinessException("Orçamento não tem itens para criar uma produção");
+        }
+
+        Producao producao = producaoService.criarProducaoBase(usuarioId, request.getDataInicio(),
+                request.getDataTerminoPrevista(), request.getObservacoes());
+        producaoService.adicionarProdutosDeOrcamento(producao.getId(), produtos, usuarioId, orcamento);
+
+        orcamentoProducaoRepository.save(OrcamentoProducao.builder()
+                .orcamento(orcamento)
+                .producao(producao)
+                .build());
+
+        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
+                .map(orcamentoMapper::toOrcamentoProducaoResponse)
+                .toList();
     }
 
     private List<ProducaoProdutoRequest> produtosDoOrcamentoComoRequest(UUID orcamentoId) {

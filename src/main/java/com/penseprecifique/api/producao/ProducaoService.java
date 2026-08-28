@@ -259,25 +259,45 @@ public class ProducaoService {
 
     /** RN-061/062/064/077 — cria produção com N produtos, sem movimentação de estoque. Nasce AGUARDANDO_INICIO. */
     public ProducaoDetalheResponse criarProducao(CriarProducaoRequest request) {
-        Usuario usuario = getUsuarioAutenticado();
-        UUID usuarioId = usuario.getId();
+        UUID usuarioId = getUsuarioIdAutenticado();
 
-        LocalDate dataInicio = request.getDataInicio() != null ? request.getDataInicio() : LocalDate.now();
-        validarDatas(dataInicio, request.getDataTerminoPrevista());
+        Producao producao = criarProducaoBase(usuarioId, request.getDataInicio(), request.getDataTerminoPrevista(),
+                request.getObservacoes());
 
         ProdutosValidados validados = validarEResolverProdutos(request.getProdutos(), usuarioId);
+        List<ProducaoProduto> produtosGravados = gravarProducaoProdutos(producao, validados);
+
+        List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
+        return montarDetalhe(producao, alertas);
+    }
+
+    /**
+     * P-B020 (V0.8.2, #320) — núcleo de criação de {@link Producao} sem produtos, extraído de
+     * {@link #criarProducao} para ser reaproveitado por {@code OrcamentoService.criarProducaoVinculada()}
+     * (RN-ORC-VINC-05), que grava os produtos à parte via {@link #adicionarProdutosDeOrcamento} — a
+     * produção nasce sem nenhum {@code ProducaoProduto}, então o merge-por-produto daquele método
+     * nunca soma em cima de nada (todo produto entra pela primeira vez), sem risco de duplicar
+     * quantidade. Note que a ordem de validação (datas antes de produtos) é preservada em
+     * {@link #criarProducao} mesmo depois da extração — quem chama decide a ordem, este método só
+     * valida as datas que recebe.
+     */
+    public Producao criarProducaoBase(UUID usuarioId, LocalDate dataInicio, LocalDate dataTerminoPrevista,
+                                       String observacoes) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
+
+        LocalDate inicio = dataInicio != null ? dataInicio : LocalDate.now();
+        validarDatas(inicio, dataTerminoPrevista);
 
         Producao producao = Producao.builder()
                 .usuario(usuario)
                 .numero(proximoNumero(usuarioId))
                 .estado(EstadoProducao.AGUARDANDO_INICIO)
-                .dataInicio(dataInicio)
-                .dataTerminoPrevista(request.getDataTerminoPrevista())
-                .observacoes(request.getObservacoes())
+                .dataInicio(inicio)
+                .dataTerminoPrevista(dataTerminoPrevista)
+                .observacoes(observacoes)
                 .build();
         producao = producaoRepository.save(producao);
-
-        List<ProducaoProduto> produtosGravados = gravarProducaoProdutos(producao, validados);
 
         historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
                 .producao(producao)
@@ -286,8 +306,7 @@ public class ProducaoService {
                 .origem(OrigemHistoricoStatus.USUARIO)
                 .build());
 
-        List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
-        return montarDetalhe(producao, alertas);
+        return producao;
     }
 
     /** RN-063 — edição restrita a AGUARDANDO_INICIO; substitui a lista de produtos por completo. */

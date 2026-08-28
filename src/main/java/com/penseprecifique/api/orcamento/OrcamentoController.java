@@ -2,6 +2,7 @@ package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.CriarProducaoVinculadaRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
@@ -118,6 +119,13 @@ public class OrcamentoController {
             @PathVariable UUID producaoId) {
         orcamentoService.desvincularProducao(id, producaoId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/criar-producao-vinculada")
+    public ResponseEntity<List<OrcamentoProducaoResponse>> criarProducaoVinculada(
+            @PathVariable UUID id,
+            @Valid @RequestBody CriarProducaoVinculadaRequest request) {
+        return ResponseEntity.status(201).body(orcamentoService.criarProducaoVinculada(id, request));
     }
 
     @PostMapping("/{id}/avancar-status")
