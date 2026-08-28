@@ -16,6 +16,7 @@ import com.penseprecifique.api.shared.dto.response.orcamento.ReciboPagamentoResp
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Component
@@ -66,6 +67,7 @@ public class OrcamentoMapper {
         response.setValorDevolvidoMulta(orcamento.getValorDevolvidoMulta());
         response.setEstornoSinal(orcamento.getEstornoSinal());
         response.setDataEstornoSinal(orcamento.getDataEstornoSinal());
+        response.setDataEntregaEstimada(calcularDataEntregaEstimada(orcamento));
         response.setItens(itens.stream().map(this::toItemResponse).toList());
         response.setCreatedAt(orcamento.getCreatedAt());
         response.setUpdatedAt(orcamento.getUpdatedAt());
@@ -141,7 +143,31 @@ public class OrcamentoMapper {
         response.setId(vinculo.getId());
         response.setProducaoId(vinculo.getProducao().getId());
         response.setIdentificadorProducao(IdentificadorFormatter.formatar("PRD", vinculo.getProducao().getNumero()));
+        LocalDate dataTerminoPrevista = vinculo.getProducao().getDataTerminoPrevista();
+        response.setDataTerminoPrevista(dataTerminoPrevista);
+        response.setEstouroPrazo(estouraPrazo(calcularDataEntregaEstimada(vinculo.getOrcamento()), dataTerminoPrevista));
         response.setCreatedAt(vinculo.getCreatedAt());
         return response;
+    }
+
+    /**
+     * RN-ORC-VINC-04 (V0.8.2, #320) — data prometida ao cliente na proposta do orçamento, soma direta
+     * de dias corridos (sem lógica de dias úteis — decisão registrada em {@code decisoes-orcamento.md},
+     * não há precedente de cálculo de dias úteis reaproveitável no projeto). Nulo quando falta
+     * {@code dataAprovacao} ou {@code prazoProducaoDias} (orçamento ainda não aprovado, ou sem prazo
+     * de produção informado — RN-NOVA-3/ORC-018).
+     */
+    private LocalDate calcularDataEntregaEstimada(Orcamento orcamento) {
+        if (orcamento.getDataAprovacao() == null || orcamento.getPrazoProducaoDias() == null) {
+            return null;
+        }
+        return orcamento.getDataAprovacao().toLocalDate().plusDays(orcamento.getPrazoProducaoDias());
+    }
+
+    /** RN-ORC-VINC-04 — estoura quando o término real previsto da produção vinculada ultrapassa a
+     * data prometida ao cliente. Sem aviso enquanto faltar qualquer um dos dois lados da comparação. */
+    private boolean estouraPrazo(LocalDate dataEntregaEstimada, LocalDate dataTerminoPrevista) {
+        return dataEntregaEstimada != null && dataTerminoPrevista != null
+                && dataTerminoPrevista.isAfter(dataEntregaEstimada);
     }
 }

@@ -27,6 +27,10 @@ public class OrcamentoDetalheResponse {
     private boolean inicioAssimQueAprovado;
     private LocalDate dataInicioEstimada;
     private LocalDateTime dataAprovacao;
+    /** RN-ORC-VINC-04 (V0.8.2, #320) — data prometida ao cliente ({@code dataAprovacao + prazoProducaoDias},
+     * dias corridos), nulo quando falta {@code dataAprovacao} ou {@code prazoProducaoDias}. Usada para
+     * comparar contra {@code Producao.dataTerminoPrevista} de cada vínculo — ver {@code producoesVinculadas}. */
+    private LocalDate dataEntregaEstimada;
     private boolean sinalAtivo;
     private BigDecimal percentualSinal;
     private BigDecimal valorSinal;

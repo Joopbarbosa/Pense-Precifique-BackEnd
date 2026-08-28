@@ -40,6 +40,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -436,5 +437,65 @@ class OrcamentoVincularProducaoIT {
 
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         assertEquals(0, new BigDecimal("3").compareTo(produtos.get(0).getQuantidade()));
+    }
+
+    /** RN-ORC-VINC-04 (#320) — produção vinculada termina depois da data prometida ao cliente
+     * (dataAprovacao + prazoProducaoDias, dias corridos): estouroPrazo = true. */
+    @Test
+    void vinculoComProducaoTerminandoDepoisDoPrazoPrometidoSinalizaEstouro() {
+        seedUsuarioECliente();
+        UUID orcamentoId = criarOrcamento(false); // prazoProducaoDias = 5
+        avancarAteAprovadoSemSinal(orcamentoId); // seta dataAprovacao = hoje
+
+        Producao producao = novaProducao();
+        producao.setDataTerminoPrevista(java.time.LocalDate.now().plusDays(10));
+        producaoRepository.save(producao);
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        List<OrcamentoProducaoResponse> vinculos = orcamentoService.vincularProducao(orcamentoId, req);
+
+        OrcamentoProducaoResponse vinculo = vinculos.get(0);
+        assertEquals(java.time.LocalDate.now().plusDays(10), vinculo.getDataTerminoPrevista());
+        assertTrue(vinculo.isEstouroPrazo());
+        assertEquals(java.time.LocalDate.now().plusDays(5),
+                orcamentoService.buscarPorId(orcamentoId).getDataEntregaEstimada());
+    }
+
+    /** RN-ORC-VINC-04 (#320) — produção termina dentro do prazo prometido: sem aviso de estouro. */
+    @Test
+    void vinculoComProducaoDentroDoPrazoPrometidoNaoSinalizaEstouro() {
+        seedUsuarioECliente();
+        UUID orcamentoId = criarOrcamento(false); // prazoProducaoDias = 5
+        avancarAteAprovadoSemSinal(orcamentoId);
+
+        Producao producao = novaProducao();
+        producao.setDataTerminoPrevista(java.time.LocalDate.now().plusDays(2));
+        producaoRepository.save(producao);
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        List<OrcamentoProducaoResponse> vinculos = orcamentoService.vincularProducao(orcamentoId, req);
+
+        assertTrue(vinculos.stream().noneMatch(OrcamentoProducaoResponse::isEstouroPrazo));
+    }
+
+    /** RN-ORC-VINC-04 (#320) — sem dataAprovacao (orçamento ainda em RASCUNHO), dataEntregaEstimada
+     * fica nula e nenhum vínculo pode ser marcado como estourado, mesmo com dataTerminoPrevista futura. */
+    @Test
+    void semDataAprovacaoNaoSinalizaEstouroENaoExpoeDataEntregaEstimada() {
+        seedUsuarioECliente();
+        UUID orcamentoId = criarOrcamento(false); // prazoProducaoDias = 5, ainda em RASCUNHO
+
+        Producao producao = novaProducao();
+        producao.setDataTerminoPrevista(java.time.LocalDate.now().plusDays(30));
+        producaoRepository.save(producao);
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        List<OrcamentoProducaoResponse> vinculos = orcamentoService.vincularProducao(orcamentoId, req);
+
+        assertTrue(vinculos.stream().noneMatch(OrcamentoProducaoResponse::isEstouroPrazo));
+        assertNull(orcamentoService.buscarPorId(orcamentoId).getDataEntregaEstimada());
     }
 }
