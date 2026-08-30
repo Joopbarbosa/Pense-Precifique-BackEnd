@@ -1,6 +1,6 @@
 # Pense & Precifique — Contexto do Back-End
 
-> **V0.8** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
+> **V0.8.2** — Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`.
 > Projeto pré-produção. Primeiro deploy estável com usuários reais = v1.
 > Caminho do projeto: `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
 > Atualizado em: 2026-07-20 — Retomada de fechamento V0.6: varredura de resíduos do fluxo antigo de Produção (nenhum encontrado em código, exceto coluna/campo órfão `data_producao`/`dataProducao` — ver Bugs conhecidos), ciclo de vida completo documentado (6 estados, transições, agrupamento/divisão), contrato de `consumoReal`, RN-069 (PDC-010), race condition conhecida do número sequencial, RN-037 (PDC-021)/RN-060 (PDC-001) marcadas obsoletas.
@@ -17,6 +17,16 @@
 > `POST /orcamentos` por estoque insuficiente + DTO dedicado `SimulacaoEstoqueProdutoResponse`)
 > fecham o pocket. Dependência nova de infraestrutura (backend → serviço externo via HTTP)
 > registrada em `docs-pense-precifique/MAPA_INTERDEPENDENCIAS.md`.
+> Atualizado em: 2026-08-30 — Retomada de fechamento V0.8.2: revisão completa do vínculo
+> Orçamento↔Produção (#320, P-B014 a P-B021) — vínculo deixa de ser obrigatório/bloqueante, ganha
+> efeito real (produtos somados via `adicionarProdutosDeOrcamento()`), histórico de origem
+> (`ITEM_ADICIONADO`/`ITEM_REMOVIDO`), desvincular, propagação em `dividir()`, aviso de estouro de
+> prazo. `OrcamentoService` ganhou dependência direta de `ProducaoService` (sem ciclo, ver
+> "Padrões de implementação consolidados"). Padrão `simular-*` consolidado como convenção
+> explícita. Demais fechamentos do pocket: mini-estorno de multa (ORC-036), edição de orçamento em
+> Rascunho (ORC-038), duplicar orçamento (ORC-039), atalho de aprovação direta (ORC-041),
+> paginação real em `GET /orcamentos/itens-catalogo` (achado: Frontend nunca consumiu a paginação,
+> virou bug de prioridade Alta para V0.8.3), allowlist de ordenação em 4 endpoints.
 
 ---
 
@@ -188,7 +198,7 @@ RASCUNHO → ENVIADO → APROVADO
 
 `OrcamentoItem` aceita duas origens, **XOR** (constraint `chk_orcamento_item_origem_xor`):
 - `item_catalogo_id` (FK → itens_catalogo) — fluxo padrão, preço vem do Catálogo (RN-048 (CAT-009))
-- `produto_id` + `margem_aplicada` (RN-054 (ORC-020), venda avulsa) — preço calculado via `GET /produtos/{id}/preco-sugerido?margem=X`, snapshot gravado em `preco_unitario`, sem margem viva depois
+- `produto_id` (RN-054 (ORC-020), venda avulsa) — preço vem direto do cadastro do Produto (`produto.preco_venda`), snapshot gravado em `preco_unitario`, sem margem viva depois; endpoint `GET /produtos/{id}/preco-sugerido` (cálculo em tempo real, fluxo pré-#251) removido por órfão em #355
 
 `MovimentacaoProduto.catalogo_referencia` (quando `motivo = ORCAMENTO`): `CTG-N` na origem Catálogo, `"{PRO-N} - Venda sem catálogo"` na origem avulsa — nunca fica nulo.
 
@@ -248,6 +258,8 @@ FINALIZADA, CANCELADA, NAO_REALIZADA — estados terminais, nunca saem (checado 
 - `BusinessException` só tem `message` — sem campo de tipo. `GlobalExceptionHandler` serializa para `ErrorResponseDTO { message, status, timestamp, fieldErrors }`
 - `calcularAlertasAoVivo()` é tolerante a produto com `rendimento` nulo/≤0 — pula o produto (`continue`) em vez de lançar exceção
 - Lógica de negócio compartilhada entre fluxos vive em método privado desde a primeira implementação (ex.: `aplicarConsumoReal()`, `estornarComponente()`) — evita duplicação quando o mesmo cálculo é chamado por rotas diferentes (finalizar direto vs. consumo real declarado). Exceção conhecida: ver bloco de duplicação de `verificarComponentes()`/baixa acima.
+- **Endpoint de simulação `simular-*`**: quando o Frontend precisa de preview de um efeito sem persistir (alertas, avanço de status, vínculo), o padrão é um endpoint dedicado no mesmo path do endpoint real com prefixo `simular-` (ex.: `POST /orcamentos/{id}/simular-avancar-status`, `POST /orcamentos/{id}/simular-vincular-producao`), reaproveitando os mesmos métodos privados/validações do endpoint real por chamada direta (nunca duplicando a lógica), e nunca chamando o método que persiste (`baixarEstoque()`, `adicionarProdutosDeOrcamento()` etc.). Usado 4x até V0.8.2: `simular-alertas` (Produção e Orçamento, V0.6.1.1), `simular-avancar-status` (P-B012, #316), `simular-vincular-producao` (P-B016, #320). Seguir este padrão para qualquer preview novo em vez de inventar um mecanismo diferente.
+- **Vínculo Orçamento↔Produção (V0.8.2, #320) deu a `OrcamentoService` dependência direta de `ProducaoService`** (não só dos repositories) — métodos públicos novos em `ProducaoService`: `adicionarProdutosDeOrcamento()` (RN-PROD-VINC-01, merge por soma de quantidade), `calcularAlertasComAdicao()` (RN-PROD-VINC-03, alerta combinando produtos já persistidos + novos), `removerProdutosDeOrcamento()` (RN-ORC-VINC-03, reversão do desvincular), `criarProducaoBase()` (extraído de `criarProducao()`, produção nasce sem produtos para depois receber via `adicionarProdutosDeOrcamento()`). Confirmado sem ciclo (Análise P-A001) — `ProducaoService` nunca chama `OrcamentoService` de volta. Ver `docs-pense-precifique/modulos/PRODUCAO/regras-producao.md` (RN-PROD-VINC-01 a 04).
 
 ### Coluna `estado` vs `status` em `producoes`
 - `status` (VARCHAR, `ATIVA`/`CANCELADA`): removido na migration V21 (fluxo legado de 1 produto) — não existe mais
@@ -320,7 +332,6 @@ nenhum DTO de PDF.
 | GET/POST | /produtos | Lista paginada e cria — `busca` corrigido em 2026-07-09 (commit `222b939`); listagem também expõe `algumInsumoNaoFracionavel` e custo recalculado ao vivo desde V0.6.1.1 (#187/#135, mesma semântica do detalhe) |
 | GET | /produtos/contagens | **Novo (V0.6.1.1)** — `{ total, inativos, porTipo: { produto, produtoBase, customizacao } }`, ignora `busca` (badges de categoria são navegação global) |
 | GET/PUT | /produtos/{id} | Detalhe e edita — inclui `rendimento`, `custoTotalLote`, `custoUnitario`, `algumInsumoNaoFracionavel` |
-| GET | /produtos/{id}/preco-sugerido?margem=X | **Novo (RN-054 (ORC-020))** — preço sugerido de venda avulsa: `{ custoUnitario, margem, precoSugerido }` |
 | POST | /produtos/{id}/baixa-manual | Baixa manual (obs mín. 30 chars — RN-035 (PDT-009), uniformizado no #127) |
 | POST | /produtos/{id}/inativar , /produtos/{id}/reativar | **Novo (V0.6.1.1)** — inativação reversível de verdade, distinta do soft-delete (`DELETE`, `ProdutoService.excluir()`, comportamento inalterado); idempotente, 204, 404 se já excluído |
 | GET | /produtos/{id}/movimentacoes | Histórico paginado — inclui `catalogoReferencia`/`precoVendido` quando `motivo=ORCAMENTO` |
