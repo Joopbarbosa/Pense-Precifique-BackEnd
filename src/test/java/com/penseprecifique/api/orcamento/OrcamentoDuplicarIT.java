@@ -200,6 +200,63 @@ class OrcamentoDuplicarIT {
         assertNotEquals(numeroOriginal, duplicado.getNumero());
     }
 
+    /** P-B021 (#314) — sinal configurado só por valor direto não pode falhar mais na duplicação. */
+    @Test
+    void sinalPorValorDiretoNaoFalhaNaDuplicacao() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto(new BigDecimal("100.00"));
+
+        OrcamentoRequest criacao = requestBase(List.of(itemAvulso(produto, new BigDecimal("100.00"), 1)));
+        criacao.setSinalAtivo(true);
+        criacao.setValorSinal(new BigDecimal("40.00"));
+        OrcamentoDetalheResponse original = orcamentoService.criar(criacao);
+        assertEquals(0, new BigDecimal("40.00").compareTo(original.getValorSinal()));
+
+        OrcamentoDetalheResponse duplicado = orcamentoService.duplicar(original.getId());
+
+        assertTrue(duplicado.isSinalAtivo());
+        assertEquals(0, new BigDecimal("40.00").compareTo(duplicado.getValorSinal()));
+    }
+
+    /** P-B021 (#314) — sinal por percentual continua recalculado sobre o total novo, sem regressão. */
+    @Test
+    void sinalPorPercentualContinuaRecalculadoNaDuplicacao() {
+        seedUsuarioECliente();
+        ItemCatalogo itemCatalogo = novoItemCatalogo(new BigDecimal("40.00"));
+
+        OrcamentoRequest criacao = requestBase(List.of(itemDeCatalogo(itemCatalogo, 2)));
+        criacao.setSinalAtivo(true);
+        criacao.setPercentualSinal(new BigDecimal("50"));
+        OrcamentoDetalheResponse original = orcamentoService.criar(criacao);
+        assertEquals(0, new BigDecimal("40.00").compareTo(original.getValorSinal())); // 50% de 80.00
+
+        // Preço vivo do item de catálogo sobe depois da criação do original.
+        itemCatalogo.setPrecoVenda(new BigDecimal("55.00"));
+        itemCatalogoRepository.save(itemCatalogo);
+
+        OrcamentoDetalheResponse duplicado = orcamentoService.duplicar(original.getId());
+
+        assertTrue(duplicado.isSinalAtivo());
+        assertEquals(0, new BigDecimal("110.00").compareTo(duplicado.getTotal()));
+        assertEquals(0, new BigDecimal("55.00").compareTo(duplicado.getValorSinal())); // 50% de 110.00 novo
+    }
+
+    /** P-B021 (#314) — orçamento sem sinal ativo segue sem sinal na duplicata, sem mudança. */
+    @Test
+    void semSinalAtivoContinuaSemSinalNaDuplicacao() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto(new BigDecimal("50.00"));
+
+        OrcamentoRequest criacao = requestBase(List.of(itemAvulso(produto, new BigDecimal("50.00"), 1)));
+        criacao.setSinalAtivo(false);
+        OrcamentoDetalheResponse original = orcamentoService.criar(criacao);
+
+        OrcamentoDetalheResponse duplicado = orcamentoService.duplicar(original.getId());
+
+        assertTrue(!duplicado.isSinalAtivo());
+        assertNull(duplicado.getValorSinal());
+    }
+
     @Test
     void datasSaoLimpasNaDuplicacao() {
         seedUsuarioECliente();

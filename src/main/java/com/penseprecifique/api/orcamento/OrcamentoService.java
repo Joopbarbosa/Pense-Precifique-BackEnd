@@ -342,8 +342,11 @@ public class OrcamentoService {
 
     /**
      * RN-NOVA-5 — campos copiados diretamente: cliente, pagamento (+obs), prazo, sinal
-     * (percentualSinal — valorSinal é sempre recalculado por {@link #calcularValorSinal} dentro de
-     * {@link #criar}, nunca copiado do original), desconto, observações. Campos resetados (deixados
+     * (percentualSinal — quando presente, valorSinal é sempre recalculado por
+     * {@link #calcularValorSinal} dentro de {@link #criar}, nunca copiado do original; quando o
+     * original configura sinal só por valor direto, sem percentualSinal, o valor é copiado tal como
+     * estava — {@link #calcularValorSinal} já trata esse modo como literal, sem recálculo, mesmo em
+     * {@code criar()}/{@code editar()} — ver P-B021, #314), desconto, observações. Campos resetados (deixados
      * de fora do request, {@code criar()} já os trata como novo): usuário, número, status, dados de
      * aprovação/sinal-pago/cancelamento. Datas ({@code dataInicioEstimada}/{@code dataValidade})
      * sempre limpas — por isso {@code inicioAssimQueAprovado} é forçado para {@code true} na
@@ -363,6 +366,13 @@ public class OrcamentoService {
         request.setDataInicioEstimada(null);
         request.setSinalAtivo(Boolean.TRUE.equals(original.getSinalAtivo()));
         request.setPercentualSinal(original.getPercentualSinal());
+        // P-B021 (#314) — sinal configurado só por valor direto (sem percentualSinal) precisa do
+        // valor copiado, senão calcularValorSinal() não tem de onde tirar o valor e validarRegras()
+        // rejeita a duplicação inteira. Só copiado quando não há percentual (modo percentual sempre
+        // recalcula, ignora valorSinal do request).
+        if (original.getPercentualSinal() == null) {
+            request.setValorSinal(original.getValorSinal());
+        }
         request.setTipoDesconto(original.getDescontoTipo() != null ? original.getDescontoTipo().name() : null);
         request.setDescontoValor(original.getDescontoValor());
         request.setObservacoes(original.getObservacoes());
