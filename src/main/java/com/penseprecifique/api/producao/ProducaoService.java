@@ -5,6 +5,8 @@ import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
+import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
 import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
@@ -19,6 +21,7 @@ import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.TipoOrigemProducao;
+import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
 import com.penseprecifique.api.shared.dto.request.producao.AgruparProducoesRequest;
 import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ConsumoRealRequest;
@@ -41,11 +44,13 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProducaoMapper;
 import com.penseprecifique.api.util.IdentificadorFormatter;
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.orcamento.OrcamentoProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -87,6 +92,7 @@ public class ProducaoService {
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProducaoMapper producaoMapper;
+    private final OrcamentoProducaoRepository orcamentoProducaoRepository;
 
     // #158/RN-NOVA-6 (+ item avulso P-BE-NUMERO-SORT) — allowlist explícita dos 5 critérios de
     // ordenação aceitos em GET /producoes. "produto" e "quantidade" são agregados (MIN/SUM sobre
@@ -146,24 +152,17 @@ public class ProducaoService {
 
     /**
      * Traduz o Sort recebido (nomes de campo voltados pro cliente) na expressão JPQL real, validando
-     * contra a allowlist. Sem Sort informado → default numero DESC (produção mais recente primeiro).
+     * contra a allowlist (#354 — validação/tradução em si extraída para PageableOrdenacaoResolver,
+     * reaproveitado também por Orçamento/Produto/Cliente/Insumo). Sem Sort informado → default
+     * numero DESC (produção mais recente primeiro).
      */
     private Pageable resolverPageableOrdenado(Pageable pageable) {
         if (pageable.getSort().isUnsorted()) {
             Sort padrao = JpaSort.unsafe(Sort.Direction.DESC, "p.numero");
             return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), padrao);
         }
-
-        Sort sortResolvido = Sort.unsorted();
-        for (Sort.Order order : pageable.getSort()) {
-            String expressao = CAMPOS_ORDENACAO_PRODUCAO.get(order.getProperty());
-            if (expressao == null) {
-                throw new BusinessException("Campo de ordenação inválido: '" + order.getProperty()
-                        + "'. Permitidos: dataInicio, estado, produto, quantidade, numero.");
-            }
-            sortResolvido = sortResolvido.and(JpaSort.unsafe(order.getDirection(), expressao));
-        }
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortResolvido);
+        return PageableOrdenacaoResolver.resolverExpressaoJpql(pageable, CAMPOS_ORDENACAO_PRODUCAO,
+                "dataInicio, estado, produto, quantidade, numero");
     }
 
     @Transactional(readOnly = true)
@@ -225,27 +224,80 @@ public class ProducaoService {
         return calcularAlertas(validados);
     }
 
+    /**
+     * RN-PROD-VINC-03 (V0.8.2, #320) — alerta de insumo/rendimento do vínculo Orçamento↔Produção,
+     * considerando a soma dos produtos já persistidos na produção com os produtos novos vindos do
+     * orçamento (não cada um isoladamente). Reaproveita {@link #validarEResolverProdutos}, que já
+     * mescla quantidades duplicadas do mesmo produto por {@code Map.merge()}, então basta concatenar
+     * as duas listas antes de validar — nenhuma lógica de soma nova aqui, e {@link #calcularAlertas}
+     * (motor existente) não é duplicado. Mesma checagem de estado (RN-PROD-VINC-02) de
+     * {@link #adicionarProdutosDeOrcamento} — falha rápido em vez de mostrar um alerta que a
+     * confirmação real não vai conseguir persistir.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertaInsumoResponse> calcularAlertasComAdicao(UUID producaoId, List<ProducaoProdutoRequest> produtosNovos) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Essa produção já começou e não pode receber novos itens");
+        }
+
+        List<ProducaoProdutoRequest> combinados = new ArrayList<>();
+        for (ProducaoProduto existente : producaoProdutoRepository.findByProducaoId(producao.getId())) {
+            ProducaoProdutoRequest request = new ProducaoProdutoRequest();
+            request.setProdutoId(existente.getProduto().getId());
+            request.setQuantidade(existente.getQuantidade());
+            combinados.add(request);
+        }
+        combinados.addAll(produtosNovos);
+
+        ProdutosValidados validados = validarEResolverProdutos(combinados, usuarioId);
+        return calcularAlertas(validados);
+    }
+
     /** RN-061/062/064/077 — cria produção com N produtos, sem movimentação de estoque. Nasce AGUARDANDO_INICIO. */
     public ProducaoDetalheResponse criarProducao(CriarProducaoRequest request) {
-        Usuario usuario = getUsuarioAutenticado();
-        UUID usuarioId = usuario.getId();
+        UUID usuarioId = getUsuarioIdAutenticado();
 
-        LocalDate dataInicio = request.getDataInicio() != null ? request.getDataInicio() : LocalDate.now();
-        validarDatas(dataInicio, request.getDataTerminoPrevista());
+        Producao producao = criarProducaoBase(usuarioId, request.getDataInicio(), request.getDataTerminoPrevista(),
+                request.getObservacoes());
 
         ProdutosValidados validados = validarEResolverProdutos(request.getProdutos(), usuarioId);
+        List<ProducaoProduto> produtosGravados = gravarProducaoProdutos(producao, validados);
+
+        List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
+        return montarDetalhe(producao, alertas);
+    }
+
+    /**
+     * P-B020 (V0.8.2, #320) — núcleo de criação de {@link Producao} sem produtos, extraído de
+     * {@link #criarProducao} para ser reaproveitado por {@code OrcamentoService.criarProducaoVinculada()}
+     * (RN-ORC-VINC-05), que grava os produtos à parte via {@link #adicionarProdutosDeOrcamento} — a
+     * produção nasce sem nenhum {@code ProducaoProduto}, então o merge-por-produto daquele método
+     * nunca soma em cima de nada (todo produto entra pela primeira vez), sem risco de duplicar
+     * quantidade. Note que a ordem de validação (datas antes de produtos) é preservada em
+     * {@link #criarProducao} mesmo depois da extração — quem chama decide a ordem, este método só
+     * valida as datas que recebe.
+     */
+    public Producao criarProducaoBase(UUID usuarioId, LocalDate dataInicio, LocalDate dataTerminoPrevista,
+                                       String observacoes) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
+
+        LocalDate inicio = dataInicio != null ? dataInicio : LocalDate.now();
+        validarDatas(inicio, dataTerminoPrevista);
 
         Producao producao = Producao.builder()
                 .usuario(usuario)
                 .numero(proximoNumero(usuarioId))
                 .estado(EstadoProducao.AGUARDANDO_INICIO)
-                .dataInicio(dataInicio)
-                .dataTerminoPrevista(request.getDataTerminoPrevista())
-                .observacoes(request.getObservacoes())
+                .dataInicio(inicio)
+                .dataTerminoPrevista(dataTerminoPrevista)
+                .observacoes(observacoes)
                 .build();
         producao = producaoRepository.save(producao);
-
-        List<ProducaoProduto> produtosGravados = gravarProducaoProdutos(producao, validados);
 
         historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
                 .producao(producao)
@@ -254,8 +306,7 @@ public class ProducaoService {
                 .origem(OrigemHistoricoStatus.USUARIO)
                 .build());
 
-        List<AlertaInsumoResponse> alertas = calcularAlertas(validados);
-        return montarDetalhe(producao, alertas);
+        return producao;
     }
 
     /** RN-063 — edição restrita a AGUARDANDO_INICIO; substitui a lista de produtos por completo. */
@@ -595,9 +646,12 @@ public class ProducaoService {
         return response;
     }
 
-    /** Cria uma produção filha (DIVISAO/AGRUPAMENTO) copiando dataInicio/dataTerminoPrevista/observacoes
-     *  da origem e gravando os ProducaoProduto informados. Nasce sem histórico — quem chama transiciona
-     *  via registrarNascimento()/transicionar(). */
+    /** Cria uma produção filha (DIVISAO) copiando dataInicio/dataTerminoPrevista/observacoes da origem
+     *  e gravando os ProducaoProduto informados. Nasce sem histórico de status — quem chama transiciona
+     *  via registrarNascimento()/transicionar(). RN-PROD-VINC-04 (P-B018, #320) — também propaga, para
+     *  cada produto que a filha recebe, o histórico de origem (ITEM_ADICIONADO) e o vínculo
+     *  (orcamento_producoes) dos orçamentos que efetivamente contribuíram, via
+     *  {@link #propagarOrigemParaFilha}. */
     private Producao criarProducaoFilha(Producao origem, List<ProducaoProduto> produtosOrigem, TipoOrigemProducao tipo) {
         Producao filha = Producao.builder()
                 .usuario(origem.getUsuario())
@@ -618,7 +672,73 @@ public class ProducaoService {
                     .quantidade(producaoProduto.getQuantidade())
                     .build());
         }
+
+        propagarOrigemParaFilha(origem, filha, produtosOrigem);
         return filha;
+    }
+
+    /**
+     * RN-PROD-VINC-04 (P-B018, #320) — como {@code dividir()} nunca fraciona a quantidade de um
+     * produto entre as duas filhas (cada {@link ProducaoProduto}, com sua quantidade inteira, vai
+     * para uma única filha — {@code UNIQUE(producao_id, produto_id)}, P-B015), propagar histórico não
+     * exige matemática de proporção: a filha que recebe o produto recebe também <b>todo</b> o
+     * histórico de origem daquele produto, de todos os orçamentos que já contribuíram para ele.
+     *
+     * <p>Para cada produto, calcula o <b>saldo líquido por orçamento</b>
+     * ({@code ITEM_ADICIONADO} − {@code ITEM_REMOVIDO}, agrupado por {@code referencia_orcamento_id})
+     * em vez de copiar cegamente todo {@code ITEM_ADICIONADO} já gravado — um orçamento pode ter sido
+     * parcial ou totalmente desvinculado (P-B017) antes desta divisão, e copiar a quantidade bruta
+     * original ressuscitaria uma reversão já efetivada. Só orçamentos com saldo positivo são
+     * propagados, com a quantidade líquida (não a bruta).
+     *
+     * <p>Cada linha propagada é uma {@code ITEM_ADICIONADO} nova na filha (histórico append-only,
+     * nunca reaproveita/move a linha original da produção-mãe) com {@code origem=SISTEMA} (a artesã
+     * não pediu para adicionar nada — é efeito automático da divisão). Cada orçamento com saldo
+     * positivo em pelo menos um produto da filha ganha um vínculo novo em {@code orcamento_producoes}
+     * para a filha — o vínculo da produção-mãe original (que vira {@code NAO_REALIZADA}) permanece
+     * intocado, nunca removido (mesmo padrão append-only: a divisão não é um desvincular).
+     */
+    private void propagarOrigemParaFilha(Producao origem, Producao filha, List<ProducaoProduto> produtosOrigem) {
+        Map<UUID, Orcamento> orcamentosParaVincular = new LinkedHashMap<>();
+
+        for (ProducaoProduto producaoProduto : produtosOrigem) {
+            UUID produtoId = producaoProduto.getProduto().getId();
+            Map<UUID, BigDecimal> saldoPorOrcamento = new LinkedHashMap<>();
+            Map<UUID, Orcamento> orcamentosDoProduto = new LinkedHashMap<>();
+
+            for (HistoricoStatusProducao linha : historicoStatusProducaoRepository
+                    .findByProducaoIdAndProdutoIdAndTipoEventoIn(origem.getId(), produtoId,
+                            List.of(TipoEventoHistoricoProducao.ITEM_ADICIONADO, TipoEventoHistoricoProducao.ITEM_REMOVIDO))) {
+                UUID orcamentoId = linha.getReferenciaOrcamento().getId();
+                BigDecimal delta = linha.getTipoEvento() == TipoEventoHistoricoProducao.ITEM_ADICIONADO
+                        ? linha.getQuantidade() : linha.getQuantidade().negate();
+                saldoPorOrcamento.merge(orcamentoId, delta, BigDecimal::add);
+                orcamentosDoProduto.putIfAbsent(orcamentoId, linha.getReferenciaOrcamento());
+            }
+
+            for (Map.Entry<UUID, BigDecimal> entry : saldoPorOrcamento.entrySet()) {
+                if (entry.getValue().compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                Orcamento orcamento = orcamentosDoProduto.get(entry.getKey());
+                historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                        .producao(filha)
+                        .tipoEvento(TipoEventoHistoricoProducao.ITEM_ADICIONADO)
+                        .produto(producaoProduto.getProduto())
+                        .quantidade(entry.getValue())
+                        .referenciaOrcamento(orcamento)
+                        .origem(OrigemHistoricoStatus.SISTEMA)
+                        .build());
+                orcamentosParaVincular.putIfAbsent(orcamento.getId(), orcamento);
+            }
+        }
+
+        for (Orcamento orcamento : orcamentosParaVincular.values()) {
+            orcamentoProducaoRepository.save(OrcamentoProducao.builder()
+                    .orcamento(orcamento)
+                    .producao(filha)
+                    .build());
+        }
     }
 
     /** Registra o "nascimento" de uma produção filha diretamente em um estado — statusAnterior null,
@@ -1137,6 +1257,137 @@ public class ProducaoService {
                     .build()));
         }
         return gravados;
+    }
+
+    /**
+     * RN-PROD-VINC-01/02 (V0.8.2, #320) — chamado por {@code OrcamentoService.vincularProducao()}
+     * quando um orçamento vincula produtos a uma produção existente. A validação de estado
+     * (RN-PROD-VINC-02) vive aqui, não em OrcamentoService — é regra do ciclo de vida de Produção,
+     * mesmo padrão já usado em {@link #editarProducao}. Produto já presente na produção tem a
+     * quantidade somada (merge, nunca duplica {@code ProducaoProduto}) — mesmo espírito de
+     * agrupamento de PDC-001, agora também contra o que já está persistido, não só duplicatas dentro
+     * do mesmo request. Grava 1 linha {@code ITEM_ADICIONADO} por produto (não agregada): a
+     * rastreabilidade de origem (RN-PROD-HIST-01) precisa de produto_id/quantidade por linha para o
+     * desvincular futuro conseguir reverter exatamente o que aquele orçamento adicionou.
+     */
+    public List<ProducaoProduto> adicionarProdutosDeOrcamento(UUID producaoId, List<ProducaoProdutoRequest> produtos,
+                                                                UUID usuarioId, Orcamento referenciaOrcamento) {
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Essa produção já começou e não pode receber novos itens");
+        }
+
+        ProdutosValidados validados = validarEResolverProdutos(produtos, usuarioId);
+
+        List<ProducaoProduto> resultado = new ArrayList<>();
+        for (Produto produto : validados.produtos()) {
+            BigDecimal quantidade = validados.quantidades().get(produto.getId());
+
+            ProducaoProduto producaoProduto = producaoProdutoRepository
+                    .findByProducaoIdAndProdutoId(producao.getId(), produto.getId())
+                    .map(existente -> {
+                        existente.setQuantidade(existente.getQuantidade().add(quantidade));
+                        return producaoProdutoRepository.save(existente);
+                    })
+                    .orElseGet(() -> producaoProdutoRepository.save(ProducaoProduto.builder()
+                            .producao(producao)
+                            .produto(produto)
+                            .quantidade(quantidade)
+                            .build()));
+            resultado.add(producaoProduto);
+
+            historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                    .producao(producao)
+                    .tipoEvento(TipoEventoHistoricoProducao.ITEM_ADICIONADO)
+                    .produto(produto)
+                    .quantidade(quantidade)
+                    .referenciaOrcamento(referenciaOrcamento)
+                    .origem(OrigemHistoricoStatus.USUARIO)
+                    .build());
+        }
+
+        return resultado;
+    }
+
+    /**
+     * P-B017 (#320) — soma, por produto, as linhas {@code ITEM_ADICIONADO} já registradas para um
+     * par orçamento+produção específico. Usado por {@code OrcamentoService.vincularProducao()} para
+     * calcular o que falta sincronizar (RN-ORC-VINC-03, achado de re-sincronização de P-B015): vincular
+     * a mesma produção mais de uma vez só reenvia o delta (produto novo ou quantidade aumentada), nunca
+     * re-soma o que já está registrado. Soma por produto porque uma re-sincronização anterior pode ter
+     * gravado mais de 1 linha para o mesmo produto (1 por chamada de {@link #adicionarProdutosDeOrcamento}).
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, BigDecimal> produtosJaAdicionadosPeloOrcamento(UUID producaoId, UUID referenciaOrcamentoId) {
+        Map<UUID, BigDecimal> jaSincronizado = new HashMap<>();
+        for (HistoricoStatusProducao linha : historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento(
+                        producaoId, referenciaOrcamentoId, TipoEventoHistoricoProducao.ITEM_ADICIONADO)) {
+            jaSincronizado.merge(linha.getProduto().getId(), linha.getQuantidade(), BigDecimal::add);
+        }
+        return jaSincronizado;
+    }
+
+    /**
+     * RN-ORC-VINC-03 (V0.8.2, #320) — chamado por {@code OrcamentoService.desvincularProducao()} para
+     * reverter o que aquele orçamento adicionou à produção. Mesma restrição de estado de
+     * {@link #adicionarProdutosDeOrcamento} (RN-PROD-VINC-02, decisão de simetria — desvincular só é
+     * aceito com a produção ainda em {@code AGUARDANDO_INICIO}, mesmo motivo: depois que a produção
+     * começa, insumo pode já ter sido baixado e o trabalho físico já está em andamento).
+     *
+     * <p>Itera <b>linha por linha do histórico</b> {@code ITEM_ADICIONADO} daquele orçamento naquela
+     * produção — nunca pelo total agregado do produto — porque o mesmo {@link ProducaoProduto} pode
+     * ter recebido contribuição de mais de uma origem (2+ orçamentos vinculados à mesma produção,
+     * somando no mesmo produto). Decrementar pelo total do produto zeraria também a contribuição de
+     * outro orçamento; decrementar linha a linha (já filtrada por {@code referencia_orcamento_id})
+     * nunca toca no que outro orçamento adicionou.
+     *
+     * <p>Piso em zero (nunca negativo) — mesmo padrão de "desconta X de Y" já usado no projeto em
+     * {@code OrcamentoService.calcularValorFinalMulta()} — cobre o caso raro de a produção ter sido
+     * editada manualmente depois do vínculo, perdendo rastreabilidade exata. Quando a quantidade
+     * chega a zero, a linha de {@link ProducaoProduto} é removida (não fica um produto "fantasma" com
+     * quantidade zero na produção) — a próxima sincronização (se houver) recria a linha do zero.
+     *
+     * <p>Grava 1 linha {@code ITEM_REMOVIDO} por linha revertida (mesma granularidade de
+     * {@code ITEM_ADICIONADO}), nunca apaga/edita a linha original — histórico é append-only.
+     */
+    public void removerProdutosDeOrcamento(UUID producaoId, UUID referenciaOrcamentoId, UUID usuarioId) {
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Essa produção já começou e não pode ter itens removidos");
+        }
+
+        List<HistoricoStatusProducao> adicionados = historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento(
+                        producaoId, referenciaOrcamentoId, TipoEventoHistoricoProducao.ITEM_ADICIONADO);
+
+        for (HistoricoStatusProducao linha : adicionados) {
+            Produto produto = linha.getProduto();
+            producaoProdutoRepository.findByProducaoIdAndProdutoId(producaoId, produto.getId())
+                    .ifPresent(producaoProduto -> {
+                        BigDecimal restante = producaoProduto.getQuantidade().subtract(linha.getQuantidade())
+                                .max(BigDecimal.ZERO);
+                        if (restante.compareTo(BigDecimal.ZERO) == 0) {
+                            producaoProdutoRepository.delete(producaoProduto);
+                        } else {
+                            producaoProduto.setQuantidade(restante);
+                            producaoProdutoRepository.save(producaoProduto);
+                        }
+                    });
+
+            historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                    .producao(producao)
+                    .tipoEvento(TipoEventoHistoricoProducao.ITEM_REMOVIDO)
+                    .produto(produto)
+                    .quantidade(linha.getQuantidade())
+                    .referenciaOrcamento(linha.getReferenciaOrcamento())
+                    .origem(OrigemHistoricoStatus.USUARIO)
+                    .build());
+        }
     }
 
     /**

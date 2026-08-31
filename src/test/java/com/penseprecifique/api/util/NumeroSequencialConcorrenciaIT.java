@@ -202,6 +202,7 @@ class NumeroSequencialConcorrenciaIT {
             OrcamentoRequest req = new OrcamentoRequest();
             req.setClienteId(cliente.getId());
             req.setMetodoPagamento(MetodoPagamento.PIX);
+            req.setTemPrazoProducao(true);
             req.setPrazoProducaoDias(5);
             OrcamentoItemRequest item = new OrcamentoItemRequest();
             item.setProdutoId(produto.getId());

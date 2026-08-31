@@ -19,11 +19,13 @@ public class ClienteController {
 
     private final ClienteService clienteService;
 
+    // #356 — padronizado para 'busca' (mesmo nome usado por Produto/Insumo/Orçamento/Catálogo/Produção);
+    // era 'nome' até V0.8.2, único endpoint divergente do padrão do resto do sistema.
     @GetMapping
     public ResponseEntity<Page<ClienteResponse>> listar(
-            @RequestParam(required = false) String nome,
+            @RequestParam(required = false) String busca,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(clienteService.listar(nome, pageable));
+        return ResponseEntity.ok(clienteService.listar(busca, pageable));
     }
 
     @GetMapping("/{id}")

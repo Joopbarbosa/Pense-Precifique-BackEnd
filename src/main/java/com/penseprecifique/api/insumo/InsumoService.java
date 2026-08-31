@@ -31,8 +31,10 @@ import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -51,6 +53,17 @@ import java.util.stream.Collectors;
 @Transactional
 public class InsumoService {
 
+    // #354 — allowlist explícita dos campos de ordenação aceitos em GET /insumos. Campo fora desta
+    // lista é rejeitado com BusinessException (400) por PageableOrdenacaoResolver, nunca mais
+    // repassado cru pro Hibernate (UnknownPathException → 500).
+    private static final Map<String, String> CAMPOS_ORDENACAO_INSUMO = Map.of(
+            "nome", "nome",
+            "numero", "numero",
+            "custoUnitario", "custoUnitario",
+            "estoqueAtual", "estoqueAtual",
+            "createdAt", "createdAt"
+    );
+
     private final InsumoRepository insumoRepository;
     private final MovimentacaoInsumoRepository movimentacaoInsumoRepository;
     private final UsuarioRepository usuarioRepository;
@@ -66,12 +79,16 @@ public class InsumoService {
     @Transactional(readOnly = true)
     public Page<InsumoResponseDTO> listar(String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        if (busca != null && !busca.isBlank()) {
-            return insumoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, busca, pageable)
-                    .map(insumoMapper::toResponse);
-        }
-        return insumoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable)
-                .map(insumoMapper::toResponse);
+        Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_INSUMO,
+                "nome, numero, custoUnitario, estoqueAtual, createdAt");
+
+        Page<Insumo> pagina = (busca != null && !busca.isBlank())
+                ? insumoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
+                        usuarioId, busca, pageableOrdenado)
+                : insumoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageableOrdenado);
+
+        Page<InsumoResponseDTO> mapeado = pagina.map(insumoMapper::toResponse);
+        return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
     }
 
     @Transactional(readOnly = true)

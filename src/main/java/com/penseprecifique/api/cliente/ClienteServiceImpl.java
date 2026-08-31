@@ -9,14 +9,17 @@ import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ClienteMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -24,22 +27,34 @@ import java.util.UUID;
 @Transactional
 public class ClienteServiceImpl implements ClienteService {
 
+    // #354 — allowlist explícita dos campos de ordenação aceitos em GET /clientes. Campo fora desta
+    // lista é rejeitado com BusinessException (400) por PageableOrdenacaoResolver, nunca mais
+    // repassado cru pro Hibernate (UnknownPathException → 500).
+    private static final Map<String, String> CAMPOS_ORDENACAO_CLIENTE = Map.of(
+            "nome", "nome",
+            "numero", "numero",
+            "email", "email",
+            "createdAt", "createdAt"
+    );
+
     private final ClienteRepository clienteRepository;
     private final UsuarioRepository usuarioRepository;
     private final ClienteMapper clienteMapper;
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ClienteResponse> listar(String nome, Pageable pageable) {
+    public Page<ClienteResponse> listar(String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        if (nome != null && !nome.isBlank()) {
-            return clienteRepository
-                    .findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(usuarioId, nome, pageable)
-                    .map(clienteMapper::toResponse);
-        }
-        return clienteRepository
-                .findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageable)
-                .map(clienteMapper::toResponse);
+        Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_CLIENTE,
+                "nome, numero, email, createdAt");
+
+        Page<Cliente> pagina = (busca != null && !busca.isBlank())
+                ? clienteRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
+                        usuarioId, busca, pageableOrdenado)
+                : clienteRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageableOrdenado);
+
+        Page<ClienteResponse> mapeado = pagina.map(clienteMapper::toResponse);
+        return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
     }
 
     @Override

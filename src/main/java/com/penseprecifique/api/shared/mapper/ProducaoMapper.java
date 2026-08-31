@@ -88,6 +88,17 @@ public class ProducaoMapper {
         response.setDataTransicao(historico.getDataTransicao());
         response.setJustificativa(historico.getJustificativa());
         response.setOrigem(historico.getOrigem());
+        response.setTipoEvento(historico.getTipoEvento());
+        if (historico.getProduto() != null) {
+            response.setProdutoId(historico.getProduto().getId());
+            response.setNomeProduto(historico.getProduto().getNome());
+        }
+        response.setQuantidade(historico.getQuantidade());
+        if (historico.getReferenciaOrcamento() != null) {
+            response.setReferenciaOrcamentoId(historico.getReferenciaOrcamento().getId());
+            response.setIdentificadorOrcamento(
+                    IdentificadorFormatter.formatar("ORC", historico.getReferenciaOrcamento().getNumero()));
+        }
         return response;
     }
 

@@ -1,9 +1,15 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
@@ -12,6 +18,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -43,6 +50,9 @@ class OrcamentoRn052EstoqueNegativoIT {
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired InsumoRepository insumoRepository;
+    @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
+    @Autowired ProducaoRepository producaoRepository;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -57,11 +67,20 @@ class OrcamentoRn052EstoqueNegativoIT {
                 .usuario(usuario).numero(1).nome("Cliente RN-052").ativa(true).build());
     }
 
+    /** RN-PROD-VINC-01 exige ficha técnica + rendimento válidos — mesma regra de criarProducao(). */
     private Produto novoProduto(String nome, int numero, BigDecimal estoqueAtual, boolean permitirEstoqueNegativo) {
-        return produtoRepository.save(Produto.builder()
+        Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(estoqueAtual).permitirEstoqueNegativo(permitirEstoqueNegativo)
-                .precoVenda(new BigDecimal("10.00")).build());
+                .rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
+
+        Insumo insumo = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida("g")
+                .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
+                .build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produto).insumo(insumo).quantidade(new BigDecimal("1")).build());
+        return produto;
     }
 
     private UUID criarOrcamentoAteEmProducao(Produto produto, int quantidade) {
@@ -74,6 +93,7 @@ class OrcamentoRn052EstoqueNegativoIT {
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
         req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
 
@@ -81,6 +101,11 @@ class OrcamentoRn052EstoqueNegativoIT {
         // RASCUNHO -> ENVIADO -> APROVADO -> EM_PRODUCAO (sinal inativo por padrão)
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
+        Producao producao = producaoRepository.save(Producao.builder().usuario(usuario).numero(1).build());
+        VincularProducaoRequest vincularReq = new VincularProducaoRequest();
+        vincularReq.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, vincularReq);
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
         return orcamentoId;
     }

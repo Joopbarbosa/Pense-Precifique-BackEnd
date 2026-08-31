@@ -74,6 +74,7 @@ class OrcamentoCriacaoNuncaBloqueiaEstoqueIT {
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
         req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
         return req;
@@ -149,6 +150,7 @@ class OrcamentoCriacaoNuncaBloqueiaEstoqueIT {
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
         req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item1, item2));
 
