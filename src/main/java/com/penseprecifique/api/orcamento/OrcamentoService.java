@@ -14,6 +14,7 @@ import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ReciboEstorno;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
@@ -70,9 +71,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -968,8 +971,34 @@ public class OrcamentoService {
      * chat (não estava na Spec original), ver {@code DECISOES_V0.8.2.md}. A reversão roda primeiro
      * (fail fast — nada é removido se a produção não estiver no estado certo); a linha de
      * {@code orcamento_producoes} só é apagada depois de a reversão ter sucesso.
+     *
+     * <p>Overload de 2 argumentos preserva o contrato original — {@code manterProdutos=false},
+     * comportamento 100% inalterado (inclusive a exceção lançada para produção fora de
+     * {@code AGUARDANDO_INICIO}).
      */
     public void desvincularProducao(UUID id, UUID producaoId) {
+        desvincularProducao(id, producaoId, false);
+    }
+
+    /**
+     * RN-NOVA-17 (V0.8.3, #375+308, P-S001c) — extensão opt-in de {@link #desvincularProducao(UUID, UUID)}
+     * para o caso "Sim, manter" (produção vinculada já {@code EM_ANDAMENTO}/{@code TRAVADA}): quando
+     * {@code manterProdutos=true} E a produção está num desses 2 estados, só a linha
+     * {@code OrcamentoProducao} é removida — produto, histórico (`ITEM_ADICIONADO`, append-only) e
+     * estoque continuam intocados. Remoções individuais de produto ("Não, remover", por produto) já
+     * aconteceram antes desta chamada, via {@link #removerProdutoDeProducaoAtiva} — esta chamada só
+     * fecha o vínculo em si, depois de todas as perguntas "por produto" resolvidas.
+     *
+     * <p>Deliberadamente um parâmetro opt-in em vez de generalizar o comportamento default: existe
+     * teste já verde (P-B017/V0.8.2) que trava o comportamento atual (lança {@code BusinessException}
+     * para qualquer estado fora de {@code AGUARDANDO_INICIO}) — {@code manterProdutos=false} preserva
+     * esse contrato ponta a ponta, sem mudança de comportamento para quem já chama sem o parâmetro.
+     * Produção em estado terminal ({@code FINALIZADA}/{@code CANCELADA}/{@code NAO_REALIZADA}) não é
+     * tratada por nenhum dos 2 caminhos — fora do escopo desta RN (ver nota de inferência em
+     * {@code DECISOES_V0.8.3.md}, P-S001c) — cai no `else` e herda a mensagem de erro de
+     * {@link ProducaoService#removerProdutosDeOrcamento}.
+     */
+    public void desvincularProducao(UUID id, UUID producaoId, boolean manterProdutos) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
@@ -978,9 +1007,33 @@ public class OrcamentoService {
                 .findByOrcamentoIdAndProducaoId(orcamento.getId(), producaoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Vínculo não encontrado"));
 
-        producaoService.removerProdutosDeOrcamento(producaoId, orcamento.getId(), usuarioId);
+        boolean producaoAtiva = vinculo.getProducao().getEstado() == EstadoProducao.EM_ANDAMENTO
+                || vinculo.getProducao().getEstado() == EstadoProducao.TRAVADA;
+
+        if (!(manterProdutos && producaoAtiva)) {
+            producaoService.removerProdutosDeOrcamento(producaoId, orcamento.getId(), usuarioId);
+        }
 
         orcamentoProducaoRepository.delete(vinculo);
+    }
+
+    /**
+     * RN-NOVA-17 (V0.8.3, #375+308, P-S001c) — "Não, remover": delega a
+     * {@link ProducaoService#removerProdutoDeProducaoAtiva}, mesma divisão de responsabilidade já
+     * usada por {@link #desvincularProducao(UUID, UUID)} (regra de estado/reversão de produto é de
+     * Produção, não de Orçamento). Não apaga a linha {@code OrcamentoProducao} — o vínculo em si só
+     * é desfeito depois, via {@link #desvincularProducao(UUID, UUID, boolean)} com
+     * {@code manterProdutos=true}, quando todas as perguntas "por produto" já foram resolvidas.
+     */
+    public void removerProdutoDeProducaoAtiva(UUID id, UUID producaoId, UUID produtoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producaoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Vínculo não encontrado"));
+
+        producaoService.removerProdutoDeProducaoAtiva(producaoId, produtoId, orcamento.getId(), usuarioId);
     }
 
     /**
@@ -1048,7 +1101,8 @@ public class OrcamentoService {
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
 
-        List<ProducaoProdutoRequest> produtos = produtosDoOrcamentoComoRequest(orcamento.getId());
+        List<ProducaoProdutoRequest> produtos = filtrarPorProdutoIds(
+                produtosDoOrcamentoComoRequest(orcamento.getId()), request.getProdutoIds());
         if (produtos.isEmpty()) {
             throw new BusinessException("Orçamento não tem itens para criar uma produção");
         }
@@ -1076,6 +1130,28 @@ public class OrcamentoService {
                     produtoRequest.setQuantidade(BigDecimal.valueOf(item.getQuantidade()));
                     return produtoRequest;
                 })
+                .toList();
+    }
+
+    /**
+     * RN-NOVA-13 (V0.8.3, #375+308) — restringe a lista de produtos do orçamento a só os
+     * {@code produtoId} selecionados, quando o checkpoint (ou, futuramente, o checkbox de
+     * RN-NOVA-25) pede uma produção cobrindo só um subconjunto dos itens. {@code null} preserva o
+     * comportamento padrão (todos os itens — usado hoje por {@code ModalVincularProducao}); uma
+     * lista vazia explícita é sempre um erro de chamada fora do fluxo de UI esperado (o Frontend já
+     * desabilita a ação nesse caso, RN-NOVA-13 "caso composto") — nunca silenciosamente ignorada.
+     */
+    private List<ProducaoProdutoRequest> filtrarPorProdutoIds(List<ProducaoProdutoRequest> produtos,
+                                                                List<UUID> produtoIds) {
+        if (produtoIds == null) {
+            return produtos;
+        }
+        if (produtoIds.isEmpty()) {
+            throw new BusinessException("Selecione ao menos um item para criar a produção");
+        }
+        Set<UUID> selecionados = new HashSet<>(produtoIds);
+        return produtos.stream()
+                .filter(p -> selecionados.contains(p.getProdutoId()))
                 .toList();
     }
 

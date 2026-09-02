@@ -2,6 +2,7 @@ package com.penseprecifique.api.shared.mapper;
 
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
 import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
@@ -9,6 +10,7 @@ import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse
 import com.penseprecifique.api.shared.dto.response.producao.HistoricoStatusResponse;
 import com.penseprecifique.api.shared.dto.response.producao.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoDetalheResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducaoOrcamentoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoProdutoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoResumoResponse;
@@ -49,7 +51,8 @@ public class ProducaoMapper {
                                                        List<AlertaInsumoResponse> alertasInsumos,
                                                        List<HistoricoStatusProducao> historicoStatus,
                                                        List<Producao> producoesFilhas,
-                                                       Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto) {
+                                                       Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto,
+                                                       List<OrcamentoProducao> orcamentosVinculados) {
         ProducaoDetalheResponse response = new ProducaoDetalheResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
@@ -70,6 +73,18 @@ public class ProducaoMapper {
         response.setInsumosConsumidos(insumosConsumidos.stream().map(this::toInsumoConsumidoResponse).toList());
         response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
         response.setProducoesFilhas(producoesFilhas.stream().map(this::toResumoResponse).toList());
+        response.setOrcamentosVinculados(orcamentosVinculados.stream().map(this::toProducaoOrcamentoResponse).toList());
+        return response;
+    }
+
+    /** RN-NOVA-15 (V0.8.3, #375+308) — lado espelhado de {@code toOrcamentoProducaoResponse}. */
+    public ProducaoOrcamentoResponse toProducaoOrcamentoResponse(OrcamentoProducao vinculo) {
+        ProducaoOrcamentoResponse response = new ProducaoOrcamentoResponse();
+        response.setOrcamentoId(vinculo.getOrcamento().getId());
+        response.setIdentificadorOrcamento(IdentificadorFormatter.formatar("ORC", vinculo.getOrcamento().getNumero()));
+        response.setStatusOrcamento(vinculo.getOrcamento().getStatus());
+        response.setNomeCliente(vinculo.getOrcamento().getCliente().getNome());
+        response.setValorTotal(vinculo.getOrcamento().getTotal());
         return response;
     }
 

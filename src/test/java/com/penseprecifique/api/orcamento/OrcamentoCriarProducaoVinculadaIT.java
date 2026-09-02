@@ -270,4 +270,78 @@ class OrcamentoCriarProducaoVinculadaIT {
         assertNotEquals(producaoId1, producaoId2);
         assertEquals(2, orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).size());
     }
+
+    private UUID criarOrcamentoComDoisProdutos(Produto produtoA, int quantidadeA, Produto produtoB, int quantidadeB) {
+        OrcamentoItemRequest itemA = new OrcamentoItemRequest();
+        itemA.setProdutoId(produtoA.getId());
+        itemA.setMargemAplicada(BigDecimal.ZERO);
+        itemA.setPrecoUnitario(new BigDecimal("50.00"));
+        itemA.setQuantidade(quantidadeA);
+
+        OrcamentoItemRequest itemB = new OrcamentoItemRequest();
+        itemB.setProdutoId(produtoB.getId());
+        itemB.setMargemAplicada(BigDecimal.ZERO);
+        itemB.setPrecoUnitario(new BigDecimal("50.00"));
+        itemB.setQuantidade(quantidadeB);
+
+        OrcamentoRequest req = new OrcamentoRequest();
+        req.setClienteId(cliente.getId());
+        req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(false);
+        req.setItens(List.of(itemA, itemB));
+        req.setSinalAtivo(false);
+        return orcamentoService.criar(req).getId();
+    }
+
+    /** RN-NOVA-13 (V0.8.3, #375+308) — produtoIds restringe a produção nova a só os itens marcados. */
+    @Test
+    void produtoIdsRestringeAosItensSelecionados() {
+        seedUsuarioECliente();
+        Produto produtoA = novoProduto();
+        Produto produtoB = novoProduto();
+        UUID orcamentoId = criarOrcamentoComDoisProdutos(produtoA, 3, produtoB, 5);
+
+        CriarProducaoVinculadaRequest request = requestCriacao(LocalDate.now().plusDays(5));
+        request.setProdutoIds(List.of(produtoA.getId()));
+
+        List<OrcamentoProducaoResponse> vinculos = orcamentoService.criarProducaoVinculada(orcamentoId, request);
+        UUID producaoId = vinculos.get(0).getProducaoId();
+
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producaoId);
+        assertEquals(1, produtos.size(), "só o produto selecionado deve entrar na produção");
+        assertEquals(produtoA.getId(), produtos.get(0).getProduto().getId());
+        assertEquals(0, new BigDecimal("3").compareTo(produtos.get(0).getQuantidade()));
+    }
+
+    /** RN-NOVA-13 — produtoIds nulo/ausente preserva o comportamento padrão (todos os itens),
+     * mesmo consumidor usado hoje por ModalVincularProducao/modoCriarNova. */
+    @Test
+    void produtoIdsAusenteMantemComportamentoPadraoComMultiplosProdutos() {
+        seedUsuarioECliente();
+        Produto produtoA = novoProduto();
+        Produto produtoB = novoProduto();
+        UUID orcamentoId = criarOrcamentoComDoisProdutos(produtoA, 2, produtoB, 6);
+
+        List<OrcamentoProducaoResponse> vinculos = orcamentoService.criarProducaoVinculada(
+                orcamentoId, requestCriacao(LocalDate.now().plusDays(5)));
+        UUID producaoId = vinculos.get(0).getProducaoId();
+
+        List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producaoId);
+        assertEquals(2, produtos.size(), "sem produtoIds, todos os itens do orçamento entram — comportamento inalterado");
+    }
+
+    /** RN-NOVA-13 — lista vazia explícita é erro de negócio, nunca silenciosamente "todos os itens". */
+    @Test
+    void produtoIdsVazioLancaBusinessException() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 2);
+
+        CriarProducaoVinculadaRequest request = requestCriacao(LocalDate.now().plusDays(5));
+        request.setProdutoIds(List.of());
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> orcamentoService.criarProducaoVinculada(orcamentoId, request));
+        assertTrue(ex.getMessage().toLowerCase().contains("selecione"));
+    }
 }

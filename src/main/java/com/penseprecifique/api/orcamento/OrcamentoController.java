@@ -116,8 +116,22 @@ public class OrcamentoController {
     @DeleteMapping("/{id}/vincular-producao/{producaoId}")
     public ResponseEntity<Void> desvincularProducao(
             @PathVariable UUID id,
-            @PathVariable UUID producaoId) {
-        orcamentoService.desvincularProducao(id, producaoId);
+            @PathVariable UUID producaoId,
+            @RequestParam(required = false, defaultValue = "false") boolean manterProdutos) {
+        orcamentoService.desvincularProducao(id, producaoId, manterProdutos);
+        return ResponseEntity.noContent().build();
+    }
+
+    // RN-NOVA-17 (V0.8.3, #375+308) — "Não, remover": remove a contribuição de 1 produto numa
+    // produção já EM_ANDAMENTO/TRAVADA, sem reverter estoque. Não remove o vínculo em si — ver
+    // desvincularProducao(..., manterProdutos=true) para fechar o vínculo depois de resolvidas
+    // todas as perguntas "por produto".
+    @DeleteMapping("/{id}/vincular-producao/{producaoId}/produtos/{produtoId}")
+    public ResponseEntity<Void> removerProdutoDeProducaoAtiva(
+            @PathVariable UUID id,
+            @PathVariable UUID producaoId,
+            @PathVariable UUID produtoId) {
+        orcamentoService.removerProdutoDeProducaoAtiva(id, producaoId, produtoId);
         return ResponseEntity.noContent().build();
     }
 

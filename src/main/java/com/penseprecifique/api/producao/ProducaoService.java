@@ -971,8 +971,9 @@ public class ProducaoService {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
         List<Producao> producoesFilhas = producaoRepository.findByProducaoOrigemId(producao.getId());
+        List<OrcamentoProducao> orcamentosVinculados = orcamentoProducaoRepository.findByProducaoId(producao.getId());
         return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas,
-                fichaTecnicaPorProduto(produtos));
+                fichaTecnicaPorProduto(produtos), orcamentosVinculados);
     }
 
     /** Componente (insumo ou produto-base) com a necessidade já somada entre todos os produtos da produção. */
@@ -1388,6 +1389,64 @@ public class ProducaoService {
                     .origem(OrigemHistoricoStatus.USUARIO)
                     .build());
         }
+    }
+
+    /**
+     * RN-NOVA-17 (V0.8.3, #375+308, P-S001c) — "Não, remover": remove a contribuição de UM produto
+     * específico feita por UM orçamento, numa produção já {@code EM_ANDAMENTO}/{@code TRAVADA}
+     * (insumo já baixado, trabalho físico em andamento — {@link #removerProdutosDeOrcamento} já não
+     * aceita mais neste ponto, RN-PROD-VINC-02). Mecanismo <b>novo e deliberadamente independente</b>
+     * de {@link #adicionarProdutosDeOrcamento}/{@link #editarProducao} — não reaproveita nem
+     * contorna a trava de {@code AGUARDANDO_INICIO} desses dois métodos, é um terceiro caminho com
+     * validação de estado própria (exige exatamente o oposto: {@code EM_ANDAMENTO}/{@code TRAVADA}).
+     *
+     * <p><b>AVISO, nunca BLOQUEIO</b> (decisão do usuário, P-S001c) — remove a linha
+     * {@code ProducaoProduto} (piso zero, mesmo padrão de {@link #removerProdutosDeOrcamento}) e
+     * registra {@code ITEM_REMOVIDO}, mas <b>nunca dispara movimentação de estoque</b>: o insumo já
+     * baixado permanece baixado, mesmo padrão-default já usado por {@code aplicarConsumoReal()}/
+     * RN-072 ("ausência de declaração de consumo real = consumo total assumido, sem estorno").
+     */
+    public void removerProdutoDeProducaoAtiva(UUID producaoId, UUID produtoId, UUID referenciaOrcamentoId,
+                                               UUID usuarioId) {
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.EM_ANDAMENTO && producao.getEstado() != EstadoProducao.TRAVADA) {
+            throw new BusinessException("Esta remoção só se aplica a produções em andamento ou travadas — "
+                    + "produções aguardando início usam o desvincular normal, que reverte o produto");
+        }
+
+        List<HistoricoStatusProducao> adicionados = historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndProdutoIdAndTipoEvento(
+                        producaoId, referenciaOrcamentoId, produtoId, TipoEventoHistoricoProducao.ITEM_ADICIONADO);
+        if (adicionados.isEmpty()) {
+            throw new ResourceNotFoundException("Este orçamento não contribuiu com este produto nesta produção");
+        }
+
+        BigDecimal quantidadeContribuida = adicionados.stream()
+                .map(HistoricoStatusProducao::getQuantidade)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        ProducaoProduto producaoProduto = producaoProdutoRepository
+                .findByProducaoIdAndProdutoId(producaoId, produtoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado nesta produção"));
+
+        BigDecimal restante = producaoProduto.getQuantidade().subtract(quantidadeContribuida).max(BigDecimal.ZERO);
+        if (restante.compareTo(BigDecimal.ZERO) == 0) {
+            producaoProdutoRepository.delete(producaoProduto);
+        } else {
+            producaoProduto.setQuantidade(restante);
+            producaoProdutoRepository.save(producaoProduto);
+        }
+
+        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                .producao(producao)
+                .tipoEvento(TipoEventoHistoricoProducao.ITEM_REMOVIDO)
+                .produto(adicionados.get(0).getProduto())
+                .quantidade(quantidadeContribuida)
+                .referenciaOrcamento(adicionados.get(0).getReferenciaOrcamento())
+                .origem(OrigemHistoricoStatus.USUARIO)
+                .build());
     }
 
     /**

@@ -33,4 +33,8 @@ public class ProducaoDetalheResponse {
 
     // RN-073/UC-036 — produções geradas a partir desta (divisão ou agrupamento) via producaoOrigemId.
     private List<ProducaoResumoResponse> producoesFilhas;
+
+    // RN-NOVA-15 (V0.8.3, #375+308) — orçamentos com vínculo formal a esta produção
+    // (orcamento_producoes). Lista vazia quando não há vínculo — Frontend oculta a seção.
+    private List<ProducaoOrcamentoResponse> orcamentosVinculados;
 }
