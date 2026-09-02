@@ -146,18 +146,35 @@ public class OrcamentoService {
         return montarDetalhe(orcamento);
     }
 
+    /** RN-NOVA-26 (V0.8.3, #319+387) — mesmo critério de estado não-terminal de RN-NOVA-19/20. */
+    private static final List<EstadoProducao> ESTADOS_PRODUCAO_NAO_TERMINAIS =
+            List.of(EstadoProducao.AGUARDANDO_INICIO, EstadoProducao.EM_ANDAMENTO, EstadoProducao.TRAVADA);
+
     /**
-     * #194/RN-NOVA-5 — itens do orçamento cujo produto não tem estoque suficiente pra cobrir a
-     * quantidade solicitada. Somente leitura: alimenta a condição de exibir o botão "Criar produção"
-     * no Detalhe do Orçamento (UC-NOVA-4) — a criação da produção em si passa pelos endpoints já
-     * existentes de Produção, não por aqui. Reaproveita OrcamentoItem.getProdutoVendido() (já resolve
-     * a origem Catálogo/avulso — RN-054) em vez de duplicar essa lógica.
+     * #194/ORC-028 (rótulo antigo "RN-NOVA-5" — ver RN-NOVA-24) — itens do orçamento cujo produto
+     * não tem estoque suficiente pra cobrir a quantidade solicitada. Somente leitura: alimenta a
+     * condição de exibir o checkbox de seleção no card "Estoque insuficiente" do Detalhe
+     * (RN-NOVA-25) — a criação da produção em si passa por {@link #criarProducaoVinculada}, não por
+     * aqui. Reaproveita OrcamentoItem.getProdutoVendido() (já resolve a origem Catálogo/avulso —
+     * RN-054) em vez de duplicar essa lógica.
+     *
+     * <p>RN-NOVA-26 — cada item também expõe {@code producaoVinculadaId}/
+     * {@code identificadorProducaoVinculada} quando já existe uma produção em estado não-terminal
+     * cobrindo aquele produto especificamente (critério diferente do de RN-NOVA-16, que olha o
+     * status do Orçamento, não o estado da Produção). 1 query batched
+     * ({@code buscarVinculosAtivosPorProduto}) para o orçamento inteiro, nunca 1 lookup por item.
      */
     @Transactional(readOnly = true)
     public List<ItemSemEstoqueResponse> itensSemEstoque(UUID id) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        Map<UUID, Object[]> vinculoAtivoPorProduto = new LinkedHashMap<>();
+        for (Object[] linha : orcamentoProducaoRepository.buscarVinculosAtivosPorProduto(
+                orcamento.getId(), ESTADOS_PRODUCAO_NAO_TERMINAIS)) {
+            vinculoAtivoPorProduto.putIfAbsent((UUID) linha[0], linha);
+        }
 
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         List<ItemSemEstoqueResponse> semEstoque = new ArrayList<>();
@@ -179,6 +196,13 @@ public class OrcamentoService {
             resposta.setQuantidadeSolicitada(solicitada);
             resposta.setEstoqueAtual(estoqueAtual);
             resposta.setQuantidadeFaltante(solicitada.subtract(estoqueAtual));
+
+            Object[] vinculo = vinculoAtivoPorProduto.get(produto.getId());
+            if (vinculo != null) {
+                resposta.setProducaoVinculadaId((UUID) vinculo[1]);
+                resposta.setIdentificadorProducaoVinculada(
+                        IdentificadorFormatter.formatar("PRD", (Integer) vinculo[2]));
+            }
             semEstoque.add(resposta);
         }
         return semEstoque;
