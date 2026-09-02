@@ -50,15 +50,13 @@ public class OrcamentoController {
     }
 
     /**
-     * P-B008/#353 — {@code Pageable} passado ao Service/Repository para limitar o tamanho da
-     * consulta (tech debt, base de itens de catálogo crescendo sem bound); contrato HTTP
-     * inalterado — resposta continua array simples (não expõe metadados de paginação), decisão
-     * confirmada no Passo 0 para não quebrar o consumidor atual (`ItemSearch`/`orcamentoService.ts`,
-     * que espera `Promise<ItemCatalogoBuscaResponse[]>`), já que não há tarefa de Frontend neste
-     * pocket para ajustar esse contrato.
+     * RN-NOVA-18 (#353/P-B008) — devolve {@code Page<>} completo (mesmo formato padrão do Spring
+     * Data já usado em {@code listar()} acima) em vez do array simples de antes — breaking change
+     * confirmado seguro (único consumidor é `ItemSearch`, migrado no mesmo pocket). `size` default
+     * continua 8 (calibração de UI do painel, ORC-030), não os 20 de listagens completas.
      */
     @GetMapping("/itens-catalogo")
-    public ResponseEntity<List<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
+    public ResponseEntity<Page<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
             @RequestParam(required = false) UUID catalogoId,
             @RequestParam(required = false) String busca,
             @PageableDefault(size = 8) Pageable pageable) {

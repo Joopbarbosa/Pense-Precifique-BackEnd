@@ -66,21 +66,19 @@ public class ItemCatalogoService {
      * aqui o bloqueio é aplicado como filtro de listagem: o item simplesmente não aparece na busca.
      * RN-NOVA-6 (#217) — `busca` filtra por nome do produto, server-side (mesmo padrão de
      * ProdutoService#listar); em branco/nulo, retorna a listagem completa.
-     * P-B008/#353 — {@code Pageable} passado ao repositório para limitar o tamanho da consulta
-     * (tech debt, base de itens de catálogo crescendo sem bound); só o conteúdo da página é
-     * devolvido (contrato HTTP inalterado, ainda array simples — ver {@code OrcamentoController}).
+     * RN-NOVA-18 (#353/P-B008) — devolve a {@code Page<>} completa (não só o conteúdo) — contrato
+     * HTTP passa a expor paginação real (`content`, `number`, `size`, `totalElements`, `last`),
+     * mesmo formato já usado por {@code OrcamentoService#listar}.
      */
     @Transactional(readOnly = true)
-    public List<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca, Pageable pageable) {
+    public Page<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
         Page<ItemCatalogo> itens = temBusca
                 ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim(), pageable)
                 : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId, pageable);
-        return itens.stream()
-                .map(item -> itemCatalogoMapper.toBuscaResponse(item,
-                        fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId())))
-                .toList();
+        return itens.map(item -> itemCatalogoMapper.toBuscaResponse(item,
+                fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId())));
     }
 
     /**
