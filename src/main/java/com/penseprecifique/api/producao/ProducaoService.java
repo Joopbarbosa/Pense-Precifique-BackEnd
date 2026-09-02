@@ -705,6 +705,14 @@ public class ProducaoService {
      * positivo em pelo menos um produto da filha ganha um vínculo novo em {@code orcamento_producoes}
      * para a filha — o vínculo da produção-mãe original (que vira {@code NAO_REALIZADA}) permanece
      * intocado, nunca removido (mesmo padrão append-only: a divisão não é um desvincular).
+     *
+     * <p>RN-NOVA-21 (V0.8.3, #375+308, P-B004) — o {@code save()} final do vínculo é idempotente
+     * (checa existência antes de gravar): {@code dividir()} sempre chama este método 1x por filha
+     * (origem única, sem risco de colisão), mas {@code agrupar()} chama 1x **por origem** contra a
+     * **mesma** produção nova — se duas origens do agrupamento compartilharem um orçamento vinculado,
+     * a 2ª chamada tentaria inserir a mesma linha `(orcamento_id, producao_id)` de novo, violando
+     * {@code UNIQUE(orcamento_id, producao_id)}. A checagem aqui resolve a deduplicação **entre**
+     * chamadas sem mudar a assinatura do método nem afetar o comportamento de {@code dividir()}.
      */
     private void propagarOrigemParaFilha(Producao origem, Producao filha, List<ProducaoProduto> produtosOrigem) {
         Map<UUID, Orcamento> orcamentosParaVincular = new LinkedHashMap<>();
@@ -742,10 +750,12 @@ public class ProducaoService {
         }
 
         for (Orcamento orcamento : orcamentosParaVincular.values()) {
-            orcamentoProducaoRepository.save(OrcamentoProducao.builder()
-                    .orcamento(orcamento)
-                    .producao(filha)
-                    .build());
+            if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), filha.getId()).isEmpty()) {
+                orcamentoProducaoRepository.save(OrcamentoProducao.builder()
+                        .orcamento(orcamento)
+                        .producao(filha)
+                        .build());
+            }
         }
     }
 
@@ -905,6 +915,16 @@ public class ProducaoService {
                     .produto(consolidado.getProduto())
                     .quantidade(consolidado.getQuantidade())
                     .build());
+        }
+
+        // RN-NOVA-21 (V0.8.3, #375+308, P-B004) — propaga o(s) vínculo(s) de orcamento_producoes das
+        // produções de origem para a nova, mesmo mecanismo de dividir()/propagarOrigemParaFilha() —
+        // 1 chamada por origem (não por produto consolidado, que já perdeu a proveniência por origem
+        // em consolidarProdutos()), usando os ProducaoProduto reais de cada origem, ainda intocados
+        // (só transicionam para NAO_REALIZADA no Passo 4 abaixo, sem apagar suas linhas).
+        for (Producao origem : originais) {
+            List<ProducaoProduto> produtosDaOrigem = producaoProdutoRepository.findByProducaoId(origem.getId());
+            propagarOrigemParaFilha(origem, nova, produtosDaOrigem);
         }
 
         // Passo 3 — leva a nova produção até o estado de destino.
