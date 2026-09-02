@@ -11,6 +11,7 @@ import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaRes
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -33,6 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * no JPQL faz o Hibernate/driver inferir o tipo do parâmetro como `bytea`, e o Postgres rejeita
  * com "function lower(bytea) does not exist" — por isso o método sem busca usa uma query JPQL
  * separada (`buscarDisponiveisParaOrcamento`) em vez de `:busca IS NULL OR ...` na mesma query.
+ *
+ * RN-NOVA-18 (#353/P-B008) — {@code buscarParaOrcamento} devolve {@code Page<>} completo (não só
+ * o conteúdo) desde esta revisão; testes atualizados para ler via {@code getContent()}, mais 3
+ * casos novos de metadado de paginação (CEN-NOVO-19/20/21).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ItemCatalogoBuscaOrcamentoIT {
@@ -71,9 +76,9 @@ class ItemCatalogoBuscaOrcamentoIT {
         novoItem("Kit Convite Floral", 1);
         novoItem("Laço Decorativo", 2);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
 
-        assertEquals(2, resultado.size());
+        assertEquals(2, resultado.getContent().size());
     }
 
     @Test
@@ -81,10 +86,10 @@ class ItemCatalogoBuscaOrcamentoIT {
         seedUsuarioECatalogo();
         ItemCatalogo item = novoItem("Kit Convite Floral", 1);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
 
-        assertEquals(1, resultado.size());
-        assertEquals(item.getProduto().getId(), resultado.get(0).getProdutoId(),
+        assertEquals(1, resultado.getContent().size());
+        assertEquals(item.getProduto().getId(), resultado.getContent().get(0).getProdutoId(),
                 "#218 — produtoId precisa estar presente para montar a navegação de criação de produção");
     }
 
@@ -98,10 +103,10 @@ class ItemCatalogoBuscaOrcamentoIT {
         seedUsuarioECatalogo();
         ItemCatalogo item = novoItem("Kit Convite Floral", 1);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
 
-        assertEquals(1, resultado.size());
-        assertEquals(item.getCatalogo().getId(), resultado.get(0).getCatalogoId());
+        assertEquals(1, resultado.getContent().size());
+        assertEquals(item.getCatalogo().getId(), resultado.getContent().get(0).getCatalogoId());
     }
 
     @Test
@@ -110,10 +115,10 @@ class ItemCatalogoBuscaOrcamentoIT {
         novoItem("Kit Convite Floral", 1);
         novoItem("Laço Decorativo", 2);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "convite", Pageable.unpaged());
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "convite", Pageable.unpaged());
 
-        assertEquals(1, resultado.size());
-        assertEquals("Kit Convite Floral", resultado.get(0).getNomeProduto());
+        assertEquals(1, resultado.getContent().size());
+        assertEquals("Kit Convite Floral", resultado.getContent().get(0).getNomeProduto());
     }
 
     @Test
@@ -122,9 +127,9 @@ class ItemCatalogoBuscaOrcamentoIT {
         novoItem("Kit Convite Floral", 1);
         novoItem("Laço Decorativo", 2);
 
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "   ", Pageable.unpaged());
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "   ", Pageable.unpaged());
 
-        assertEquals(2, resultado.size(), "busca em branco deve equivaler a nenhuma busca (listagem completa)");
+        assertEquals(2, resultado.getContent().size(), "busca em branco deve equivaler a nenhuma busca (listagem completa)");
     }
 
     @Test
@@ -135,9 +140,9 @@ class ItemCatalogoBuscaOrcamentoIT {
         // Regressão do bug "function lower(bytea) does not exist" (bind de parâmetro nulo) —
         // aqui o parâmetro é não-nulo mas sem match; o ponto crítico já está coberto pelo teste
         // "semBuscaRetornaTodosOsItensDisponiveis" (busca=null) não lançar exceção.
-        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "zzz-nao-existe", Pageable.unpaged());
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "zzz-nao-existe", Pageable.unpaged());
 
-        assertTrue(resultado.isEmpty());
+        assertTrue(resultado.getContent().isEmpty());
     }
 
     @Test
@@ -154,11 +159,11 @@ class ItemCatalogoBuscaOrcamentoIT {
                 .catalogo(outroCatalogo).produto(produtoOutroCatalogo).quantidadePacote(1)
                 .precoVenda(new BigDecimal("10.00")).build());
 
-        List<ItemCatalogoBuscaResponse> resultado =
+        Page<ItemCatalogoBuscaResponse> resultado =
                 itemCatalogoService.buscarParaOrcamento(catalogo.getId(), "convite", Pageable.unpaged());
 
-        assertEquals(1, resultado.size());
-        assertEquals("Kit Convite Floral", resultado.get(0).getNomeProduto());
+        assertEquals(1, resultado.getContent().size());
+        assertEquals("Kit Convite Floral", resultado.getContent().get(0).getNomeProduto());
     }
 
     /**
@@ -172,12 +177,12 @@ class ItemCatalogoBuscaOrcamentoIT {
             novoItem(String.format("Item %02d", i), i);
         }
 
-        List<ItemCatalogoBuscaResponse> resultado =
+        Page<ItemCatalogoBuscaResponse> resultado =
                 itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(0, 8));
 
-        assertEquals(8, resultado.size());
-        assertEquals("Item 01", resultado.get(0).getNomeProduto());
-        assertEquals("Item 08", resultado.get(7).getNomeProduto());
+        assertEquals(8, resultado.getContent().size());
+        assertEquals("Item 01", resultado.getContent().get(0).getNomeProduto());
+        assertEquals("Item 08", resultado.getContent().get(7).getNomeProduto());
     }
 
     /**
@@ -191,11 +196,71 @@ class ItemCatalogoBuscaOrcamentoIT {
             novoItem(String.format("Item %02d", i), i);
         }
 
-        List<ItemCatalogoBuscaResponse> segundaPagina =
+        Page<ItemCatalogoBuscaResponse> segundaPagina =
                 itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(1, 8));
 
-        assertEquals(2, segundaPagina.size());
-        assertEquals("Item 09", segundaPagina.get(0).getNomeProduto());
-        assertEquals("Item 10", segundaPagina.get(1).getNomeProduto());
+        assertEquals(2, segundaPagina.getContent().size());
+        assertEquals("Item 09", segundaPagina.getContent().get(0).getNomeProduto());
+        assertEquals("Item 10", segundaPagina.getContent().get(1).getNomeProduto());
+    }
+
+    /**
+     * RN-NOVA-18 (#353/P-B008) — CEN-NOVO-19: catálogo com mais de 8 itens elegíveis, sem busca —
+     * página cheia (8) com {@code last=false}, expondo que há mais itens além da primeira página
+     * (metadado que o contrato antigo, array simples, escondia por completo).
+     */
+    @Test
+    void cenNovo19MaisDeOitoItensSemBuscaDevolveOitoComLastFalse() {
+        seedUsuarioECatalogo();
+        for (int i = 1; i <= 10; i++) {
+            novoItem(String.format("Item %02d", i), i);
+        }
+
+        Page<ItemCatalogoBuscaResponse> resultado =
+                itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(0, 8));
+
+        assertEquals(8, resultado.getContent().size());
+        assertEquals(10, resultado.getTotalElements());
+        assertTrue(!resultado.isLast(), "com 10 itens e página de 8, a primeira página não deve ser a última");
+    }
+
+    /**
+     * RN-NOVA-18 (#353/P-B008) — CEN-NOVO-20: catálogo com 8 ou menos itens elegíveis — todos numa
+     * página só, {@code last=true}.
+     */
+    @Test
+    void cenNovo20OitoOuMenosItensDevolveTodosNumaPaginaComLastTrue() {
+        seedUsuarioECatalogo();
+        for (int i = 1; i <= 5; i++) {
+            novoItem(String.format("Item %02d", i), i);
+        }
+
+        Page<ItemCatalogoBuscaResponse> resultado =
+                itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(0, 8));
+
+        assertEquals(5, resultado.getContent().size());
+        assertEquals(5, resultado.getTotalElements());
+        assertTrue(resultado.isLast());
+    }
+
+    /**
+     * RN-NOVA-18 (#353/P-B008) — CEN-NOVO-21: busca reduz o conjunto a 8 ou menos, mesmo com
+     * catálogo grande sem filtro — {@code last=true}, sem paginação restante para o resultado
+     * filtrado (o total sem filtro é maior, mas irrelevante aqui — o metadado reflete a busca).
+     */
+    @Test
+    void cenNovo21BuscaReduzAOitoOuMenosDevolveLastTrueMesmoComCatalogoGrande() {
+        seedUsuarioECatalogo();
+        novoItem("Kit Convite Floral", 1);
+        for (int i = 2; i <= 10; i++) {
+            novoItem(String.format("Item %02d", i), i);
+        }
+
+        Page<ItemCatalogoBuscaResponse> resultado =
+                itemCatalogoService.buscarParaOrcamento(null, "convite", PageRequest.of(0, 8));
+
+        assertEquals(1, resultado.getContent().size());
+        assertEquals(1, resultado.getTotalElements());
+        assertTrue(resultado.isLast());
     }
 }
