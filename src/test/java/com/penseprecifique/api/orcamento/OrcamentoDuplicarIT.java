@@ -16,6 +16,7 @@ import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -184,11 +185,17 @@ class OrcamentoDuplicarIT {
         sinalReq.setMetodoSinalRecebido(MetodoPagamento.PIX);
         orcamentoService.avancarStatus(original.getId(), sinalReq); // APROVADO -> AGUARDANDO_SINAL
         orcamentoService.avancarStatus(original.getId(), sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
-        // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
+        // Vínculo com produção que termina FINALIZADA — RN-NOVA-6 (vínculo obrigatório) foi
+        // removida em P-B017, este vínculo não é mais pré-requisito. vincularProducao() só aceita
+        // produção AGUARDANDO_INICIO (adicionarProdutosDeOrcamento), então o vínculo precisa
+        // acontecer ANTES de transicionar para FINALIZADA — senão o próprio vincular já falha.
+        // FINALIZADA depois evita o bloqueio novo de RN-NOVA-19 (P-B004) na transição abaixo.
         Producao producao = producaoRepository.save(Producao.builder().usuario(usuario).numero(1).build());
         VincularProducaoRequest vincularReq = new VincularProducaoRequest();
         vincularReq.setProducaoId(producao.getId());
         orcamentoService.vincularProducao(original.getId(), vincularReq);
+        producao.setEstado(EstadoProducao.FINALIZADA);
+        producaoRepository.save(producao);
         orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
         orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // EM_PRODUCAO -> FINALIZADO
 

@@ -33,6 +33,7 @@ import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcame
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducaoResumoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
@@ -821,6 +822,35 @@ public class OrcamentoService {
                 break;
 
             case EM_PRODUCAO:
+                // RN-NOVA-19/20 (V0.8.3, #375+308, P-B004) — só na transição EM_PRODUCAO→FINALIZADO
+                // literal; o atalho de aprovação direta (RN-NOVA-2, case ENVIADO) nunca passa por
+                // EM_PRODUCAO e fica deliberadamente fora do escopo desta checagem, mesmo precedente
+                // já usado por RN-NOVA-6 (ver DECISOES_V0.8.3.md).
+                List<ProducaoResumoResponse> vinculosOrfaos = new ArrayList<>();
+                List<String> producoesPendentes = new ArrayList<>();
+                for (OrcamentoProducao vinculo : orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId())) {
+                    Producao producaoVinculada = vinculo.getProducao();
+                    EstadoProducao estadoVinculado = producaoVinculada.getEstado();
+                    String identificadorVinculado = IdentificadorFormatter.formatar("PRD", producaoVinculada.getNumero());
+                    if (estadoVinculado == EstadoProducao.AGUARDANDO_INICIO || estadoVinculado == EstadoProducao.EM_ANDAMENTO
+                            || estadoVinculado == EstadoProducao.TRAVADA) {
+                        producoesPendentes.add(identificadorVinculado + " (" + estadoVinculado + ")");
+                    } else if (estadoVinculado == EstadoProducao.CANCELADA || estadoVinculado == EstadoProducao.NAO_REALIZADA) {
+                        ProducaoResumoResponse resumo = new ProducaoResumoResponse();
+                        resumo.setId(producaoVinculada.getId());
+                        resumo.setIdentificador(identificadorVinculado);
+                        resumo.setEstado(estadoVinculado);
+                        vinculosOrfaos.add(resumo);
+                    }
+                    // FINALIZADA — vínculo saudável, nenhuma ação.
+                }
+                if (!producoesPendentes.isEmpty()) {
+                    boolean varias = producoesPendentes.size() > 1;
+                    throw new BusinessException((varias ? "Produções " : "Produção ")
+                            + String.join(", ", producoesPendentes)
+                            + " ainda não " + (varias ? "foram finalizadas" : "foi finalizada") + ".");
+                }
+
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                 List<UUID> confirmados = request.getConfirmarEstoqueNegativoProdutoIds() != null
                         ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
@@ -830,11 +860,16 @@ public class OrcamentoService {
                             "Estoque insuficiente para " + String.join(", ", resultado.bloqueados())
                                     + ". Este(s) produto(s) não permite(m) estoque negativo.");
                 }
-                // RN-052 — algum produto ficaria negativo e ainda não foi confirmado: nada foi baixado,
-                // devolve o aviso para o usuário confirmar antes de reenviar.
-                if (!resultado.avisosPendentes().isEmpty()) {
+                // RN-052/RN-NOVA-20 — algum produto ficaria negativo e/ou há vínculo órfão ainda não
+                // confirmado: nada foi baixado, devolve os avisos para o usuário confirmar antes de
+                // reenviar. Os dois tipos de aviso coexistem na mesma resposta, sem um suprimir o outro.
+                // vinculosOrfaos só deixa de barrar quando confirmarVinculosOrfaos=true — diferente de
+                // avisosPendentes (que se esvazia sozinho ao confirmar os ids), o vínculo órfão não tem
+                // "id resolvido", só ciência agregada.
+                if (!resultado.avisosPendentes().isEmpty() || (!vinculosOrfaos.isEmpty() && !request.isConfirmarVinculosOrfaos())) {
                     ConfirmacaoEstoqueNegativoResponse resposta = new ConfirmacaoEstoqueNegativoResponse();
                     resposta.setAvisos(resultado.avisosPendentes());
+                    resposta.setVinculosOrfaos(vinculosOrfaos);
                     return resposta;
                 }
                 baixarEstoque(orcamento, itensParaBaixa);
