@@ -1200,9 +1200,29 @@ public class OrcamentoService {
      * {@link #validarVinculoProducao} de propósito: RN-NOVA-6 se aplica só às duas transições que
      * persistem {@code status=EM_PRODUCAO}, e o atalho nunca passa por esse status — o atalho existe
      * justamente para quando a produção não é necessária.
+     *
+     * <p>RN-NOVA-19 (achado de P-A005, corrigido em P-B005, V0.8.3, #379) — a premissa acima
+     * ("produção não é necessária") nunca era verificada de fato, só assumida: um orçamento podia
+     * ganhar vínculo em {@code orcamento_producoes} (via {@link #vincularProducao}/
+     * {@link #criarProducaoVinculada}, nenhum dos dois exige status específico do orçamento,
+     * RN-ORC-VINC-01) e mesmo assim continuar elegível ao atalho, pulando {@code EM_PRODUCAO} e,
+     * com ele, o bloqueio/aviso de RN-NOVA-19/20 inteiro — sem erro, sem aviso. Corrigido
+     * acrescentando a 3ª condição: nenhum vínculo com produção em estado <b>não-terminal</b> (mesmo
+     * critério de RN-NOVA-19 — {@code AGUARDANDO_INICIO}/{@code EM_ANDAMENTO}/{@code TRAVADA}
+     * desqualificam o atalho; {@code FINALIZADA}/{@code CANCELADA}/{@code NAO_REALIZADA} não, por
+     * simetria com a regra irmã). Vínculo órfão ({@code CANCELADA}/{@code NAO_REALIZADA}) continua
+     * liberando o atalho, deliberadamente — RN-NOVA-20 é só um AVISO informativo (nunca bloqueio), e
+     * o atalho já pula por natureza vários passos/avisos intermediários do fluxo normal.
      */
     private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento) {
-        return !Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getPrazoProducaoDias() == null;
+        if (Boolean.TRUE.equals(orcamento.getSinalAtivo()) || orcamento.getPrazoProducaoDias() != null) {
+            return false;
+        }
+        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
+                .map(vinculo -> vinculo.getProducao().getEstado())
+                .noneMatch(estado -> estado == EstadoProducao.AGUARDANDO_INICIO
+                        || estado == EstadoProducao.EM_ANDAMENTO
+                        || estado == EstadoProducao.TRAVADA);
     }
 
     /**
