@@ -88,6 +88,22 @@ class ItemCatalogoBuscaOrcamentoIT {
                 "#218 — produtoId precisa estar presente para montar a navegação de criação de produção");
     }
 
+    /**
+     * RN-NOVA-23 (#313, P-B006) — Caminho A: catalogoId precisa estar presente para o Frontend
+     * chamar GET /catalogos/{catalogoId}/itens e montar a calculadora de preço após selecionar o
+     * item na busca (a busca sozinha não carrega quantidadePacote/customizacoesAnexadas).
+     */
+    @Test
+    void respostaExpoeCatalogoId() {
+        seedUsuarioECatalogo();
+        ItemCatalogo item = novoItem("Kit Convite Floral", 1);
+
+        List<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
+
+        assertEquals(1, resultado.size());
+        assertEquals(item.getCatalogo().getId(), resultado.get(0).getCatalogoId());
+    }
+
     @Test
     void buscaFiltraPorNomeDoProdutoCaseInsensitive() {
         seedUsuarioECatalogo();

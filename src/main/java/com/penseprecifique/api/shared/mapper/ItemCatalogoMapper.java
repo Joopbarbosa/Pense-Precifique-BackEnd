@@ -56,6 +56,7 @@ public class ItemCatalogoMapper {
         ItemCatalogoBuscaResponse response = new ItemCatalogoBuscaResponse();
         response.setId(item.getId());
         response.setProdutoId(item.getProduto().getId());
+        response.setCatalogoId(item.getCatalogo().getId());
         response.setNomeProduto(item.getProduto().getNome());
         response.setPrecoVenda(item.getPrecoVenda());
         response.setCatalogoNome(item.getCatalogo().getNome());
