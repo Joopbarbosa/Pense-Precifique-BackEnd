@@ -28,7 +28,8 @@ public class ProducaoMapper {
     public ProducaoResponse toResponse(Producao producao, List<ProducaoProduto> produtos,
                                         List<AlertaInsumoResponse> alertasInsumos,
                                         List<HistoricoStatusProducao> historicoStatus,
-                                        Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto) {
+                                        Map<UUID, List<FichaTecnicaItem>> fichaTecnicaPorProduto,
+                                        List<OrcamentoProducao> orcamentosVinculados) {
         ProducaoResponse response = new ProducaoResponse();
         response.setId(producao.getId());
         response.setNumero(producao.getNumero());
@@ -42,6 +43,7 @@ public class ProducaoMapper {
                 .toList());
         response.setAlertasInsumos(alertasInsumos);
         response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
+        response.setOrcamentosVinculados(orcamentosVinculados.stream().map(this::toProducaoOrcamentoResponse).toList());
         return response;
     }
 

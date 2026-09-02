@@ -15,4 +15,8 @@ public interface OrcamentoProducaoRepository extends JpaRepository<OrcamentoProd
 
     // RN-NOVA-15 (V0.8.3, #375+308) — seção "Orçamentos vinculados" no Detalhe de Produção.
     List<OrcamentoProducao> findByProducaoId(UUID producaoId);
+
+    // RN-NOVA-16 (V0.8.3, #375+308, P-B002) — mesmo campo em lote para a Listagem/Kanban de
+    // Produção: 1 query batched por página, nunca 1 findByProducaoId por linha.
+    List<OrcamentoProducao> findByProducaoIdIn(List<UUID> producaoIds);
 }

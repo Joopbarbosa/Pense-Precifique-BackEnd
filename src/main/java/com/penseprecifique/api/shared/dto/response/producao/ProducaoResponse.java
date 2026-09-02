@@ -25,4 +25,8 @@ public class ProducaoResponse {
     // #156 — mesmo formato de ProducaoDetalheResponse.historicoStatus; front usa pra distinguir
     // TRAVADA_USUARIO de TRAVADA_SISTEMA na listagem sem precisar abrir o detalhe (getBadgeEstado).
     private List<HistoricoStatusResponse> historicoStatus;
+
+    // RN-NOVA-16 (V0.8.3, #375+308, P-B002) — mesmo campo/DTO de ProducaoDetalheResponse
+    // (RN-NOVA-15), populado via query batched (findByProducaoIdIn), não findByProducaoId por linha.
+    private List<ProducaoOrcamentoResponse> orcamentosVinculados;
 }

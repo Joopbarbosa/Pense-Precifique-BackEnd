@@ -141,10 +141,18 @@ public class ProducaoService {
         List<UUID> ids = idsPage.getContent();
         Map<UUID, Producao> porId = producaoRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Producao::getId, p -> p));
+
+        // RN-NOVA-16 (V0.8.3, #375+308, P-B002) — 1 query batched pra página inteira, nunca
+        // findByProducaoId por linha (evita replicar o N+1 já existente para produtos/histórico).
+        Map<UUID, List<OrcamentoProducao>> vinculosPorProducao = orcamentoProducaoRepository
+                .findByProducaoIdIn(ids).stream()
+                .collect(Collectors.groupingBy(v -> v.getProducao().getId()));
+
         List<ProducaoResponse> conteudo = ids.stream()
                 .map(porId::get)
                 .filter(Objects::nonNull)
-                .map(this::montarResponseComAlertas)
+                .map(producao -> montarResponseComAlertas(producao,
+                        vinculosPorProducao.getOrDefault(producao.getId(), List.of())))
                 .toList();
 
         return new PageImpl<>(conteudo, pageable, idsPage.getTotalElements());
@@ -179,11 +187,11 @@ public class ProducaoService {
      * #156 — historicoStatus também exposto aqui (mesma fonte de ProducaoDetalheResponse), pro front distinguir
      * TRAVADA_USUARIO/TRAVADA_SISTEMA sem precisar abrir o detalhe.
      */
-    private ProducaoResponse montarResponseComAlertas(Producao producao) {
+    private ProducaoResponse montarResponseComAlertas(Producao producao, List<OrcamentoProducao> orcamentosVinculados) {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
         return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos), historico,
-                fichaTecnicaPorProduto(produtos));
+                fichaTecnicaPorProduto(produtos), orcamentosVinculados);
     }
 
     /** #238 — tag global fracionável/estoque negativo/estoque atual por produto da produção. */
