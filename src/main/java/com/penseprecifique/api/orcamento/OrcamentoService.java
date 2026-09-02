@@ -513,6 +513,7 @@ public class OrcamentoService {
             item = OrcamentoItem.builder()
                     .orcamento(orcamento)
                     .itemCatalogo(itemCatalogo)
+                    .margemAplicada(itemReq.getMargemAplicada())
                     .quantidade(itemReq.getQuantidade())
                     .precoUnitario(precoUnitario)
                     .subtotal(subtotalItem)
