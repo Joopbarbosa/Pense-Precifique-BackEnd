@@ -332,7 +332,13 @@ public class ProducaoService {
 
         ProdutosValidados validados = validarEResolverProdutos(request.getProdutos(), usuarioId);
 
+        // P-B010 (V0.8.3) — flush explícito obrigatório aqui: sem ele, o DELETE fica só enfileirado
+        // no persistence context e a ActionQueue do Hibernate executa INSERTs antes de DELETEs no
+        // mesmo flush (independente da ordem no código-fonte). Sem o flush, editar mantendo um
+        // produtoId já existente reinsere a mesma linha antes de apagar a antiga, violando
+        // uq_producao_produto (UNIQUE(producao_id, produto_id), migration V35) com 500/ConstraintViolationException.
         producaoProdutoRepository.deleteAll(producaoProdutoRepository.findByProducaoId(producao.getId()));
+        producaoProdutoRepository.flush();
 
         producao.setDataInicio(dataInicio);
         producao.setDataTerminoPrevista(request.getDataTerminoPrevista());
