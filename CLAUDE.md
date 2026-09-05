@@ -158,6 +158,19 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   path do real, reaproveitando os métodos/validações do endpoint real por chamada direta, nunca
   duplicando lógica e nunca chamando o método que persiste. Seguir este padrão para qualquer
   preview novo em vez de inventar mecanismo diferente.
+- **Propagar vínculo/histórico para N origens** (canônico: `ProducaoService.agrupar()` chamando
+  `propagarOrigemParaFilha()` 1x por origem em loop, V0.8.3/RN-NOVA-21) — quando um método já
+  aceita 1 origem e precisa passar a aceitar N, preferir chamar em loop a generalizar a assinatura
+  (preserva o cálculo por-origem já testado). Sempre checar `UNIQUE` composta na tabela de destino
+  antes de assumir que múltiplas chamadas são seguras — aqui exigiu checar existência
+  (`findByOrcamentoIdAndProducaoId`) antes de cada `save()`, porque origens diferentes podem
+  compartilhar o mesmo vínculo (`UNIQUE(orcamento_id, producao_id)`).
+- **Navegação de associação a partir de `LEFT JOIN` explícito precisa de `LEFT JOIN` também no
+  próximo salto** (achado de bug real, V0.8.3, `buscarIdsOrdenados()`) — em JPQL, `pp.produto`
+  vindo de uma linha `LEFT JOIN pp` volta a virar `INNER JOIN` implícito no Hibernate se não
+  declarado explicitamente; produção sem produto nenhum some silenciosamente do resultado. Ao
+  navegar uma associação a partir de um `LEFT JOIN`, declarar `LEFT JOIN` no segundo salto também,
+  nunca confiar em inferência.
 
 ---
 
