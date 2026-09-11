@@ -43,10 +43,20 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
      * Postgres não consegue inferir o tipo de um parâmetro usado só numa checagem "? IS NULL" sem
      * contexto de coluna). Fix: CAST **só** na checagem IS NULL (que não tem contexto pra inferir
      * sozinha); a comparação (`p.dataInicio >= :dataInicioDe`) já resolve o tipo pela coluna, sem CAST.
+     *
+     * <p>Bug pré-existente corrigido em P-B003 (V0.8.3, achado de P-B002): a navegação de associação
+     * {@code pp.produto.nome} (usada só no filtro opcional de busca por nome), mesmo com {@code pp}
+     * vindo de um {@code LEFT JOIN}, era traduzida pelo Hibernate para um {@code INNER JOIN} implícito
+     * contra {@code produtos} — quando {@code pp} é {@code NULL} (produção sem nenhum
+     * {@code ProducaoProduto}), esse INNER JOIN não casava com nada e a linha inteira desaparecia do
+     * resultado, mesmo sem nenhum filtro de busca ativo. Corrigido declarando o segundo
+     * {@code LEFT JOIN pp.produto prod} explicitamente — navegação de associação a partir de uma linha
+     * já opcional (`pp`) precisa ser declarada como LEFT JOIN também, nunca fica implícita.
      */
     @Query(value = """
             SELECT p.id FROM Producao p
             LEFT JOIN ProducaoProduto pp ON pp.producao = p
+            LEFT JOIN pp.produto prod
             WHERE p.usuario.id = :usuarioId
             AND (:estado IS NULL OR p.estado = :estado)
             AND (CAST(:dataInicioDe AS date) IS NULL OR p.dataInicio >= :dataInicioDe)
@@ -54,13 +64,14 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
             AND (
                 (:buscaNumero IS NULL AND :buscaNome IS NULL)
                 OR (:buscaNumero IS NOT NULL AND p.numero = :buscaNumero)
-                OR (:buscaNome IS NOT NULL AND LOWER(pp.produto.nome) LIKE LOWER(CONCAT('%', CAST(:buscaNome AS string), '%')))
+                OR (:buscaNome IS NOT NULL AND LOWER(prod.nome) LIKE LOWER(CONCAT('%', CAST(:buscaNome AS string), '%')))
             )
             GROUP BY p.id
             """,
             countQuery = """
             SELECT COUNT(DISTINCT p.id) FROM Producao p
             LEFT JOIN ProducaoProduto pp ON pp.producao = p
+            LEFT JOIN pp.produto prod
             WHERE p.usuario.id = :usuarioId
             AND (:estado IS NULL OR p.estado = :estado)
             AND (CAST(:dataInicioDe AS date) IS NULL OR p.dataInicio >= :dataInicioDe)
@@ -68,7 +79,7 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
             AND (
                 (:buscaNumero IS NULL AND :buscaNome IS NULL)
                 OR (:buscaNumero IS NOT NULL AND p.numero = :buscaNumero)
-                OR (:buscaNome IS NOT NULL AND LOWER(pp.produto.nome) LIKE LOWER(CONCAT('%', CAST(:buscaNome AS string), '%')))
+                OR (:buscaNome IS NOT NULL AND LOWER(prod.nome) LIKE LOWER(CONCAT('%', CAST(:buscaNome AS string), '%')))
             )
             """)
     Page<UUID> buscarIdsOrdenados(@Param("usuarioId") UUID usuarioId,

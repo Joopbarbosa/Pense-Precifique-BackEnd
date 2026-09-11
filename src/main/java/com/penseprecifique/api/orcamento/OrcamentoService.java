@@ -14,6 +14,7 @@ import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ReciboEstorno;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
@@ -32,6 +33,7 @@ import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcame
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducaoResumoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.AvisoEstoqueResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
@@ -70,9 +72,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -142,18 +146,35 @@ public class OrcamentoService {
         return montarDetalhe(orcamento);
     }
 
+    /** RN-NOVA-26 (V0.8.3, #319+387) — mesmo critério de estado não-terminal de RN-NOVA-19/20. */
+    private static final List<EstadoProducao> ESTADOS_PRODUCAO_NAO_TERMINAIS =
+            List.of(EstadoProducao.AGUARDANDO_INICIO, EstadoProducao.EM_ANDAMENTO, EstadoProducao.TRAVADA);
+
     /**
-     * #194/RN-NOVA-5 — itens do orçamento cujo produto não tem estoque suficiente pra cobrir a
-     * quantidade solicitada. Somente leitura: alimenta a condição de exibir o botão "Criar produção"
-     * no Detalhe do Orçamento (UC-NOVA-4) — a criação da produção em si passa pelos endpoints já
-     * existentes de Produção, não por aqui. Reaproveita OrcamentoItem.getProdutoVendido() (já resolve
-     * a origem Catálogo/avulso — RN-054) em vez de duplicar essa lógica.
+     * #194/ORC-028 (rótulo antigo "RN-NOVA-5" — ver RN-NOVA-24) — itens do orçamento cujo produto
+     * não tem estoque suficiente pra cobrir a quantidade solicitada. Somente leitura: alimenta a
+     * condição de exibir o checkbox de seleção no card "Estoque insuficiente" do Detalhe
+     * (RN-NOVA-25) — a criação da produção em si passa por {@link #criarProducaoVinculada}, não por
+     * aqui. Reaproveita OrcamentoItem.getProdutoVendido() (já resolve a origem Catálogo/avulso —
+     * RN-054) em vez de duplicar essa lógica.
+     *
+     * <p>RN-NOVA-26 — cada item também expõe {@code producaoVinculadaId}/
+     * {@code identificadorProducaoVinculada} quando já existe uma produção em estado não-terminal
+     * cobrindo aquele produto especificamente (critério diferente do de RN-NOVA-16, que olha o
+     * status do Orçamento, não o estado da Produção). 1 query batched
+     * ({@code buscarVinculosAtivosPorProduto}) para o orçamento inteiro, nunca 1 lookup por item.
      */
     @Transactional(readOnly = true)
     public List<ItemSemEstoqueResponse> itensSemEstoque(UUID id) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        Map<UUID, Object[]> vinculoAtivoPorProduto = new LinkedHashMap<>();
+        for (Object[] linha : orcamentoProducaoRepository.buscarVinculosAtivosPorProduto(
+                orcamento.getId(), ESTADOS_PRODUCAO_NAO_TERMINAIS)) {
+            vinculoAtivoPorProduto.putIfAbsent((UUID) linha[0], linha);
+        }
 
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         List<ItemSemEstoqueResponse> semEstoque = new ArrayList<>();
@@ -175,6 +196,13 @@ public class OrcamentoService {
             resposta.setQuantidadeSolicitada(solicitada);
             resposta.setEstoqueAtual(estoqueAtual);
             resposta.setQuantidadeFaltante(solicitada.subtract(estoqueAtual));
+
+            Object[] vinculo = vinculoAtivoPorProduto.get(produto.getId());
+            if (vinculo != null) {
+                resposta.setProducaoVinculadaId((UUID) vinculo[1]);
+                resposta.setIdentificadorProducaoVinculada(
+                        IdentificadorFormatter.formatar("PRD", (Integer) vinculo[2]));
+            }
             semEstoque.add(resposta);
         }
         return semEstoque;
@@ -509,6 +537,7 @@ public class OrcamentoService {
             item = OrcamentoItem.builder()
                     .orcamento(orcamento)
                     .itemCatalogo(itemCatalogo)
+                    .margemAplicada(itemReq.getMargemAplicada())
                     .quantidade(itemReq.getQuantidade())
                     .precoUnitario(precoUnitario)
                     .subtotal(subtotalItem)
@@ -818,6 +847,35 @@ public class OrcamentoService {
                 break;
 
             case EM_PRODUCAO:
+                // RN-NOVA-19/20 (V0.8.3, #375+308, P-B004) — só na transição EM_PRODUCAO→FINALIZADO
+                // literal; o atalho de aprovação direta (RN-NOVA-2, case ENVIADO) nunca passa por
+                // EM_PRODUCAO e fica deliberadamente fora do escopo desta checagem, mesmo precedente
+                // já usado por RN-NOVA-6 (ver DECISOES_V0.8.3.md).
+                List<ProducaoResumoResponse> vinculosOrfaos = new ArrayList<>();
+                List<String> producoesPendentes = new ArrayList<>();
+                for (OrcamentoProducao vinculo : orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId())) {
+                    Producao producaoVinculada = vinculo.getProducao();
+                    EstadoProducao estadoVinculado = producaoVinculada.getEstado();
+                    String identificadorVinculado = IdentificadorFormatter.formatar("PRD", producaoVinculada.getNumero());
+                    if (estadoVinculado == EstadoProducao.AGUARDANDO_INICIO || estadoVinculado == EstadoProducao.EM_ANDAMENTO
+                            || estadoVinculado == EstadoProducao.TRAVADA) {
+                        producoesPendentes.add(identificadorVinculado + " (" + estadoVinculado + ")");
+                    } else if (estadoVinculado == EstadoProducao.CANCELADA || estadoVinculado == EstadoProducao.NAO_REALIZADA) {
+                        ProducaoResumoResponse resumo = new ProducaoResumoResponse();
+                        resumo.setId(producaoVinculada.getId());
+                        resumo.setIdentificador(identificadorVinculado);
+                        resumo.setEstado(estadoVinculado);
+                        vinculosOrfaos.add(resumo);
+                    }
+                    // FINALIZADA — vínculo saudável, nenhuma ação.
+                }
+                if (!producoesPendentes.isEmpty()) {
+                    boolean varias = producoesPendentes.size() > 1;
+                    throw new BusinessException((varias ? "Produções " : "Produção ")
+                            + String.join(", ", producoesPendentes)
+                            + " ainda não " + (varias ? "foram finalizadas" : "foi finalizada") + ".");
+                }
+
                 List<OrcamentoItem> itensParaBaixa = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                 List<UUID> confirmados = request.getConfirmarEstoqueNegativoProdutoIds() != null
                         ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
@@ -827,11 +885,16 @@ public class OrcamentoService {
                             "Estoque insuficiente para " + String.join(", ", resultado.bloqueados())
                                     + ". Este(s) produto(s) não permite(m) estoque negativo.");
                 }
-                // RN-052 — algum produto ficaria negativo e ainda não foi confirmado: nada foi baixado,
-                // devolve o aviso para o usuário confirmar antes de reenviar.
-                if (!resultado.avisosPendentes().isEmpty()) {
+                // RN-052/RN-NOVA-20 — algum produto ficaria negativo e/ou há vínculo órfão ainda não
+                // confirmado: nada foi baixado, devolve os avisos para o usuário confirmar antes de
+                // reenviar. Os dois tipos de aviso coexistem na mesma resposta, sem um suprimir o outro.
+                // vinculosOrfaos só deixa de barrar quando confirmarVinculosOrfaos=true — diferente de
+                // avisosPendentes (que se esvazia sozinho ao confirmar os ids), o vínculo órfão não tem
+                // "id resolvido", só ciência agregada.
+                if (!resultado.avisosPendentes().isEmpty() || (!vinculosOrfaos.isEmpty() && !request.isConfirmarVinculosOrfaos())) {
                     ConfirmacaoEstoqueNegativoResponse resposta = new ConfirmacaoEstoqueNegativoResponse();
                     resposta.setAvisos(resultado.avisosPendentes());
+                    resposta.setVinculosOrfaos(vinculosOrfaos);
                     return resposta;
                 }
                 baixarEstoque(orcamento, itensParaBaixa);
@@ -968,8 +1031,34 @@ public class OrcamentoService {
      * chat (não estava na Spec original), ver {@code DECISOES_V0.8.2.md}. A reversão roda primeiro
      * (fail fast — nada é removido se a produção não estiver no estado certo); a linha de
      * {@code orcamento_producoes} só é apagada depois de a reversão ter sucesso.
+     *
+     * <p>Overload de 2 argumentos preserva o contrato original — {@code manterProdutos=false},
+     * comportamento 100% inalterado (inclusive a exceção lançada para produção fora de
+     * {@code AGUARDANDO_INICIO}).
      */
     public void desvincularProducao(UUID id, UUID producaoId) {
+        desvincularProducao(id, producaoId, false);
+    }
+
+    /**
+     * RN-NOVA-17 (V0.8.3, #375+308, P-S001c) — extensão opt-in de {@link #desvincularProducao(UUID, UUID)}
+     * para o caso "Sim, manter" (produção vinculada já {@code EM_ANDAMENTO}/{@code TRAVADA}): quando
+     * {@code manterProdutos=true} E a produção está num desses 2 estados, só a linha
+     * {@code OrcamentoProducao} é removida — produto, histórico (`ITEM_ADICIONADO`, append-only) e
+     * estoque continuam intocados. Remoções individuais de produto ("Não, remover", por produto) já
+     * aconteceram antes desta chamada, via {@link #removerProdutoDeProducaoAtiva} — esta chamada só
+     * fecha o vínculo em si, depois de todas as perguntas "por produto" resolvidas.
+     *
+     * <p>Deliberadamente um parâmetro opt-in em vez de generalizar o comportamento default: existe
+     * teste já verde (P-B017/V0.8.2) que trava o comportamento atual (lança {@code BusinessException}
+     * para qualquer estado fora de {@code AGUARDANDO_INICIO}) — {@code manterProdutos=false} preserva
+     * esse contrato ponta a ponta, sem mudança de comportamento para quem já chama sem o parâmetro.
+     * Produção em estado terminal ({@code FINALIZADA}/{@code CANCELADA}/{@code NAO_REALIZADA}) não é
+     * tratada por nenhum dos 2 caminhos — fora do escopo desta RN (ver nota de inferência em
+     * {@code DECISOES_V0.8.3.md}, P-S001c) — cai no `else` e herda a mensagem de erro de
+     * {@link ProducaoService#removerProdutosDeOrcamento}.
+     */
+    public void desvincularProducao(UUID id, UUID producaoId, boolean manterProdutos) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
@@ -978,9 +1067,33 @@ public class OrcamentoService {
                 .findByOrcamentoIdAndProducaoId(orcamento.getId(), producaoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Vínculo não encontrado"));
 
-        producaoService.removerProdutosDeOrcamento(producaoId, orcamento.getId(), usuarioId);
+        boolean producaoAtiva = vinculo.getProducao().getEstado() == EstadoProducao.EM_ANDAMENTO
+                || vinculo.getProducao().getEstado() == EstadoProducao.TRAVADA;
+
+        if (!(manterProdutos && producaoAtiva)) {
+            producaoService.removerProdutosDeOrcamento(producaoId, orcamento.getId(), usuarioId);
+        }
 
         orcamentoProducaoRepository.delete(vinculo);
+    }
+
+    /**
+     * RN-NOVA-17 (V0.8.3, #375+308, P-S001c) — "Não, remover": delega a
+     * {@link ProducaoService#removerProdutoDeProducaoAtiva}, mesma divisão de responsabilidade já
+     * usada por {@link #desvincularProducao(UUID, UUID)} (regra de estado/reversão de produto é de
+     * Produção, não de Orçamento). Não apaga a linha {@code OrcamentoProducao} — o vínculo em si só
+     * é desfeito depois, via {@link #desvincularProducao(UUID, UUID, boolean)} com
+     * {@code manterProdutos=true}, quando todas as perguntas "por produto" já foram resolvidas.
+     */
+    public void removerProdutoDeProducaoAtiva(UUID id, UUID producaoId, UUID produtoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+
+        orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producaoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Vínculo não encontrado"));
+
+        producaoService.removerProdutoDeProducaoAtiva(producaoId, produtoId, orcamento.getId(), usuarioId);
     }
 
     /**
@@ -1048,7 +1161,8 @@ public class OrcamentoService {
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
 
-        List<ProducaoProdutoRequest> produtos = produtosDoOrcamentoComoRequest(orcamento.getId());
+        List<ProducaoProdutoRequest> produtos = filtrarPorProdutoIds(
+                produtosDoOrcamentoComoRequest(orcamento.getId()), request.getProdutoIds());
         if (produtos.isEmpty()) {
             throw new BusinessException("Orçamento não tem itens para criar uma produção");
         }
@@ -1080,6 +1194,28 @@ public class OrcamentoService {
     }
 
     /**
+     * RN-NOVA-13 (V0.8.3, #375+308) — restringe a lista de produtos do orçamento a só os
+     * {@code produtoId} selecionados, quando o checkpoint (ou, futuramente, o checkbox de
+     * RN-NOVA-25) pede uma produção cobrindo só um subconjunto dos itens. {@code null} preserva o
+     * comportamento padrão (todos os itens — usado hoje por {@code ModalVincularProducao}); uma
+     * lista vazia explícita é sempre um erro de chamada fora do fluxo de UI esperado (o Frontend já
+     * desabilita a ação nesse caso, RN-NOVA-13 "caso composto") — nunca silenciosamente ignorada.
+     */
+    private List<ProducaoProdutoRequest> filtrarPorProdutoIds(List<ProducaoProdutoRequest> produtos,
+                                                                List<UUID> produtoIds) {
+        if (produtoIds == null) {
+            return produtos;
+        }
+        if (produtoIds.isEmpty()) {
+            throw new BusinessException("Selecione ao menos um item para criar a produção");
+        }
+        Set<UUID> selecionados = new HashSet<>(produtoIds);
+        return produtos.stream()
+                .filter(p -> selecionados.contains(p.getProdutoId()))
+                .toList();
+    }
+
+    /**
      * RN-NOVA-2 (V0.8.2) — checagem barata (sem consulta ao banco além do orçamento já carregado) das
      * duas primeiras condições de habilitação do atalho ENVIADO→FINALIZADO: sinal inativo e nenhum
      * prazo de produção informado. {@code prazoProducaoDias == null} é o único sinal confiável de "sem
@@ -1089,9 +1225,29 @@ public class OrcamentoService {
      * {@link #validarVinculoProducao} de propósito: RN-NOVA-6 se aplica só às duas transições que
      * persistem {@code status=EM_PRODUCAO}, e o atalho nunca passa por esse status — o atalho existe
      * justamente para quando a produção não é necessária.
+     *
+     * <p>RN-NOVA-19 (achado de P-A005, corrigido em P-B005, V0.8.3, #379) — a premissa acima
+     * ("produção não é necessária") nunca era verificada de fato, só assumida: um orçamento podia
+     * ganhar vínculo em {@code orcamento_producoes} (via {@link #vincularProducao}/
+     * {@link #criarProducaoVinculada}, nenhum dos dois exige status específico do orçamento,
+     * RN-ORC-VINC-01) e mesmo assim continuar elegível ao atalho, pulando {@code EM_PRODUCAO} e,
+     * com ele, o bloqueio/aviso de RN-NOVA-19/20 inteiro — sem erro, sem aviso. Corrigido
+     * acrescentando a 3ª condição: nenhum vínculo com produção em estado <b>não-terminal</b> (mesmo
+     * critério de RN-NOVA-19 — {@code AGUARDANDO_INICIO}/{@code EM_ANDAMENTO}/{@code TRAVADA}
+     * desqualificam o atalho; {@code FINALIZADA}/{@code CANCELADA}/{@code NAO_REALIZADA} não, por
+     * simetria com a regra irmã). Vínculo órfão ({@code CANCELADA}/{@code NAO_REALIZADA}) continua
+     * liberando o atalho, deliberadamente — RN-NOVA-20 é só um AVISO informativo (nunca bloqueio), e
+     * o atalho já pula por natureza vários passos/avisos intermediários do fluxo normal.
      */
     private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento) {
-        return !Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getPrazoProducaoDias() == null;
+        if (Boolean.TRUE.equals(orcamento.getSinalAtivo()) || orcamento.getPrazoProducaoDias() != null) {
+            return false;
+        }
+        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
+                .map(vinculo -> vinculo.getProducao().getEstado())
+                .noneMatch(estado -> estado == EstadoProducao.AGUARDANDO_INICIO
+                        || estado == EstadoProducao.EM_ANDAMENTO
+                        || estado == EstadoProducao.TRAVADA);
     }
 
     /**

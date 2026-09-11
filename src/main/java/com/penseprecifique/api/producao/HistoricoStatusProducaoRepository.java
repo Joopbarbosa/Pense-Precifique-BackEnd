@@ -22,4 +22,11 @@ public interface HistoricoStatusProducaoRepository extends JpaRepository<Histori
     // para calcular o saldo líquido por orçamento (ITEM_ADICIONADO - ITEM_REMOVIDO) antes de propagar.
     List<HistoricoStatusProducao> findByProducaoIdAndProdutoIdAndTipoEventoIn(
             UUID producaoId, UUID produtoId, List<TipoEventoHistoricoProducao> tiposEvento);
+
+    // RN-NOVA-17 (V0.8.3, #375+308) — linhas ITEM_ADICIONADO de UM produto específico contribuído
+    // por UM orçamento específico — granularidade usada pela remoção "por produto" em produção já
+    // EM_ANDAMENTO/TRAVADA (removerProdutoDeProducaoAtiva), diferente de
+    // findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento (todos os produtos daquele orçamento).
+    List<HistoricoStatusProducao> findByProducaoIdAndReferenciaOrcamentoIdAndProdutoIdAndTipoEvento(
+            UUID producaoId, UUID referenciaOrcamentoId, UUID produtoId, TipoEventoHistoricoProducao tipoEvento);
 }

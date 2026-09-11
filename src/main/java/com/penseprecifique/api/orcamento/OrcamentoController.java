@@ -50,15 +50,13 @@ public class OrcamentoController {
     }
 
     /**
-     * P-B008/#353 — {@code Pageable} passado ao Service/Repository para limitar o tamanho da
-     * consulta (tech debt, base de itens de catálogo crescendo sem bound); contrato HTTP
-     * inalterado — resposta continua array simples (não expõe metadados de paginação), decisão
-     * confirmada no Passo 0 para não quebrar o consumidor atual (`ItemSearch`/`orcamentoService.ts`,
-     * que espera `Promise<ItemCatalogoBuscaResponse[]>`), já que não há tarefa de Frontend neste
-     * pocket para ajustar esse contrato.
+     * RN-NOVA-18 (#353/P-B008) — devolve {@code Page<>} completo (mesmo formato padrão do Spring
+     * Data já usado em {@code listar()} acima) em vez do array simples de antes — breaking change
+     * confirmado seguro (único consumidor é `ItemSearch`, migrado no mesmo pocket). `size` default
+     * continua 8 (calibração de UI do painel, ORC-030), não os 20 de listagens completas.
      */
     @GetMapping("/itens-catalogo")
-    public ResponseEntity<List<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
+    public ResponseEntity<Page<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
             @RequestParam(required = false) UUID catalogoId,
             @RequestParam(required = false) String busca,
             @PageableDefault(size = 8) Pageable pageable) {
@@ -116,8 +114,22 @@ public class OrcamentoController {
     @DeleteMapping("/{id}/vincular-producao/{producaoId}")
     public ResponseEntity<Void> desvincularProducao(
             @PathVariable UUID id,
-            @PathVariable UUID producaoId) {
-        orcamentoService.desvincularProducao(id, producaoId);
+            @PathVariable UUID producaoId,
+            @RequestParam(required = false, defaultValue = "false") boolean manterProdutos) {
+        orcamentoService.desvincularProducao(id, producaoId, manterProdutos);
+        return ResponseEntity.noContent().build();
+    }
+
+    // RN-NOVA-17 (V0.8.3, #375+308) — "Não, remover": remove a contribuição de 1 produto numa
+    // produção já EM_ANDAMENTO/TRAVADA, sem reverter estoque. Não remove o vínculo em si — ver
+    // desvincularProducao(..., manterProdutos=true) para fechar o vínculo depois de resolvidas
+    // todas as perguntas "por produto".
+    @DeleteMapping("/{id}/vincular-producao/{producaoId}/produtos/{produtoId}")
+    public ResponseEntity<Void> removerProdutoDeProducaoAtiva(
+            @PathVariable UUID id,
+            @PathVariable UUID producaoId,
+            @PathVariable UUID produtoId) {
+        orcamentoService.removerProdutoDeProducaoAtiva(id, producaoId, produtoId);
         return ResponseEntity.noContent().build();
     }
 

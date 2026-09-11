@@ -141,10 +141,18 @@ public class ProducaoService {
         List<UUID> ids = idsPage.getContent();
         Map<UUID, Producao> porId = producaoRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Producao::getId, p -> p));
+
+        // RN-NOVA-16 (V0.8.3, #375+308, P-B002) — 1 query batched pra página inteira, nunca
+        // findByProducaoId por linha (evita replicar o N+1 já existente para produtos/histórico).
+        Map<UUID, List<OrcamentoProducao>> vinculosPorProducao = orcamentoProducaoRepository
+                .findByProducaoIdIn(ids).stream()
+                .collect(Collectors.groupingBy(v -> v.getProducao().getId()));
+
         List<ProducaoResponse> conteudo = ids.stream()
                 .map(porId::get)
                 .filter(Objects::nonNull)
-                .map(this::montarResponseComAlertas)
+                .map(producao -> montarResponseComAlertas(producao,
+                        vinculosPorProducao.getOrDefault(producao.getId(), List.of())))
                 .toList();
 
         return new PageImpl<>(conteudo, pageable, idsPage.getTotalElements());
@@ -179,11 +187,11 @@ public class ProducaoService {
      * #156 — historicoStatus também exposto aqui (mesma fonte de ProducaoDetalheResponse), pro front distinguir
      * TRAVADA_USUARIO/TRAVADA_SISTEMA sem precisar abrir o detalhe.
      */
-    private ProducaoResponse montarResponseComAlertas(Producao producao) {
+    private ProducaoResponse montarResponseComAlertas(Producao producao, List<OrcamentoProducao> orcamentosVinculados) {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
         return producaoMapper.toResponse(producao, produtos, calcularAlertasAoVivo(produtos), historico,
-                fichaTecnicaPorProduto(produtos));
+                fichaTecnicaPorProduto(produtos), orcamentosVinculados);
     }
 
     /** #238 — tag global fracionável/estoque negativo/estoque atual por produto da produção. */
@@ -324,7 +332,13 @@ public class ProducaoService {
 
         ProdutosValidados validados = validarEResolverProdutos(request.getProdutos(), usuarioId);
 
+        // P-B010 (V0.8.3) — flush explícito obrigatório aqui: sem ele, o DELETE fica só enfileirado
+        // no persistence context e a ActionQueue do Hibernate executa INSERTs antes de DELETEs no
+        // mesmo flush (independente da ordem no código-fonte). Sem o flush, editar mantendo um
+        // produtoId já existente reinsere a mesma linha antes de apagar a antiga, violando
+        // uq_producao_produto (UNIQUE(producao_id, produto_id), migration V35) com 500/ConstraintViolationException.
         producaoProdutoRepository.deleteAll(producaoProdutoRepository.findByProducaoId(producao.getId()));
+        producaoProdutoRepository.flush();
 
         producao.setDataInicio(dataInicio);
         producao.setDataTerminoPrevista(request.getDataTerminoPrevista());
@@ -697,6 +711,14 @@ public class ProducaoService {
      * positivo em pelo menos um produto da filha ganha um vínculo novo em {@code orcamento_producoes}
      * para a filha — o vínculo da produção-mãe original (que vira {@code NAO_REALIZADA}) permanece
      * intocado, nunca removido (mesmo padrão append-only: a divisão não é um desvincular).
+     *
+     * <p>RN-NOVA-21 (V0.8.3, #375+308, P-B004) — o {@code save()} final do vínculo é idempotente
+     * (checa existência antes de gravar): {@code dividir()} sempre chama este método 1x por filha
+     * (origem única, sem risco de colisão), mas {@code agrupar()} chama 1x **por origem** contra a
+     * **mesma** produção nova — se duas origens do agrupamento compartilharem um orçamento vinculado,
+     * a 2ª chamada tentaria inserir a mesma linha `(orcamento_id, producao_id)` de novo, violando
+     * {@code UNIQUE(orcamento_id, producao_id)}. A checagem aqui resolve a deduplicação **entre**
+     * chamadas sem mudar a assinatura do método nem afetar o comportamento de {@code dividir()}.
      */
     private void propagarOrigemParaFilha(Producao origem, Producao filha, List<ProducaoProduto> produtosOrigem) {
         Map<UUID, Orcamento> orcamentosParaVincular = new LinkedHashMap<>();
@@ -734,10 +756,12 @@ public class ProducaoService {
         }
 
         for (Orcamento orcamento : orcamentosParaVincular.values()) {
-            orcamentoProducaoRepository.save(OrcamentoProducao.builder()
-                    .orcamento(orcamento)
-                    .producao(filha)
-                    .build());
+            if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), filha.getId()).isEmpty()) {
+                orcamentoProducaoRepository.save(OrcamentoProducao.builder()
+                        .orcamento(orcamento)
+                        .producao(filha)
+                        .build());
+            }
         }
     }
 
@@ -899,6 +923,16 @@ public class ProducaoService {
                     .build());
         }
 
+        // RN-NOVA-21 (V0.8.3, #375+308, P-B004) — propaga o(s) vínculo(s) de orcamento_producoes das
+        // produções de origem para a nova, mesmo mecanismo de dividir()/propagarOrigemParaFilha() —
+        // 1 chamada por origem (não por produto consolidado, que já perdeu a proveniência por origem
+        // em consolidarProdutos()), usando os ProducaoProduto reais de cada origem, ainda intocados
+        // (só transicionam para NAO_REALIZADA no Passo 4 abaixo, sem apagar suas linhas).
+        for (Producao origem : originais) {
+            List<ProducaoProduto> produtosDaOrigem = producaoProdutoRepository.findByProducaoId(origem.getId());
+            propagarOrigemParaFilha(origem, nova, produtosDaOrigem);
+        }
+
         // Passo 3 — leva a nova produção até o estado de destino.
         if (request.getEstadoDestino() == EstadoProducao.AGUARDANDO_INICIO) {
             registrarNascimento(nova, EstadoProducao.AGUARDANDO_INICIO, OrigemHistoricoStatus.USUARIO, request.getJustificativa());
@@ -971,8 +1005,9 @@ public class ProducaoService {
         List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(producao.getId());
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
         List<Producao> producoesFilhas = producaoRepository.findByProducaoOrigemId(producao.getId());
+        List<OrcamentoProducao> orcamentosVinculados = orcamentoProducaoRepository.findByProducaoId(producao.getId());
         return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas,
-                fichaTecnicaPorProduto(produtos));
+                fichaTecnicaPorProduto(produtos), orcamentosVinculados);
     }
 
     /** Componente (insumo ou produto-base) com a necessidade já somada entre todos os produtos da produção. */
@@ -1388,6 +1423,64 @@ public class ProducaoService {
                     .origem(OrigemHistoricoStatus.USUARIO)
                     .build());
         }
+    }
+
+    /**
+     * RN-NOVA-17 (V0.8.3, #375+308, P-S001c) — "Não, remover": remove a contribuição de UM produto
+     * específico feita por UM orçamento, numa produção já {@code EM_ANDAMENTO}/{@code TRAVADA}
+     * (insumo já baixado, trabalho físico em andamento — {@link #removerProdutosDeOrcamento} já não
+     * aceita mais neste ponto, RN-PROD-VINC-02). Mecanismo <b>novo e deliberadamente independente</b>
+     * de {@link #adicionarProdutosDeOrcamento}/{@link #editarProducao} — não reaproveita nem
+     * contorna a trava de {@code AGUARDANDO_INICIO} desses dois métodos, é um terceiro caminho com
+     * validação de estado própria (exige exatamente o oposto: {@code EM_ANDAMENTO}/{@code TRAVADA}).
+     *
+     * <p><b>AVISO, nunca BLOQUEIO</b> (decisão do usuário, P-S001c) — remove a linha
+     * {@code ProducaoProduto} (piso zero, mesmo padrão de {@link #removerProdutosDeOrcamento}) e
+     * registra {@code ITEM_REMOVIDO}, mas <b>nunca dispara movimentação de estoque</b>: o insumo já
+     * baixado permanece baixado, mesmo padrão-default já usado por {@code aplicarConsumoReal()}/
+     * RN-072 ("ausência de declaração de consumo real = consumo total assumido, sem estorno").
+     */
+    public void removerProdutoDeProducaoAtiva(UUID producaoId, UUID produtoId, UUID referenciaOrcamentoId,
+                                               UUID usuarioId) {
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (producao.getEstado() != EstadoProducao.EM_ANDAMENTO && producao.getEstado() != EstadoProducao.TRAVADA) {
+            throw new BusinessException("Esta remoção só se aplica a produções em andamento ou travadas — "
+                    + "produções aguardando início usam o desvincular normal, que reverte o produto");
+        }
+
+        List<HistoricoStatusProducao> adicionados = historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndProdutoIdAndTipoEvento(
+                        producaoId, referenciaOrcamentoId, produtoId, TipoEventoHistoricoProducao.ITEM_ADICIONADO);
+        if (adicionados.isEmpty()) {
+            throw new ResourceNotFoundException("Este orçamento não contribuiu com este produto nesta produção");
+        }
+
+        BigDecimal quantidadeContribuida = adicionados.stream()
+                .map(HistoricoStatusProducao::getQuantidade)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        ProducaoProduto producaoProduto = producaoProdutoRepository
+                .findByProducaoIdAndProdutoId(producaoId, produtoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado nesta produção"));
+
+        BigDecimal restante = producaoProduto.getQuantidade().subtract(quantidadeContribuida).max(BigDecimal.ZERO);
+        if (restante.compareTo(BigDecimal.ZERO) == 0) {
+            producaoProdutoRepository.delete(producaoProduto);
+        } else {
+            producaoProduto.setQuantidade(restante);
+            producaoProdutoRepository.save(producaoProduto);
+        }
+
+        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                .producao(producao)
+                .tipoEvento(TipoEventoHistoricoProducao.ITEM_REMOVIDO)
+                .produto(adicionados.get(0).getProduto())
+                .quantidade(quantidadeContribuida)
+                .referenciaOrcamento(adicionados.get(0).getReferenciaOrcamento())
+                .origem(OrigemHistoricoStatus.USUARIO)
+                .build());
     }
 
     /**

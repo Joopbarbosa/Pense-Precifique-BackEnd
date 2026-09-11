@@ -1,17 +1,25 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoDetalheResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -30,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * P-B006/RN-NOVA-2/RN-NOVA-3 (V0.8.2) — RN-NOVA-3 substitui a obrigatoriedade incondicional de
@@ -47,9 +56,13 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired ProducaoRepository producaoRepository;
+    @Autowired InsumoRepository insumoRepository;
+    @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
 
     private Usuario usuario;
     private Cliente cliente;
+    private int proximoNumeroProducao = 1;
 
     private void seedUsuarioECliente() {
         usuario = usuarioRepository.save(Usuario.builder()
@@ -196,5 +209,182 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
 
         Produto atualizado = produtoRepository.findById(produto.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("-7").compareTo(atualizado.getEstoqueAtual()));
+    }
+
+    private void vincular(UUID orcamentoId, Producao producao) {
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        orcamentoService.vincularProducao(orcamentoId, req);
+    }
+
+    /** vincularProducao() exige ficha técnica + rendimento válidos (RN-PROD-VINC-01) — o
+     * novoProduto() padrão deste arquivo não tem isso, porque nenhum teste pré-existente aqui
+     * precisava vincular produção. Helper próprio só para os testes de vínculo desta tarefa. */
+    private Produto produtoComFichaTecnica(String nome, int numero, BigDecimal estoqueAtual, boolean permitirEstoqueNegativo) {
+        Produto produto = produtoRepository.save(Produto.builder()
+                .usuario(usuario).numero(numero).nome(nome).tipo(TipoProduto.PRODUTO)
+                .tempoProducao(30).estoqueAtual(estoqueAtual).permitirEstoqueNegativo(permitirEstoqueNegativo)
+                .rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
+        Insumo insumo = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida("g")
+                .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
+                .build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produto).insumo(insumo).quantidade(new BigDecimal("1")).build());
+        return produto;
+    }
+
+    /** vincularProducao() só aceita produção AGUARDANDO_INICIO (adicionarProdutosDeOrcamento) — a
+     * produção precisa nascer nesse estado, ser vinculada, e só DEPOIS transicionar pro estado que
+     * o teste quer simular (a ordem inversa faz o próprio vincular falhar). */
+    private Producao criarProducaoVinculada(UUID orcamentoId, EstadoProducao estadoFinal) {
+        Producao producao = producaoRepository.save(
+                Producao.builder().usuario(usuario).numero(proximoNumeroProducao++).build());
+        vincular(orcamentoId, producao);
+        if (estadoFinal != EstadoProducao.AGUARDANDO_INICIO) {
+            producao.setEstado(estadoFinal);
+            producao = producaoRepository.save(producao);
+        }
+        return producao;
+    }
+
+    /**
+     * RN-NOVA-19 (achado de P-A005, corrigido em P-B005, V0.8.3, #379) — vínculo com produção
+     * não-terminal desqualifica o atalho, mesmo com sinal inativo e sem prazo (as 2 condições
+     * antigas continuariam batendo). Exemplo numérico do prompt de execução: checkpoint vincula
+     * Produção X (RN-NOVA-13) enquanto ainda RASCUNHO, antes de avançar pra ENVIADO.
+     */
+    @Test
+    void vinculoComProducaoAguardandoInicioDesqualificaAtalho() {
+        seedUsuarioECliente();
+        Produto produto = produtoComFichaTecnica("Produto Vinculado", 8, new BigDecimal("100"), true);
+        UUID id = orcamentoService.criar(montarRequest(produto, 10, false, false, null)).getId();
+        criarProducaoVinculada(id, EstadoProducao.AGUARDANDO_INICIO);
+        orcamentoService.avancarStatus(id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus(),
+                "vínculo não-terminal desqualifica o atalho — segue fluxo normal, não pula pra FINALIZADO");
+
+        Produto inalterado = produtoRepository.findById(produto.getId()).orElseThrow();
+        assertEquals(0, new BigDecimal("100").compareTo(inalterado.getEstoqueAtual()), "atalho não rodou, nada foi baixado");
+    }
+
+    /** Mesmo critério para EM_ANDAMENTO (não só AGUARDANDO_INICIO). */
+    @Test
+    void vinculoComProducaoEmAndamentoDesqualificaAtalho() {
+        seedUsuarioECliente();
+        Produto produto = produtoComFichaTecnica("Produto Vinculado EM_ANDAMENTO", 9, new BigDecimal("100"), true);
+        UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
+        criarProducaoVinculada(id, EstadoProducao.EM_ANDAMENTO);
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus());
+    }
+
+    /** Mesmo critério para TRAVADA. */
+    @Test
+    void vinculoComProducaoTravadaDesqualificaAtalho() {
+        seedUsuarioECliente();
+        Produto produto = produtoComFichaTecnica("Produto Vinculado TRAVADA", 10, new BigDecimal("100"), true);
+        UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
+        criarProducaoVinculada(id, EstadoProducao.TRAVADA);
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus());
+    }
+
+    /** RN-NOVA-19, caso feliz: vínculo com produção já FINALIZADA NÃO desqualifica — atalho
+     * continua funcionando normalmente (por simetria com RN-NOVA-19, que também não bloqueia aqui). */
+    @Test
+    void vinculoComProducaoFinalizadaNaoDesqualificaAtalho() {
+        seedUsuarioECliente();
+        Produto produto = produtoComFichaTecnica("Produto Vinculado FINALIZADA", 11, new BigDecimal("100"), true);
+        UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
+        criarProducaoVinculada(id, EstadoProducao.FINALIZADA);
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus(), "vínculo terminal-feliz não desqualifica o atalho");
+    }
+
+    /** RN-NOVA-19/20, vínculo órfão: produção CANCELADA também NÃO desqualifica o atalho —
+     * decisão deliberada (RN-NOVA-20 é só aviso informativo, o atalho pula esse mecanismo por
+     * natureza, mesmo espírito de "produção não é necessária"). */
+    @Test
+    void vinculoComProducaoCanceladaOrfaNaoDesqualificaAtalho() {
+        seedUsuarioECliente();
+        Produto produto = produtoComFichaTecnica("Produto Vinculado CANCELADA", 12, new BigDecimal("100"), true);
+        UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
+        criarProducaoVinculada(id, EstadoProducao.CANCELADA);
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus(), "vínculo órfão não desqualifica o atalho, deliberadamente");
+    }
+
+    /** Mesmo critério para NAO_REALIZADA (outro estado terminal-órfão). */
+    @Test
+    void vinculoComProducaoNaoRealizadaNaoDesqualificaAtalho() {
+        seedUsuarioECliente();
+        Produto produto = produtoComFichaTecnica("Produto Vinculado NAO_REALIZADA", 13, new BigDecimal("100"), true);
+        UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
+        criarProducaoVinculada(id, EstadoProducao.NAO_REALIZADA);
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
+    }
+
+    /** Sem vínculo nenhum — regressão: atalho continua elegível normalmente (já coberto por
+     * atalhoCompletoPulaDiretoParaFinalizado, mas reconfirmado aqui explicitamente com
+     * orcamentoProducaoRepository ausente de propósito, ver Passo 0 desta tarefa). */
+    @Test
+    void semVinculoAtalhoContinuaElegivel() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto("Produto Sem Vinculo Nenhum", 14, new BigDecimal("100"), true);
+        UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
+    }
+
+    /** Depois de desqualificado o atalho por vínculo ativo, o fluxo normal continua protegido por
+     * RN-NOVA-19 até a produção vinculada finalizar — não requer código novo, só confirma a
+     * integração entre as duas correções (P-B004 + P-B005). */
+    @Test
+    void aposDesqualificarAtalhoFluxoNormalRespeitaRnNova19AteProducaoFinalizar() {
+        seedUsuarioECliente();
+        Produto produto = produtoComFichaTecnica("Produto Fluxo Normal Protegido", 15, new BigDecimal("100"), true);
+        UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
+        Producao producaoX = criarProducaoVinculada(id, EstadoProducao.EM_ANDAMENTO);
+
+        // ENVIADO -> APROVADO (atalho desqualificado)
+        orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        // APROVADO -> EM_PRODUCAO (sinal inativo)
+        orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+
+        // EM_PRODUCAO -> FINALIZADO deve ser bloqueado por RN-NOVA-19 (produção ainda EM_ANDAMENTO)
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> orcamentoService.avancarStatus(id, new AvancaStatusRequest()));
+        assertTrue(ex.getMessage().contains("ainda não foi finalizada"));
+
+        producaoX.setEstado(EstadoProducao.FINALIZADA);
+        producaoRepository.save(producaoX);
+
+        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
+        assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
     }
 }
