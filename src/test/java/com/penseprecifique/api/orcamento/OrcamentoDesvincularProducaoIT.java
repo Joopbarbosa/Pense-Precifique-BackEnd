@@ -2,10 +2,12 @@ package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
+import com.penseprecifique.api.producao.ProducaoService;
 import com.penseprecifique.api.producao.HistoricoStatusProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
@@ -17,12 +19,14 @@ import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -48,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrcamentoDesvincularProducaoIT {
 
     @Autowired OrcamentoService orcamentoService;
+    @Autowired ProducaoService producaoService;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -57,6 +62,7 @@ class OrcamentoDesvincularProducaoIT {
     @Autowired ProducaoProdutoRepository producaoProdutoRepository;
     @Autowired HistoricoStatusProducaoRepository historicoStatusProducaoRepository;
     @Autowired OrcamentoProducaoRepository orcamentoProducaoRepository;
+    @Autowired MovimentacaoInsumoRepository movimentacaoInsumoRepository;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -228,5 +234,131 @@ class OrcamentoDesvincularProducaoIT {
 
         assertThrows(ResourceNotFoundException.class,
                 () -> orcamentoService.desvincularProducao(orcamentoId, producao.getId()));
+    }
+
+    /** RN-NOVA-17 (V0.8.3, #375+308, P-S001c) — "Sim, manter": produção EM_ANDAMENTO,
+     * manterProdutos=true remove só o vínculo — produto e histórico continuam intactos. */
+    @Test
+    void desvincularComManterProdutosEmProducaoEmAndamentoRemoveSoOVinculo() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 4);
+        Producao producao = novaProducao();
+        vincular(orcamentoId, producao);
+        producaoService.iniciar(producao.getId(), new IniciarProducaoRequest());
+
+        orcamentoService.desvincularProducao(orcamentoId, producao.getId(), true);
+
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamentoId, producao.getId()).isEmpty(),
+                "vínculo deve ser removido");
+        ProducaoProduto inalterado = producaoProdutoRepository
+                .findByProducaoIdAndProdutoId(producao.getId(), produto.getId()).orElseThrow();
+        assertEquals(0, new BigDecimal("4").compareTo(inalterado.getQuantidade()),
+                "produto deve continuar intacto na produção — vira item avulso, sem vínculo ativo");
+        List<HistoricoStatusProducao> removidos = historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento(
+                        producao.getId(), orcamentoId, TipoEventoHistoricoProducao.ITEM_REMOVIDO);
+        assertTrue(removidos.isEmpty(), "histórico ITEM_ADICIONADO permanece intacto — nenhum ITEM_REMOVIDO gerado por este caminho");
+    }
+
+    /** RN-NOVA-17 — mesma garantia para TRAVADA (mesma restrição de estado de EM_ANDAMENTO). */
+    @Test
+    void desvincularComManterProdutosEmProducaoTravadaRemoveSoOVinculo() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 2);
+        Producao producao = novaProducao();
+        vincular(orcamentoId, producao);
+        producao.setEstado(EstadoProducao.TRAVADA);
+        producaoRepository.save(producao);
+
+        orcamentoService.desvincularProducao(orcamentoId, producao.getId(), true);
+
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamentoId, producao.getId()).isEmpty());
+        assertTrue(producaoProdutoRepository.findByProducaoIdAndProdutoId(producao.getId(), produto.getId()).isPresent(),
+                "produto continua na produção travada");
+    }
+
+    /** RN-NOVA-17 — manterProdutos=true não tem efeito em AGUARDANDO_INICIO: reversão completa normal. */
+    @Test
+    void manterProdutosNaoTemEfeitoEmAguardandoInicio() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 3);
+        Producao producao = novaProducao();
+        vincular(orcamentoId, producao);
+
+        orcamentoService.desvincularProducao(orcamentoId, producao.getId(), true);
+
+        assertTrue(producaoProdutoRepository.findByProducaoIdAndProdutoId(producao.getId(), produto.getId()).isEmpty(),
+                "AGUARDANDO_INICIO sempre reverte de verdade, independente da flag manterProdutos");
+    }
+
+    /** RN-NOVA-17 — "Não, remover": remove a contribuição de 1 produto em produção ativa, sem
+     * mexer em estoque (nenhuma movimentação nova) e sem apagar o vínculo em si. */
+    @Test
+    void removerProdutoDeProducaoAtivaRemoveSemMexerEmEstoqueNemNoVinculo() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        Insumo insumo = fichaTecnicaItemRepository.findByProdutoId(produto.getId()).get(0).getInsumo();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 4);
+        Producao producao = novaProducao();
+        vincular(orcamentoId, producao);
+        producaoService.iniciar(producao.getId(), new IniciarProducaoRequest());
+
+        BigDecimal estoqueAposIniciar = insumoRepository.findById(insumo.getId()).orElseThrow().getEstoqueAtual();
+        int movimentacoesAntes = movimentacaoInsumoRepository
+                .findByReferenciaIdAndReferenciaTipo(producao.getId(), ReferenciaMovimentacaoTipo.PRODUCAO).size();
+
+        orcamentoService.removerProdutoDeProducaoAtiva(orcamentoId, producao.getId(), produto.getId());
+
+        assertTrue(producaoProdutoRepository.findByProducaoIdAndProdutoId(producao.getId(), produto.getId()).isEmpty(),
+                "ProducaoProduto deve ser removido (piso zero, mesma contribuição do único orçamento)");
+
+        List<HistoricoStatusProducao> removidos = historicoStatusProducaoRepository
+                .findByProducaoIdAndReferenciaOrcamentoIdAndTipoEvento(
+                        producao.getId(), orcamentoId, TipoEventoHistoricoProducao.ITEM_REMOVIDO);
+        assertEquals(1, removidos.size());
+        assertEquals(produto.getId(), removidos.get(0).getProduto().getId());
+        assertEquals(0, new BigDecimal("4").compareTo(removidos.get(0).getQuantidade()));
+
+        BigDecimal estoqueDepois = insumoRepository.findById(insumo.getId()).orElseThrow().getEstoqueAtual();
+        assertEquals(0, estoqueAposIniciar.compareTo(estoqueDepois),
+                "estoque já baixado por iniciar() permanece baixado — sem estorno (RN-072)");
+        int movimentacoesDepois = movimentacaoInsumoRepository
+                .findByReferenciaIdAndReferenciaTipo(producao.getId(), ReferenciaMovimentacaoTipo.PRODUCAO).size();
+        assertEquals(movimentacoesAntes, movimentacoesDepois, "nenhuma movimentação de estoque nova deve ser criada");
+
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamentoId, producao.getId()).isPresent(),
+                "o vínculo em si não é afetado — só a contribuição do produto");
+    }
+
+    /** RN-NOVA-17 — remoção por produto é rejeitada em AGUARDANDO_INICIO (esse caso usa o desvincular normal). */
+    @Test
+    void removerProdutoDeProducaoAtivaRejeitaProducaoAguardandoInicio() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produto, 2);
+        Producao producao = novaProducao();
+        vincular(orcamentoId, producao);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> orcamentoService.removerProdutoDeProducaoAtiva(orcamentoId, producao.getId(), produto.getId()));
+        assertTrue(ex.getMessage().toLowerCase().contains("aguardando"));
+    }
+
+    /** RN-NOVA-17 — orçamento que não contribuiu com aquele produto naquela produção lança ResourceNotFoundException. */
+    @Test
+    void removerProdutoDeProducaoAtivaLancaResourceNotFoundParaProdutoNaoContribuido() {
+        seedUsuarioECliente();
+        Produto produtoA = novoProduto();
+        Produto produtoB = novoProduto();
+        UUID orcamentoId = criarOrcamentoComProduto(produtoA, 2);
+        Producao producao = novaProducao();
+        vincular(orcamentoId, producao);
+        producaoService.iniciar(producao.getId(), new IniciarProducaoRequest());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> orcamentoService.removerProdutoDeProducaoAtiva(orcamentoId, producao.getId(), produtoB.getId()));
     }
 }

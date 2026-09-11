@@ -94,9 +94,10 @@ public class OrcamentoMapper {
             response.setCatalogoIdentificador(
                     IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero()));
             response.setCatalogoNome(item.getItemCatalogo().getCatalogo().getNome());
-        } else {
-            response.setMargemAplicada(item.getMargemAplicada());
         }
+        // ORC-020 (REVISÃO)/RN-NOVA-23 (#313) — margemAplicada volta a ser exposta nas duas origens,
+        // não só na avulsa (achado do Passo 0: mapper restringia a leitura só ao branch else).
+        response.setMargemAplicada(item.getMargemAplicada());
         response.setQuantidade(item.getQuantidade());
         response.setPrecoUnitario(item.getPrecoUnitario());
         response.setSubtotal(item.getSubtotal());

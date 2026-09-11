@@ -37,4 +37,12 @@ public class AvancaStatusRequest {
     // (fluxo normal), ignorando a checagem de elegibilidade. Default false/ausente preserva o
     // comportamento existente (atalho aplica automaticamente quando elegível).
     private boolean ignorarAtalhoAprovacaoDireta;
+
+    // RN-NOVA-20 (V0.8.3, #375+308, P-B004) — ciência de vínculo(s) órfão(s) (produção CANCELADA/
+    // NAO_REALIZADA ainda referenciada em orcamento_producoes) ao avançar EM_PRODUCAO → FINALIZADO.
+    // Aviso agregado (todos os vínculos órfãos de uma vez, não sequencial) — diferente de
+    // confirmarEstoqueNegativoProdutoIds (lista de ids), aqui é um único boolean porque não há
+    // decisão por vínculo, só ciência. Default false/ausente preserva o comportamento de sempre
+    // devolver o aviso na 1ª chamada quando houver vínculo órfão.
+    private boolean confirmarVinculosOrfaos;
 }

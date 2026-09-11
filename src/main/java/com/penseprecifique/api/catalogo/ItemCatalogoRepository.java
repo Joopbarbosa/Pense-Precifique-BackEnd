@@ -25,8 +25,9 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
      * RN-044/045/046 — busca para a Seção Itens do orçamento: exclui itens de catálogo
      * desativado (RN-046) e itens cujo produto esteja inativo ou excluído (RN-045).
      * P-B008/#353 — {@code Pageable} evita servir a base inteira sem limite conforme o catálogo
-     * cresce (mesmo padrão de {@code ProdutoRepository#buscar}); Service/Controller extraem só o
-     * conteúdo da página, contrato HTTP inalterado (ver {@code ItemCatalogoService#buscarParaOrcamento}).
+     * cresce (mesmo padrão de {@code ProdutoRepository#buscar}); desde RN-NOVA-18 (#353/P-B008), a
+     * {@code Page<>} completa é devolvida pelo contrato HTTP (ver {@code
+     * ItemCatalogoService#buscarParaOrcamento}), não só o conteúdo.
      */
     @Query("""
         SELECT ic FROM ItemCatalogo ic
