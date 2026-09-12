@@ -3,7 +3,7 @@
 > Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`. Projeto pré-produção
 > (primeiro deploy estável com usuários reais = v1). Caminho:
 > `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Última atualização: 05/09/2026 (P-DIETA-002, Retomada V0.8.3) · Branch padrão atual: `feature/V0.8.3`
+> Última atualização: 12/09/2026 (Retomada V0.9.0) · Branch padrão atual: `feature/V0.9.0`
 > Se este arquivo e o prompt da sessão divergirem, este arquivo vence.
 >
 > Histórico de versões (V0.5 a V0.8.2) migrado para os `regras-*.md`/`decisoes-*.md` de cada
@@ -171,6 +171,14 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   declarado explicitamente; produção sem produto nenhum some silenciosamente do resultado. Ao
   navegar uma associação a partir de um `LEFT JOIN`, declarar `LEFT JOIN` no segundo salto também,
   nunca confiar em inferência.
+- **Mapeamento de exceção para status HTTP correto** (canônico: `shared/exception/
+  GlobalExceptionHandler.java`, RN-085 em `DECISOES_GLOBAIS.md`, V0.9.0/#421) — todo
+  `@ExceptionHandler` novo segue o contrato: erro de validação de payload/parâmetro → 400,
+  recurso não encontrado → 404, qualquer coisa fora desses casos e genuinamente inesperada → 500
+  com mensagem genérica (nunca vazar stack trace). Achado do gate `seguranca-resiliencia`
+  (fuzzing): parâmetro de path/query com tipo incompatível (`MethodArgumentTypeMismatchException`)
+  não estava coberto e caía no handler genérico — ao adicionar handler novo, sempre checar contra
+  esse contrato antes de deixar algo cair no `Exception.class` por omissão.
 
 ---
 
