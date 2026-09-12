@@ -11,6 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -98,6 +99,48 @@ public class GlobalExceptionHandler {
         log.warn("Parâmetro de consulta inválido", ex);
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(
                 "Parâmetro de consulta inválido.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
+    /**
+     * #421 — achado da skill seguranca-resiliencia (Fase 5/Schemathesis, RN-NOVA-1
+     * em DECISOES_V0.9.0.md): parâmetro de path/query com tipo incompatível (ex.:
+     * {@code @PathVariable UUID} recebendo "0" ou texto arbitrário) lançava
+     * {@code MethodArgumentTypeMismatchException}, não coberta antes, caindo no
+     * handler genérico e devolvendo 500 em vez de 400. Mensagem propositalmente
+     * genérica — não expõe o tipo Java esperado ao cliente.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        log.warn("Parâmetro de path/query com tipo inválido: {}", ex.getName());
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Valor inválido para o parâmetro '" + ex.getName() + "'.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
+    /**
+     * #455 — achado residual do gate seguranca-resiliencia ao validar #421 (contagem de 500 caiu
+     * de 87/87 para 1/87, este era o 1 restante). Causa raiz confirmada via log real: valor de
+     * query param com sequência percent-encoded malformada (ex. {@code sort=%v}, hex inválido
+     * após {@code %}) faz {@code StringUtils.uriDecode} do Spring lançar
+     * {@code IllegalArgumentException} dentro de {@code SortHandlerMethodArgumentResolver} —
+     * ANTES do controller, nem chega na allowlist de {@code PageableOrdenacaoResolver}. Handler
+     * genérico o bastante pra cobrir esse caso, mas não indiscriminado: nenhum código de aplicação
+     * deste projeto lança {@code IllegalArgumentException} sem capturar internamente
+     * (confirmado — os únicos 2 usos, em {@code JwtTokenProvider}/{@code OrcamentoService}, já
+     * têm catch local) — não há caso legítimo hoje em que isso mascare um bug real de negócio.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponseDTO> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Parâmetro de requisição inválido (IllegalArgumentException)", ex);
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Parâmetro de requisição inválido.",
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
                 null
