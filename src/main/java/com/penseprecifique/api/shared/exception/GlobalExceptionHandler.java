@@ -124,6 +124,29 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    /**
+     * #455 — achado residual do gate seguranca-resiliencia ao validar #421 (contagem de 500 caiu
+     * de 87/87 para 1/87, este era o 1 restante). Causa raiz confirmada via log real: valor de
+     * query param com sequência percent-encoded malformada (ex. {@code sort=%v}, hex inválido
+     * após {@code %}) faz {@code StringUtils.uriDecode} do Spring lançar
+     * {@code IllegalArgumentException} dentro de {@code SortHandlerMethodArgumentResolver} —
+     * ANTES do controller, nem chega na allowlist de {@code PageableOrdenacaoResolver}. Handler
+     * genérico o bastante pra cobrir esse caso, mas não indiscriminado: nenhum código de aplicação
+     * deste projeto lança {@code IllegalArgumentException} sem capturar internamente
+     * (confirmado — os únicos 2 usos, em {@code JwtTokenProvider}/{@code OrcamentoService}, já
+     * têm catch local) — não há caso legítimo hoje em que isso mascare um bug real de negócio.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponseDTO> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Parâmetro de requisição inválido (IllegalArgumentException)", ex);
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Parâmetro de requisição inválido.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDTO> handleGenericException(Exception ex) {
         log.error("Erro interno não tratado", ex);
