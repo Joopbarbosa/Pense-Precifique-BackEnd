@@ -11,6 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -98,6 +99,25 @@ public class GlobalExceptionHandler {
         log.warn("Parâmetro de consulta inválido", ex);
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(
                 "Parâmetro de consulta inválido.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
+    /**
+     * #421 — achado da skill seguranca-resiliencia (Fase 5/Schemathesis, RN-NOVA-1
+     * em DECISOES_V0.9.0.md): parâmetro de path/query com tipo incompatível (ex.:
+     * {@code @PathVariable UUID} recebendo "0" ou texto arbitrário) lançava
+     * {@code MethodArgumentTypeMismatchException}, não coberta antes, caindo no
+     * handler genérico e devolvendo 500 em vez de 400. Mensagem propositalmente
+     * genérica — não expõe o tipo Java esperado ao cliente.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        log.warn("Parâmetro de path/query com tipo inválido: {}", ex.getName());
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Valor inválido para o parâmetro '" + ex.getName() + "'.",
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
                 null
