@@ -27,6 +27,61 @@
         <lombok.version>1.18.38</lombok.version>
     </properties>
 
+    <!--
+        OP #419 — spring-boot-starter-parent:3.3.5 gerencia versões com CVEs HIGH/CRITICAL
+        conhecidos (achado da skill seguranca-resiliencia, OSV-Scanner). A branch 3.3.x do
+        Spring Boot atingiu EOL (30/06/2025) — não haverá patch 3.3.x futuro que resolva isso,
+        forçar aqui é a única via enquanto o projeto não migra para uma branch ainda mantida
+        (3.4/3.5). Overrides confirmados compatíveis com Servlet 6.0/Jakarta EE 10 (linha
+        10.1.x do Tomcat) e semver do Jackson (2.15.4 -> 2.18.10, mesma major 2.x).
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- Tomcat embarcado: 10.1.31 -> 10.1.55+ corrige GHSA-5m62-pw8w-7w9f (CRITICAL)
+                 e demais CVEs HIGH/CRITICAL da rodada. Os 3 artefatos embed precisam da
+                 mesma versão. -->
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-core</artifactId>
+                <version>10.1.55</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
+                <version>10.1.55</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-websocket</artifactId>
+                <version>10.1.55</version>
+            </dependency>
+            <!-- jackson-core/-databind/-annotations -> 2.18.10 (última patch da linha 2.18,
+                 corrige CVE-2026-59888/59889/68497 HIGH). Os 3 módulos Jackson precisam da
+                 mesma versão entre si. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.18.10</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>2.18.10</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>2.18.10</version>
+            </dependency>
+            <!-- json-smart HIGH (DoS, CVE-2023-1370/CVE-2024-57699) -> 2.5.2 corrige. -->
+            <dependency>
+                <groupId>net.minidev</groupId>
+                <artifactId>json-smart</artifactId>
+                <version>2.5.2</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!-- Web -->
         <dependency>
