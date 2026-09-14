@@ -48,8 +48,10 @@ public class DashboardService {
 
         long totalOrcamentos = orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(uid);
         long pendentes = orcamentoRepository.countByUsuarioIdAndStatusInAndDeletedAtIsNull(uid, PENDENTES);
-        BigDecimal receitaTotal = orcamentoRepository.sumTotalByStatus(uid, StatusOrcamento.PAGO);
-        BigDecimal receitaMes = orcamentoRepository.sumTotalByStatusAndPeriodo(uid, StatusOrcamento.PAGO, inicioMes, inicioProximoMes);
+        // DT-NOVA-4 (V0.10.0, #466) — dataPagamento (não status = PAGO) já reflete "foi pago
+        // alguma vez", correto mesmo depois do orçamento avançar pra ENTREGUE (RN-NOVA-10).
+        BigDecimal receitaTotal = orcamentoRepository.sumTotalPago(uid);
+        BigDecimal receitaMes = orcamentoRepository.sumTotalPagoNoPeriodo(uid, inicioMes, inicioProximoMes);
 
         List<ProdutoVendidoDTO> produtosMaisVendidos = orcamentoItemRepository
                 .findTopProdutosMaisVendidos(uid, PageRequest.of(0, 5))

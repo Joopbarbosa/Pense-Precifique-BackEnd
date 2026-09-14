@@ -234,6 +234,8 @@ class PdfServiceReciboMicroservicoIT {
         Orcamento orcamento = buscarParaEditar(orcamentoId);
         orcamento.setStatus(StatusOrcamento.PAGO);
         orcamento.setDataAprovacao(LocalDateTime.now());
+        // DT-NOVA-4 (V0.10.0, #466) — guard checa dataPagamento, não mais status == PAGO.
+        orcamento.setDataPagamento(LocalDateTime.now());
         orcamentoRepository.save(orcamento);
 
         reciboPagamentoRepository.save(ReciboPagamento.builder()
@@ -263,7 +265,7 @@ class PdfServiceReciboMicroservicoIT {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> pdfService.gerarReciboPagamento(orcamentoId));
 
-        assertEquals("Recibo de pagamento só disponível para orçamentos com status PAGO", ex.getMessage());
+        assertEquals("Recibo de pagamento só disponível para orçamentos já pagos", ex.getMessage());
         wireMockServer.verify(0, com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
                 urlPathMatching("/render/recibo-pagamento/.*")));
     }
@@ -274,10 +276,12 @@ class PdfServiceReciboMicroservicoIT {
         UUID orcamentoId = criarOrcamentoSimples();
         Orcamento orcamento = buscarParaEditar(orcamentoId);
         orcamento.setStatus(StatusOrcamento.PAGO);
+        // DT-NOVA-4 (V0.10.0, #466) — guard checa dataPagamento, não mais status == PAGO.
+        orcamento.setDataPagamento(LocalDateTime.now());
         orcamentoRepository.save(orcamento);
-        // status PAGO, mas sem ReciboPagamento persistido (nunca deveria acontecer via
-        // OrcamentoService.avancarStatus, que sempre cria o recibo na transição ENTREGUE → PAGO —
-        // teste cobre a defesa de leitura do bean colaborador mesmo assim)
+        // dataPagamento setado, mas sem ReciboPagamento persistido (nunca deveria acontecer via
+        // OrcamentoService.avancarStatus, que sempre cria o recibo na transição FINALIZADO → PAGO,
+        // RN-NOVA-10 — teste cobre a defesa de leitura do bean colaborador mesmo assim)
 
         assertThrows(ResourceNotFoundException.class, () -> pdfService.gerarReciboPagamento(orcamentoId));
         wireMockServer.verify(0, com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(

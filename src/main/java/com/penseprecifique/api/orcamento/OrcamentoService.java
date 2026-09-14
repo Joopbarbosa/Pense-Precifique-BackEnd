@@ -902,10 +902,9 @@ public class OrcamentoService {
                 break;
 
             case FINALIZADO:
-                orcamento.setStatus(StatusOrcamento.ENTREGUE);
-                break;
-
-            case ENTREGUE:
+                // RN-NOVA-10 (V0.10.0, #466, altera ORC-005) — PAGO agora vem antes de ENTREGUE
+                // (era o inverso). O gatilho de geração do Recibo de Pagamento é o mesmo de sempre
+                // (transição PARA PAGO), só o momento no ciclo de vida mudou.
                 BigDecimal valorSinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
                         ? orcamento.getValorSinal()
                         : BigDecimal.ZERO;
@@ -919,7 +918,15 @@ public class OrcamentoService {
                         .totalQuitado(orcamento.getTotal())
                         .build());
 
+                // DT-NOVA-4 (V0.10.0, #466) — setado uma única vez, nunca sobrescrito depois; o
+                // frontend passa a checar este campo (não o status atual) pra manter o Recibo de
+                // Pagamento visível mesmo depois do orçamento avançar pra ENTREGUE.
+                orcamento.setDataPagamento(LocalDateTime.now());
                 orcamento.setStatus(StatusOrcamento.PAGO);
+                break;
+
+            case PAGO:
+                orcamento.setStatus(StatusOrcamento.ENTREGUE);
                 break;
 
             default:
