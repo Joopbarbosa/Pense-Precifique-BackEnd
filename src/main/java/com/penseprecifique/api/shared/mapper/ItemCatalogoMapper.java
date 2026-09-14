@@ -64,6 +64,7 @@ public class ItemCatalogoMapper {
         response.setPermitirEstoqueNegativo(item.getProduto().getPermitirEstoqueNegativo());
         response.setEstoqueAtual(item.getProduto().getEstoqueAtual());
         response.setAlgumInsumoNaoFracionavel(algumInsumoNaoFracionavel(fichaTecnicaProduto));
+        response.setFracionavel(item.getProduto().getFracionavel()); // #473
         return response;
     }
 
