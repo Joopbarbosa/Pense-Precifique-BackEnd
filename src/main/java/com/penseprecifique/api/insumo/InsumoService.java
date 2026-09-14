@@ -6,7 +6,6 @@ import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.AcaoResolucaoVinculo;
@@ -15,6 +14,7 @@ import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.SubstituicaoInsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.response.insumo.InsumoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.ProdutoRelacionadoResponse;
@@ -88,6 +88,22 @@ public class InsumoService {
 
         Page<InsumoResponseDTO> mapeado = pagina.map(insumoMapper::toResponse);
         return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
+    }
+
+    // RN-NOVA-4 (V0.10.0, #336) — contadores agregados no backend, endpoint separado (GET
+    // /insumos, o Page<> nativo do Spring, não carrega campo extra sem quebrar contrato — DT-NOVA-1
+    // revisado em DECISOES_V0.10.0.md). Chamado 1x por carregamento de tela, não por filtro clicado.
+    @Transactional(readOnly = true)
+    public InsumoContagensResponse contagens() {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        return new InsumoContagensResponse(
+                insumoRepository.countByUsuarioIdAndDeletedAtIsNull(usuarioId),
+                insumoRepository.countByUsuarioIdAndAtivoAndDeletedAtIsNull(usuarioId, true),
+                insumoRepository.countByUsuarioIdAndAtivoAndDeletedAtIsNull(usuarioId, false),
+                insumoRepository.contarEstoqueBaixo(usuarioId),
+                insumoRepository.countByUsuarioIdAndDeletedAtIsNullAndEstoqueAtualLessThan(usuarioId, BigDecimal.ZERO),
+                insumoRepository.countByUsuarioIdAndDeletedAtIsNullAndEstoqueAtualGreaterThan(usuarioId, BigDecimal.ZERO)
+        );
     }
 
     @Transactional(readOnly = true)

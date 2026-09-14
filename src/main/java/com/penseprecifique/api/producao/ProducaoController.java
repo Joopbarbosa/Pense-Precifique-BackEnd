@@ -11,6 +11,7 @@ import com.penseprecifique.api.shared.dto.request.producao.TravarProducaoRequest
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.InsumoConsumidoResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducaoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoResponse;
 import jakarta.validation.Valid;
@@ -41,6 +42,12 @@ public class ProducaoController {
             @RequestParam(required = false) LocalDate dataInicioAte,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(producaoService.listar(busca, estado, dataInicioDe, dataInicioAte, pageable));
+    }
+
+    // RN-NOVA-4 (V0.10.0, #336) — contadores por filtro (badges da Lista/Kanban de Produção).
+    @GetMapping("/contagens")
+    public ResponseEntity<ProducaoContagensResponse> contagens() {
+        return ResponseEntity.ok(producaoService.contagens());
     }
 
     @GetMapping("/{id}")

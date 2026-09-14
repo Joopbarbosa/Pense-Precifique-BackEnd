@@ -13,6 +13,7 @@ import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.shared.dto.response.producao.ProducaoContagensResponse;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.OrigemHistoricoStatus;
@@ -171,6 +172,28 @@ public class ProducaoService {
         }
         return PageableOrdenacaoResolver.resolverExpressaoJpql(pageable, CAMPOS_ORDENACAO_PRODUCAO,
                 "dataInicio, estado, produto, quantidade, numero");
+    }
+
+    // RN-NOVA-4 (V0.10.0, #336) — contadores por filtro (badges da Lista/Kanban), agregados no
+    // backend, ignora o filtro de busca/período atual (mesmo critério de ProdutoService#contagens
+    // — badges são navegação global, não devem mudar conforme o texto digitado).
+    @Transactional(readOnly = true)
+    public ProducaoContagensResponse contagens() {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        ProducaoContagensResponse response = new ProducaoContagensResponse();
+        response.setTotal(producaoRepository.countByUsuarioId(usuarioId));
+        for (ProducaoRepository.ContagemPorEstado contagem : producaoRepository.contarPorEstado(usuarioId)) {
+            switch (contagem.getEstado()) {
+                case AGUARDANDO_INICIO -> response.setAguardandoInicio(contagem.getQuantidade());
+                case EM_ANDAMENTO -> response.setEmAndamento(contagem.getQuantidade());
+                case TRAVADA -> response.setTravada(contagem.getQuantidade());
+                case FINALIZADA -> response.setFinalizada(contagem.getQuantidade());
+                case CANCELADA -> response.setCancelada(contagem.getQuantidade());
+                case NAO_REALIZADA -> response.setNaoRealizada(contagem.getQuantidade());
+            }
+        }
+        return response;
     }
 
     @Transactional(readOnly = true)

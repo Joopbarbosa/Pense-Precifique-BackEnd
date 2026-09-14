@@ -4,6 +4,7 @@ import com.penseprecifique.api.shared.dto.request.insumo.BaixaManualInsumoReques
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.response.insumo.InsumoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.ProdutoRelacionadoResponse;
@@ -35,6 +36,12 @@ public class InsumoController {
     @GetMapping("/{id}")
     public ResponseEntity<InsumoResponseDTO> buscar(@PathVariable UUID id) {
         return ResponseEntity.ok(insumoService.buscarPorId(id));
+    }
+
+    // RN-NOVA-4 (V0.10.0, #336) — contadores por filtro da Lista de Insumos, agregados no backend.
+    @GetMapping("/contagens")
+    public ResponseEntity<InsumoContagensResponse> contagens() {
+        return ResponseEntity.ok(insumoService.contagens());
     }
 
     @PostMapping
