@@ -136,6 +136,7 @@ public class ProdutoMapper {
             custoUnitario = item.getProdutoBase().getPrecoCusto();
             response.setProdutoBaseId(item.getProdutoBase().getId());
             response.setNomeProdutoBase(item.getProdutoBase().getNome());
+            response.setTipoProdutoBase(item.getProdutoBase().getTipo()); // RN-NOVA-8/#462
         }
 
         response.setCustoUnitario(custoUnitario);
