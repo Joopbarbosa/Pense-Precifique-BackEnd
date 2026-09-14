@@ -35,8 +35,12 @@ public class ProdutoDetalheResponse {
     private BigDecimal estoqueMinimo;
     private boolean permitirEstoqueNegativo;
     private boolean ativo;
-    /** RN-051 — true se algum insumo direto da ficha técnica não for fracionável; decide o modo do campo de produção (quantidade livre vs. lotes). */
+    /** RN-051 — true se algum insumo direto da ficha técnica não for fracionável; decide o modo do campo de produção (quantidade livre vs. lotes). Fonte: !Produto.fracionavel (RN-NOVA-2). */
     private boolean algumInsumoNaoFracionavel;
+    /** RN-NOVA-2 (V0.10.0, #299) — valor atual exibido/editável (persistido, calculado+override). */
+    private Boolean fracionavel;
+    /** true quando a artesã já editou fracionavel manualmente. */
+    private Boolean fracionavelOverride;
     private List<FichaTecnicaItemResponse> fichaTecnica;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

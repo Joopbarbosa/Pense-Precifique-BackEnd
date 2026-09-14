@@ -196,6 +196,10 @@ public class ProdutoService {
             validarPrecoVendaObrigatorio(produto);
         }
 
+        List<FichaTecnicaItem> itensCriados = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+        boolean fracionavelDerivado = !algumInsumoNaoFracionavel(itensCriados);
+        aplicarFracionavelCriacao(produto, request.getFracionavel(), fracionavelDerivado);
+
         produto = produtoRepository.save(produto);
 
         List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
@@ -215,6 +219,8 @@ public class ProdutoService {
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
         BigDecimal margemLucroAntigo = produto.getMargemLucro();
         boolean overrideAntigo = Boolean.TRUE.equals(produto.getOverride());
+        Boolean fracionavelAntigo = produto.getFracionavel();
+        boolean fracionavelOverrideAntigo = Boolean.TRUE.equals(produto.getFracionavelOverride());
 
         produtoMapper.updateEntity(request, produto);
         if (produto.getMargemLucro() == null) {
@@ -234,6 +240,11 @@ public class ProdutoService {
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO) {
             validarPrecoVendaObrigatorio(produto);
         }
+
+        List<FichaTecnicaItem> itensEditados = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+        boolean fracionavelDerivadoEdicao = !algumInsumoNaoFracionavel(itensEditados);
+        aplicarFracionavelEdicao(produto, request.getFracionavel(), fracionavelDerivadoEdicao,
+                fracionavelAntigo, fracionavelOverrideAntigo);
 
         produtoRepository.save(produto);
 
@@ -661,6 +672,53 @@ public class ProdutoService {
         // com override, ou mudança apenas de custo (ficha técnica/insumo): preço persistido nunca muda sozinho
         produto.setPrecoVenda(precoVendaAntigo);
         produto.setOverride(overrideAntigo);
+    }
+
+    // ---------------------------------------------------------------
+    // RN-NOVA-2 (V0.10.0, #299, altera PDT-016) — fracionável com override (mesmo padrão calculado+
+    // override de precoVenda acima). Fonte única: substitui o cálculo que 5 mappers replicavam via
+    // stream sobre FichaTecnicaItem — agora só leem produto.getFracionavel() direto.
+    // ---------------------------------------------------------------
+
+    private boolean algumInsumoNaoFracionavel(List<FichaTecnicaItem> itens) {
+        return itens.stream()
+                .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel()));
+    }
+
+    private void aplicarFracionavelCriacao(Produto produto, Boolean fracionavelInformado, boolean fracionavelDerivado) {
+        if (fracionavelInformado != null && !fracionavelInformado.equals(fracionavelDerivado)) {
+            produto.setFracionavel(fracionavelInformado);
+            produto.setFracionavelOverride(true);
+        } else {
+            produto.setFracionavel(fracionavelDerivado);
+            produto.setFracionavelOverride(false);
+        }
+    }
+
+    private void aplicarFracionavelEdicao(Produto produto, Boolean fracionavelInformado, boolean fracionavelDerivado,
+                                           Boolean fracionavelAntigo, boolean overrideAntigo) {
+        if (fracionavelInformado != null && !fracionavelInformado.equals(fracionavelDerivado)) {
+            // artesã editou o valor manualmente para diferente do derivado
+            produto.setFracionavel(fracionavelInformado);
+            produto.setFracionavelOverride(true);
+            return;
+        }
+        if (fracionavelInformado != null) {
+            // veio igual ao derivado: trata como se não fosse override
+            produto.setFracionavel(fracionavelDerivado);
+            produto.setFracionavelOverride(false);
+            return;
+        }
+        // fracionavel não veio no request
+        if (!overrideAntigo) {
+            // sem override: segue derivando ao vivo da ficha técnica (que pode ter mudado nesta edição)
+            produto.setFracionavel(fracionavelDerivado);
+            produto.setFracionavelOverride(false);
+            return;
+        }
+        // com override: valor persistido nunca muda sozinho, mesmo que a ficha técnica mude (CEN-NOVO-5)
+        produto.setFracionavel(fracionavelAntigo);
+        produto.setFracionavelOverride(true);
     }
 
     private void validarPrecoVendaObrigatorio(Produto produto) {
