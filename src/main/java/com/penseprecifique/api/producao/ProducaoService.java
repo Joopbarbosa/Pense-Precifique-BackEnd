@@ -1013,6 +1013,11 @@ public class ProducaoService {
         }
 
         List<ProducaoProduto> produtosOriginal = producaoProdutoRepository.findByProducaoId(original.getId());
+        // RN-NOVA-11 (V0.10.0, #469) — complementa RN-NOVA-5: critério aditivo, além do estado e da
+        // origem já checados acima, elegível só com mais de 2 produtos/customizações agrupados.
+        if (produtosOriginal.size() <= 2) {
+            throw new BusinessException("Só é possível desagrupar produções com mais de 2 produtos/customizações agrupados");
+        }
         Map<UUID, ProducaoProduto> produtosPorId = produtosOriginal.stream()
                 .collect(Collectors.toMap(pp -> pp.getProduto().getId(), pp -> pp, (a, b) -> a, LinkedHashMap::new));
 

@@ -38,6 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * RN-NOVA-5 (V0.10.0, #450) — desagrupar produção agrupada. Inverso de agrupar(): 1 produção nova
  * por produto, nunca revive as originais (append-only, RN-PROD-VINC-04). Só permitido em
  * AGUARDANDO_INICIO.
+ *
+ * <p>RN-NOVA-11 (V0.10.0, #469) — complementa RN-NOVA-5: critério ADITIVO, só elegível com mais de
+ * 2 produtos/customizações agrupados (>= 3). Cenário padrão desta classe usa 3 produtos por isso;
+ * {@link #agruparDoisProdutos()} existe à parte só para testar o novo guard de contagem.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ProducaoDesagruparIT {
@@ -52,6 +56,7 @@ class ProducaoDesagruparIT {
     private Usuario usuario;
     private Produto produtoA;
     private Produto produtoB;
+    private Produto produtoC;
 
     private void seedCenario() {
         usuario = usuarioRepository.save(Usuario.builder()
@@ -75,6 +80,12 @@ class ProducaoDesagruparIT {
                 .tempoProducao(60).rendimento(BigDecimal.ONE).precoVenda(new BigDecimal("15.00")).build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
                 .produto(produtoB).insumo(insumo).quantidade(new BigDecimal("1")).build());
+
+        produtoC = produtoRepository.save(Produto.builder()
+                .usuario(usuario).numero(3).nome("Bolo C").tipo(TipoProduto.PRODUTO)
+                .tempoProducao(60).rendimento(BigDecimal.ONE).precoVenda(new BigDecimal("20.00")).build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produtoC).insumo(insumo).quantidade(new BigDecimal("1")).build());
     }
 
     private UUID criarProducao(UUID produtoId, BigDecimal quantidade) {
@@ -87,14 +98,30 @@ class ProducaoDesagruparIT {
         return producaoService.criarProducao(criar).getId();
     }
 
+    /** 3 produtos — elegível pra desagrupar por RN-NOVA-11 (> 2 itens). */
     private UUID agruparEmAguardandoInicio() {
+        UUID p1 = criarProducao(produtoA.getId(), BigDecimal.ONE);
+        UUID p2 = criarProducao(produtoB.getId(), BigDecimal.ONE);
+        UUID p3 = criarProducao(produtoC.getId(), BigDecimal.ONE);
+
+        AgruparProducoesRequest agrupar = new AgruparProducoesRequest();
+        agrupar.setProducaoIds(List.of(p1, p2, p3));
+        agrupar.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
+        agrupar.setJustificativa("Agrupamento de teste automatizado para RN-NOVA-5 do #450.");
+
+        AgruparProducoesResponse resultado = (AgruparProducoesResponse) producaoService.agrupar(agrupar);
+        return resultado.getProducaoNova().getId();
+    }
+
+    /** RN-NOVA-11 (V0.10.0, #469) — 2 produtos, NÃO elegível (precisa de mais de 2). */
+    private UUID agruparDoisProdutos() {
         UUID p1 = criarProducao(produtoA.getId(), BigDecimal.ONE);
         UUID p2 = criarProducao(produtoB.getId(), BigDecimal.ONE);
 
         AgruparProducoesRequest agrupar = new AgruparProducoesRequest();
         agrupar.setProducaoIds(List.of(p1, p2));
         agrupar.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
-        agrupar.setJustificativa("Agrupamento de teste automatizado para RN-NOVA-5 do #450.");
+        agrupar.setJustificativa("Agrupamento de teste automatizado (2 itens) para RN-NOVA-11 do #469.");
 
         AgruparProducoesResponse resultado = (AgruparProducoesResponse) producaoService.agrupar(agrupar);
         return resultado.getProducaoNova().getId();
@@ -111,12 +138,15 @@ class ProducaoDesagruparIT {
         DesagruparProducaoRequest.ItemDesagrupar itemB = new DesagruparProducaoRequest.ItemDesagrupar();
         itemB.setProdutoId(produtoB.getId());
         itemB.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
+        DesagruparProducaoRequest.ItemDesagrupar itemC = new DesagruparProducaoRequest.ItemDesagrupar();
+        itemC.setProdutoId(produtoC.getId());
+        itemC.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
         DesagruparProducaoRequest request = new DesagruparProducaoRequest();
-        request.setItens(List.of(itemA, itemB));
+        request.setItens(List.of(itemA, itemB, itemC));
 
         DesagruparProducaoResponse resultado = producaoService.desagrupar(agrupadaId, request);
 
-        assertEquals(2, resultado.getProducoesNovas().size());
+        assertEquals(3, resultado.getProducoesNovas().size());
         for (ProducaoDetalheResponse filha : resultado.getProducoesNovas()) {
             assertEquals(EstadoProducao.AGUARDANDO_INICIO, filha.getEstado());
             assertEquals(1, filha.getProdutos().size());
@@ -125,6 +155,27 @@ class ProducaoDesagruparIT {
 
         Producao original = producaoRepository.findById(agrupadaId).orElseThrow();
         assertTrue(original.getJustificativaNaoRealizada().contains("Desagrupada"));
+    }
+
+    @Test
+    void desagruparComApenas2ItensFalha() {
+        // RN-NOVA-11 (V0.10.0, #469) — critério aditivo: estado/origem corretos não bastam mais,
+        // precisa de mais de 2 produtos/customizações agrupados.
+        seedCenario();
+        UUID agrupadaId = agruparDoisProdutos();
+
+        DesagruparProducaoRequest.ItemDesagrupar itemA = new DesagruparProducaoRequest.ItemDesagrupar();
+        itemA.setProdutoId(produtoA.getId());
+        itemA.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
+        DesagruparProducaoRequest.ItemDesagrupar itemB = new DesagruparProducaoRequest.ItemDesagrupar();
+        itemB.setProdutoId(produtoB.getId());
+        itemB.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
+        DesagruparProducaoRequest request = new DesagruparProducaoRequest();
+        request.setItens(List.of(itemA, itemB));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> producaoService.desagrupar(agrupadaId, request));
+        assertTrue(ex.getMessage().contains("mais de 2"));
     }
 
     @Test
@@ -171,9 +222,12 @@ class ProducaoDesagruparIT {
         DesagruparProducaoRequest.ItemDesagrupar itemA = new DesagruparProducaoRequest.ItemDesagrupar();
         itemA.setProdutoId(produtoA.getId());
         itemA.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
-        // Falta o item de produtoB — lista incompleta.
+        DesagruparProducaoRequest.ItemDesagrupar itemB = new DesagruparProducaoRequest.ItemDesagrupar();
+        itemB.setProdutoId(produtoB.getId());
+        itemB.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
+        // Falta o item de produtoC — lista incompleta.
         DesagruparProducaoRequest request = new DesagruparProducaoRequest();
-        request.setItens(List.of(itemA));
+        request.setItens(List.of(itemA, itemB));
 
         assertThrows(BusinessException.class, () -> producaoService.desagrupar(agrupadaId, request));
     }
