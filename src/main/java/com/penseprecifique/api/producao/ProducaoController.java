@@ -4,12 +4,14 @@ import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.dto.request.producao.AgruparProducoesRequest;
 import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.DesagruparProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.RetomarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
+import com.penseprecifique.api.shared.dto.response.producao.DesagruparProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoDetalheResponse;
@@ -118,5 +120,12 @@ public class ProducaoController {
     @PostMapping("/agrupar")
     public ResponseEntity<Object> agrupar(@Valid @RequestBody AgruparProducoesRequest request) {
         return ResponseEntity.ok(producaoService.agrupar(request));
+    }
+
+    // RN-NOVA-5 (V0.10.0, #450) — desagrupar produção agrupada.
+    @PostMapping("/{id}/desagrupar")
+    public ResponseEntity<DesagruparProducaoResponse> desagrupar(
+            @PathVariable UUID id, @Valid @RequestBody DesagruparProducaoRequest request) {
+        return ResponseEntity.ok(producaoService.desagrupar(id, request));
     }
 }
