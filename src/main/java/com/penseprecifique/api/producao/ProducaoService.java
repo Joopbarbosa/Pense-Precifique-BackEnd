@@ -1013,11 +1013,11 @@ public class ProducaoService {
         }
 
         List<ProducaoProduto> produtosOriginal = producaoProdutoRepository.findByProducaoId(original.getId());
-        // RN-NOVA-11 (V0.10.0, #469) — complementa RN-NOVA-5: critério aditivo, além do estado e da
-        // origem já checados acima, elegível só com mais de 2 produtos/customizações agrupados.
-        if (produtosOriginal.size() <= 2) {
-            throw new BusinessException("Só é possível desagrupar produções com mais de 2 produtos/customizações agrupados");
-        }
+        // RN-NOVA-11 (V0.10.0, #469) revogada por RN-NOVA-14 (mesma versão, achado do teste manual,
+        // 2ª rodada): a artesã confirmou que a elegibilidade correta é "2 ou mais" produtos/
+        // customizações agrupados — como um agrupamento nunca tem menos de 2 produtos (mínimo pra
+        // agrupar), isso equivale a não ter restrição de contagem nenhuma, voltando ao critério
+        // original de RN-NOVA-5 (só estado + origem, já checados acima).
         Map<UUID, ProducaoProduto> produtosPorId = produtosOriginal.stream()
                 .collect(Collectors.toMap(pp -> pp.getProduto().getId(), pp -> pp, (a, b) -> a, LinkedHashMap::new));
 

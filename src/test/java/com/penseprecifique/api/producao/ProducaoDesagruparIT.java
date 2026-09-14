@@ -39,9 +39,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * por produto, nunca revive as originais (append-only, RN-PROD-VINC-04). Só permitido em
  * AGUARDANDO_INICIO.
  *
- * <p>RN-NOVA-11 (V0.10.0, #469) — complementa RN-NOVA-5: critério ADITIVO, só elegível com mais de
- * 2 produtos/customizações agrupados (>= 3). Cenário padrão desta classe usa 3 produtos por isso;
- * {@link #agruparDoisProdutos()} existe à parte só para testar o novo guard de contagem.
+ * <p>RN-NOVA-11 (V0.10.0, #469) — critério aditivo de contagem (mais de 2 produtos) — revogada por
+ * RN-NOVA-14 (mesma versão, achado do teste manual, 2ª rodada): a artesã confirmou que 2 produtos
+ * também deve ser elegível (não existe grupo com menos de 2). {@link #agruparDoisProdutos()}
+ * permanece — agora cobre o caso de sucesso com exatamente 2 itens, não mais o de rejeição.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ProducaoDesagruparIT {
@@ -98,7 +99,7 @@ class ProducaoDesagruparIT {
         return producaoService.criarProducao(criar).getId();
     }
 
-    /** 3 produtos — elegível pra desagrupar por RN-NOVA-11 (> 2 itens). */
+    /** 3 produtos — elegível pra desagrupar. */
     private UUID agruparEmAguardandoInicio() {
         UUID p1 = criarProducao(produtoA.getId(), BigDecimal.ONE);
         UUID p2 = criarProducao(produtoB.getId(), BigDecimal.ONE);
@@ -113,7 +114,7 @@ class ProducaoDesagruparIT {
         return resultado.getProducaoNova().getId();
     }
 
-    /** RN-NOVA-11 (V0.10.0, #469) — 2 produtos, NÃO elegível (precisa de mais de 2). */
+    /** 2 produtos — elegível pra desagrupar (RN-NOVA-14 revoga a restrição de RN-NOVA-11). */
     private UUID agruparDoisProdutos() {
         UUID p1 = criarProducao(produtoA.getId(), BigDecimal.ONE);
         UUID p2 = criarProducao(produtoB.getId(), BigDecimal.ONE);
@@ -158,9 +159,9 @@ class ProducaoDesagruparIT {
     }
 
     @Test
-    void desagruparComApenas2ItensFalha() {
-        // RN-NOVA-11 (V0.10.0, #469) — critério aditivo: estado/origem corretos não bastam mais,
-        // precisa de mais de 2 produtos/customizações agrupados.
+    void desagruparComApenas2ItensFunciona() {
+        // RN-NOVA-14 (V0.10.0) — revoga RN-NOVA-11/#469: 2 produtos/customizações agrupados também
+        // é elegível pra desagrupar, não só "mais de 2".
         seedCenario();
         UUID agrupadaId = agruparDoisProdutos();
 
@@ -173,9 +174,10 @@ class ProducaoDesagruparIT {
         DesagruparProducaoRequest request = new DesagruparProducaoRequest();
         request.setItens(List.of(itemA, itemB));
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> producaoService.desagrupar(agrupadaId, request));
-        assertTrue(ex.getMessage().contains("mais de 2"));
+        DesagruparProducaoResponse resultado = producaoService.desagrupar(agrupadaId, request);
+
+        assertEquals(2, resultado.getProducoesNovas().size());
+        assertEquals(EstadoProducao.NAO_REALIZADA, resultado.getProducaoOriginal().getEstado());
     }
 
     @Test
