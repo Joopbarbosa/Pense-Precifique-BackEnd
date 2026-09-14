@@ -30,19 +30,25 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
         WHERE p.usuario.id = :usuarioId
         AND p.deletedAt IS NULL
         AND (:tipo IS NULL OR p.tipo = :tipo)
+        AND (:ativo IS NULL OR p.ativo = :ativo)
         AND (:semCatalogo = false OR (
             NOT EXISTS (SELECT 1 FROM ItemCatalogo ic WHERE ic.produto = p AND ic.deletedAt IS NULL)
             AND NOT EXISTS (SELECT 1 FROM ItemCatalogoCustomizacao icc WHERE icc.produto = p AND icc.itemCatalogo.deletedAt IS NULL)
         ))
     """)
     Page<Produto> buscar(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoProduto tipo,
-                          @Param("semCatalogo") boolean semCatalogo, Pageable pageable);
+                          @Param("semCatalogo") boolean semCatalogo, @Param("ativo") Boolean ativo, Pageable pageable);
 
+    // #459 (V0.10.0, parent #336) — parâmetro `ativo` novo, mesmo padrão já usado nos outros 3
+    // filtros desta query (`IS NULL OR` = sem filtro). Bind direto em `=`, não em LOWER/CONCAT —
+    // não sofre do problema de inferência de tipo nulo do Postgres que motivou splitar `busca` em
+    // método separado (ver javadoc acima).
     @Query("""
         SELECT p FROM Produto p
         WHERE p.usuario.id = :usuarioId
         AND p.deletedAt IS NULL
         AND (:tipo IS NULL OR p.tipo = :tipo)
+        AND (:ativo IS NULL OR p.ativo = :ativo)
         AND (:semCatalogo = false OR (
             NOT EXISTS (SELECT 1 FROM ItemCatalogo ic WHERE ic.produto = p AND ic.deletedAt IS NULL)
             AND NOT EXISTS (SELECT 1 FROM ItemCatalogoCustomizacao icc WHERE icc.produto = p AND icc.itemCatalogo.deletedAt IS NULL)
@@ -51,7 +57,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
     """)
     Page<Produto> buscarComBusca(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoProduto tipo,
                                   @Param("semCatalogo") boolean semCatalogo, @Param("busca") String busca,
-                                  Pageable pageable);
+                                  @Param("ativo") Boolean ativo, Pageable pageable);
 
     Optional<Produto> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
