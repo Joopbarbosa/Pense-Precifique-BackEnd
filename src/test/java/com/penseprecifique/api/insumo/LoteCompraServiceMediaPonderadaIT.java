@@ -47,6 +47,13 @@ class LoteCompraServiceMediaPonderadaIT {
         InsumoResponseDTO criado = insumoService.cadastrar(new InsumoCreateRequestDTO(
                 "Insumo " + UUID.randomUUID(), null, "kg", true, null, true,
                 BigDecimal.ZERO, new BigDecimal("100.00"), new BigDecimal("10")));
+        // RN-NOVA-1 (V0.10.0, #442, altera INS-003) — cadastro não gera mais estoque/movimentação
+        // automática (só custoUnitario calculado, estoqueAtual nasce 0). Este teste valida a
+        // blindagem de LoteCompraService#registrarCompraIndividual, não o cadastro — registrar a
+        // compra explicitamente para chegar ao mesmo estado de partida de antes (estoque 10, custo 10).
+        loteCompraService.registrarCompraIndividual(
+                insumoRepository.findById(criado.id()).orElseThrow(),
+                new BigDecimal("10"), new BigDecimal("100.00"), UUID.randomUUID());
         return criado.id();
     }
 

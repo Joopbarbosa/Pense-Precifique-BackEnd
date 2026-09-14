@@ -1,7 +1,6 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.domain.entity.Insumo;
-import com.penseprecifique.api.shared.domain.entity.LoteCompra;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Producao;
@@ -41,6 +40,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +70,6 @@ public class InsumoService {
     private final InsumoMapper insumoMapper;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final FichaTecnicaService fichaTecnicaService;
-    private final LoteCompraService loteCompraService;
     private final ProducaoRepository producaoRepository;
     private final OrcamentoRepository orcamentoRepository;
     private final ProdutoRepository produtoRepository;
@@ -113,11 +112,19 @@ public class InsumoService {
         usuarioRepository.lockPorId(usuarioId);
         insumo.setNumero(NumeroSequencialUtil.proximoNumero(
                 insumoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Insumo::getNumero)));
-        insumo = insumoRepository.save(insumo);
 
-        LoteCompra loteCompra = loteCompraService.criarLote(usuario, LocalDateTime.now());
-        loteCompraService.registrarCompraIndividual(
-                insumo, request.quantidadeCompradaInicial(), request.precoTotalCompraInicial(), loteCompra.getId());
+        // RN-NOVA-1 (V0.10.0, #442, altera INS-003) — cadastro de insumo NÃO gera mais
+        // MovimentacaoInsumo/LoteCompra automáticos. Custo unitário é calculado e persistido direto
+        // a partir do custo e quantidade informados (mesma fórmula/escala de
+        // LoteCompraService#registrarCompraIndividual para o caso trivial de insumo novo, sem estoque
+        // anterior a ponderar) — estoqueAtual permanece 0 (default da entidade), sem histórico de
+        // movimentação. Entrada de estoque real passa a exigir sempre "Registrar compra" ou "Entrada
+        // manual", igual a qualquer entrada subsequente.
+        BigDecimal custoUnitario = request.precoTotalCompraInicial()
+                .divide(request.quantidadeCompradaInicial(), 6, RoundingMode.HALF_UP);
+        insumo.setCustoUnitario(custoUnitario);
+
+        insumo = insumoRepository.save(insumo);
 
         return insumoMapper.toResponse(insumo);
     }
