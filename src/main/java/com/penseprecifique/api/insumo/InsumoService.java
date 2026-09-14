@@ -76,15 +76,15 @@ public class InsumoService {
     private final ProdutoService produtoService;
 
     @Transactional(readOnly = true)
-    public Page<InsumoResponseDTO> listar(String busca, Pageable pageable) {
+    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_INSUMO,
                 "nome, numero, custoUnitario, estoqueAtual, createdAt");
 
-        Page<Insumo> pagina = (busca != null && !busca.isBlank())
-                ? insumoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
-                        usuarioId, busca, pageableOrdenado)
-                : insumoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageableOrdenado);
+        // #336 (V0.10.0) — filtro de status agora é server-side (era client-side sobre a janela
+        // paginada, causa raiz confirmada de "insumo inativado não aparece no filtro de inativados").
+        String buscaNormalizada = (busca != null && !busca.isBlank()) ? busca : null;
+        Page<Insumo> pagina = insumoRepository.buscarComFiltros(usuarioId, buscaNormalizada, ativo, pageableOrdenado);
 
         Page<InsumoResponseDTO> mapeado = pagina.map(insumoMapper::toResponse);
         return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());

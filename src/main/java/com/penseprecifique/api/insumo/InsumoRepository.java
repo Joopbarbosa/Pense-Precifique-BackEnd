@@ -12,10 +12,17 @@ import java.util.UUID;
 
 public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
 
-    Page<Insumo> findByUsuarioIdAndDeletedAtIsNull(UUID usuarioId, Pageable pageable);
-
-    Page<Insumo> findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
-            UUID usuarioId, String nome, Pageable pageable);
+    // #336 (V0.10.0) — causa raiz do bug original ("insumo inativado não aparece no filtro de
+    // inativados"): filtro de status era aplicado client-side sobre a janela paginada, violando a
+    // convenção do projeto (busca sempre server-side). `ativo`/`busca` nulos = sem filtro (mesmo
+    // resultado das duas queries derivadas acima, unificadas aqui para não duplicar combinação).
+    // CAST(:busca AS string) obrigatório — sem ele, Hibernate/Postgres infere o parâmetro nulo
+    // como bytea e `lower(bytea)` falha em runtime (só reproduz com busca=null, testado no fix).
+    @Query("SELECT i FROM Insumo i WHERE i.usuario.id = :usuarioId AND i.deletedAt IS NULL " +
+            "AND (:busca IS NULL OR LOWER(i.nome) LIKE LOWER(CONCAT('%', CAST(:busca AS string), '%'))) " +
+            "AND (:ativo IS NULL OR i.ativo = :ativo)")
+    Page<Insumo> buscarComFiltros(@Param("usuarioId") UUID usuarioId, @Param("busca") String busca,
+            @Param("ativo") Boolean ativo, Pageable pageable);
 
     Optional<Insumo> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
