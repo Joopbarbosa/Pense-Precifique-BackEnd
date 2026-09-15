@@ -53,6 +53,7 @@ public class OrcamentoMapper {
         response.setPercentualSinal(orcamento.getPercentualSinal());
         response.setValorSinal(orcamento.getValorSinal());
         response.setDataSinalPago(orcamento.getDataSinalPago());
+        response.setDataPagamento(orcamento.getDataPagamento()); // DT-NOVA-4/#466 — achado do teste manual
         response.setMetodoSinalRecebido(orcamento.getMetodoSinalRecebido());
         response.setMetodoSinalRecebidoObs(orcamento.getMetodoSinalRecebidoObs());
         response.setSubtotal(orcamento.getSubtotal());

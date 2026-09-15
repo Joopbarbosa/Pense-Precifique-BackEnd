@@ -35,6 +35,11 @@ public class OrcamentoDetalheResponse {
     private BigDecimal percentualSinal;
     private BigDecimal valorSinal;
     private LocalDateTime dataSinalPago;
+    /** DT-NOVA-4 (V0.10.0, #466) — achado do teste manual: campo persistido na entidade
+     *  (dataPagamento) desde #466, mas nunca chegou a este DTO nem ao mapper — mesmo anti-padrão já
+     *  documentado no CLAUDE.md do backend (campo persistido "esquecido" no DTO de resposta). Sem
+     *  ele, a condição de exibir o Recibo de Pagamento no Frontend nunca era verdadeira. */
+    private LocalDateTime dataPagamento;
     private MetodoPagamento metodoSinalRecebido;
     private String metodoSinalRecebidoObs;
     private BigDecimal subtotal;

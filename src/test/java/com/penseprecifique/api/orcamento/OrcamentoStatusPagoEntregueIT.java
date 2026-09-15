@@ -121,6 +121,8 @@ class OrcamentoStatusPagoEntregueIT {
 
         Orcamento persistido = orcamentoRepository.findById(orcamentoId).orElseThrow();
         assertNotNull(persistido.getDataPagamento(), "DT-NOVA-4 — setado na transição pra PAGO");
+        assertNotNull(detalhe.getDataPagamento(),
+                "achado do teste manual — dataPagamento persistido mas nunca chegava ao DTO de resposta");
         assertTrue(reciboPagamentoRepository.findByOrcamentoId(orcamentoId).isPresent(),
                 "gatilho de geração do Recibo de Pagamento continua o mesmo, só antecipado");
     }
@@ -143,6 +145,8 @@ class OrcamentoStatusPagoEntregueIT {
         Orcamento apoisEntregue = orcamentoRepository.findById(orcamentoId).orElseThrow();
         assertEquals(dataPagamentoOriginal, apoisEntregue.getDataPagamento(),
                 "DT-NOVA-4 — nunca sobrescrito depois de setado uma vez");
+        assertEquals(dataPagamentoOriginal, detalhe.getDataPagamento(),
+                "achado do teste manual — DTO precisa continuar expondo dataPagamento em ENTREGUE também");
         assertTrue(reciboPagamentoRepository.findByOrcamentoId(orcamentoId).isPresent(),
                 "recibo continua existindo, gerado só uma vez na transição pra PAGO");
     }
