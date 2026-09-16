@@ -314,6 +314,30 @@ class OrcamentoVincularProducaoIT {
         assertEquals(0, producaoProdutoRepository.findByProducaoId(producao.getId()).size());
     }
 
+    /**
+     * #395/D-004 — RN-PROD-VINC-02 tem que valer também quando não há nenhum produto pendente de
+     * sincronizar (aqui: orçamento sem nenhum item). Antes da correção, `vincularProducao()` só
+     * chamava `adicionarProdutosDeOrcamento` (onde vive o guard de estado) quando havia produto
+     * pendente — com a lista vazia, pulava direto pro `save()` de `orcamento_producoes` sem checar
+     * o estado da produção, mesmo ela estando `EM_ANDAMENTO`/`CANCELADA`/etc.
+     */
+    @Test
+    void vincularProducaoSemNenhumItemPendenteAindaAssimValidaEstadoDaProducao() {
+        seedUsuarioECliente();
+        UUID orcamentoId = orcamentoService.criar(requestComItens(List.of())).getId();
+        Producao producao = producaoRepository.save(Producao.builder()
+                .usuario(usuario).numero(proximoNumeroProducao++).estado(EstadoProducao.EM_ANDAMENTO).build());
+
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producao.getId());
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> orcamentoService.vincularProducao(orcamentoId, req));
+        assertTrue(ex.getMessage().toLowerCase().contains("já começou"));
+
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamentoId, producao.getId()).isEmpty(),
+                "vínculo não pode ser gravado quando a produção está bloqueada, mesmo sem produto pendente");
+    }
+
     /** RN-PROD-HIST-01 — vincular grava histórico ITEM_ADICIONADO com produto/quantidade/origem corretos. */
     @Test
     void vincularProducaoGravaHistoricoItemAdicionado() {
