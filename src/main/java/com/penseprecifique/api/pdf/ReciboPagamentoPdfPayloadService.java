@@ -6,7 +6,6 @@ import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboPagamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.ReciboPagamentoPdfData;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -57,8 +56,11 @@ public class ReciboPagamentoPdfPayloadService {
         Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuario.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
 
-        if (orcamento.getStatus() != StatusOrcamento.PAGO) {
-            throw new BusinessException("Recibo de pagamento só disponível para orçamentos com status PAGO");
+        // DT-NOVA-4 (V0.10.0, #466) — status == PAGO (igualdade exata) bloquearia o PDF assim que
+        // o orçamento avançasse pra ENTREGUE (RN-NOVA-10 tira PAGO de terminal). dataPagamento
+        // reflete "já foi pago" independente do status atual.
+        if (orcamento.getDataPagamento() == null) {
+            throw new BusinessException("Recibo de pagamento só disponível para orçamentos já pagos");
         }
 
         ReciboPagamento recibo = reciboPagamentoRepository.findByOrcamentoId(orcamentoId)

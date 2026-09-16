@@ -13,6 +13,7 @@ import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.shared.dto.response.producao.ProducaoContagensResponse;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.OrigemHistoricoStatus;
@@ -26,6 +27,7 @@ import com.penseprecifique.api.shared.dto.request.producao.AgruparProducoesReque
 import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ConsumoRealRequest;
 import com.penseprecifique.api.shared.dto.request.producao.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.DesagruparProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.PerdaProducaoRequest;
@@ -36,6 +38,7 @@ import com.penseprecifique.api.shared.dto.response.producao.AgruparProducoesResp
 import com.penseprecifique.api.shared.dto.response.producao.AlertaInsumoResponse;
 import com.penseprecifique.api.shared.dto.response.AvisoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
+import com.penseprecifique.api.shared.dto.response.producao.DesagruparProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.DivisaoProducaoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.InsumoConsumidoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoDetalheResponse;
@@ -73,6 +76,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -171,6 +175,28 @@ public class ProducaoService {
         }
         return PageableOrdenacaoResolver.resolverExpressaoJpql(pageable, CAMPOS_ORDENACAO_PRODUCAO,
                 "dataInicio, estado, produto, quantidade, numero");
+    }
+
+    // RN-NOVA-4 (V0.10.0, #336) — contadores por filtro (badges da Lista/Kanban), agregados no
+    // backend, ignora o filtro de busca/período atual (mesmo critério de ProdutoService#contagens
+    // — badges são navegação global, não devem mudar conforme o texto digitado).
+    @Transactional(readOnly = true)
+    public ProducaoContagensResponse contagens() {
+        UUID usuarioId = getUsuarioIdAutenticado();
+
+        ProducaoContagensResponse response = new ProducaoContagensResponse();
+        response.setTotal(producaoRepository.countByUsuarioId(usuarioId));
+        for (ProducaoRepository.ContagemPorEstado contagem : producaoRepository.contarPorEstado(usuarioId)) {
+            switch (contagem.getEstado()) {
+                case AGUARDANDO_INICIO -> response.setAguardandoInicio(contagem.getQuantidade());
+                case EM_ANDAMENTO -> response.setEmAndamento(contagem.getQuantidade());
+                case TRAVADA -> response.setTravada(contagem.getQuantidade());
+                case FINALIZADA -> response.setFinalizada(contagem.getQuantidade());
+                case CANCELADA -> response.setCancelada(contagem.getQuantidade());
+                case NAO_REALIZADA -> response.setNaoRealizada(contagem.getQuantidade());
+            }
+        }
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -962,6 +988,81 @@ public class ProducaoService {
         AgruparProducoesResponse response = new AgruparProducoesResponse();
         response.setProducaoNova(montarDetalhe(nova, List.of()));
         response.setProducoesOriginais(originaisResponse);
+        return response;
+    }
+
+    /**
+     * RN-NOVA-5 (V0.10.0, #450) — inverso de {@link #agrupar}: separa uma produção com
+     * {@code tipoOrigem=AGRUPAMENTO} de volta em 1 produção nova por produto (nunca revive as
+     * produções originais que viraram NAO_REALIZADA no agrupamento — mesmo padrão append-only já
+     * usado por {@code dividir()}/{@code agrupar()}, RN-PROD-VINC-04). Só permitido em
+     * AGUARDANDO_INICIO (nada baixado ainda, sem consumo a redistribuir/estornar). Reaproveita
+     * {@link #criarProducaoFilha} (propaga vínculo/histórico automaticamente). DT-NOVA-2: 1
+     * chamada atômica — a fila "uma pergunta por vez" já vem resolvida do frontend.
+     */
+    public DesagruparProducaoResponse desagrupar(UUID id, DesagruparProducaoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao original = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+
+        if (original.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+            throw new BusinessException("Apenas produções aguardando início podem ser desagrupadas");
+        }
+        if (original.getTipoOrigem() != TipoOrigemProducao.AGRUPAMENTO) {
+            throw new BusinessException("Apenas produções originadas de agrupamento podem ser desagrupadas");
+        }
+
+        List<ProducaoProduto> produtosOriginal = producaoProdutoRepository.findByProducaoId(original.getId());
+        // RN-NOVA-11 (V0.10.0, #469) revogada por RN-NOVA-14 (mesma versão, achado do teste manual,
+        // 2ª rodada): a artesã confirmou que a elegibilidade correta é "2 ou mais" produtos/
+        // customizações agrupados — como um agrupamento nunca tem menos de 2 produtos (mínimo pra
+        // agrupar), isso equivale a não ter restrição de contagem nenhuma, voltando ao critério
+        // original de RN-NOVA-5 (só estado + origem, já checados acima).
+        Map<UUID, ProducaoProduto> produtosPorId = produtosOriginal.stream()
+                .collect(Collectors.toMap(pp -> pp.getProduto().getId(), pp -> pp, (a, b) -> a, LinkedHashMap::new));
+
+        Set<UUID> produtoIdsDoRequest = request.getItens().stream()
+                .map(DesagruparProducaoRequest.ItemDesagrupar::getProdutoId).collect(Collectors.toSet());
+        if (!produtoIdsDoRequest.equals(produtosPorId.keySet())) {
+            throw new BusinessException("A lista de itens deve cobrir exatamente os produtos da produção original, sem repetir nenhum");
+        }
+
+        List<Producao> filhas = new ArrayList<>();
+        for (DesagruparProducaoRequest.ItemDesagrupar item : request.getItens()) {
+            ProducaoProduto produtoOrigem = produtosPorId.get(item.getProdutoId());
+            Producao filha = criarProducaoFilha(original, List.of(produtoOrigem), TipoOrigemProducao.DESAGRUPAMENTO);
+
+            List<ProducaoProduto> produtosFilha = producaoProdutoRepository.findByProducaoId(filha.getId());
+            if (item.getEstadoDestino() == EstadoProducao.EM_ANDAMENTO) {
+                List<UUID> confirmados = item.getConfirmarEstoqueNegativoInsumoIds() != null
+                        ? item.getConfirmarEstoqueNegativoInsumoIds() : List.of();
+                VerificacaoInsumos verificacao = verificarEBaixarSeLiberado(filha, produtosFilha, confirmados);
+                if (!verificacao.bloqueantes().isEmpty() || !verificacao.avisosPendentes().isEmpty()) {
+                    // Trava automática — mesmo padrão de PDC-008/agrupar(): sem confirmação
+                    // interativa dentro de uma operação em lote, item incerto nasce travado, nunca
+                    // baixado silenciosamente.
+                    registrarNascimento(filha, EstadoProducao.TRAVADA, OrigemHistoricoStatus.SISTEMA,
+                            "Insumo(s) bloqueante(s) ou aviso de estoque negativo não confirmado: "
+                                    + String.join(", ", verificacao.bloqueantes()));
+                } else {
+                    registrarNascimento(filha, EstadoProducao.EM_ANDAMENTO, OrigemHistoricoStatus.USUARIO, null);
+                }
+            } else {
+                registrarNascimento(filha, EstadoProducao.AGUARDANDO_INICIO, OrigemHistoricoStatus.USUARIO, null);
+            }
+            filhas.add(filha);
+        }
+
+        String identificadoresFilhas = filhas.stream()
+                .map(f -> IdentificadorFormatter.formatar("PRD", f.getNumero()))
+                .collect(Collectors.joining(", "));
+        original.setJustificativaNaoRealizada("Desagrupada nas produções " + identificadoresFilhas);
+        transicionar(original, EstadoProducao.NAO_REALIZADA, OrigemHistoricoStatus.SISTEMA,
+                original.getJustificativaNaoRealizada());
+
+        DesagruparProducaoResponse response = new DesagruparProducaoResponse();
+        response.setProducoesNovas(filhas.stream().map(f -> montarDetalhe(f, List.of())).toList());
+        response.setProducaoOriginal(montarDetalhe(original, List.of()));
         return response;
     }
 

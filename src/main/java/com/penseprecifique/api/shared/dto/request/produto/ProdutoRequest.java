@@ -40,6 +40,13 @@ public class ProdutoRequest {
 
     private Boolean permitirEstoqueNegativo;
 
+    /**
+     * RN-NOVA-2 (V0.10.0, #299, altera PDT-016) — valor exibido/editável de "produto fracionável".
+     * Ausente ou igual ao valor derivado da ficha técnica = sem override (segue derivando ao vivo).
+     * Diferente do derivado = override manual, congela até nova edição explícita.
+     */
+    private Boolean fracionavel;
+
     @NotNull
     @Valid
     private List<FichaTecnicaItemRequest> fichaTecnica = new ArrayList<>();

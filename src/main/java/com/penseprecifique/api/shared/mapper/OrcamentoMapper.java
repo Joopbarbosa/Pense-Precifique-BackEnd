@@ -53,6 +53,7 @@ public class OrcamentoMapper {
         response.setPercentualSinal(orcamento.getPercentualSinal());
         response.setValorSinal(orcamento.getValorSinal());
         response.setDataSinalPago(orcamento.getDataSinalPago());
+        response.setDataPagamento(orcamento.getDataPagamento()); // DT-NOVA-4/#466 — achado do teste manual
         response.setMetodoSinalRecebido(orcamento.getMetodoSinalRecebido());
         response.setMetodoSinalRecebidoObs(orcamento.getMetodoSinalRecebidoObs());
         response.setSubtotal(orcamento.getSubtotal());
@@ -106,6 +107,9 @@ public class OrcamentoMapper {
         }
         response.setPermitirEstoqueNegativo(produtoVendido.getPermitirEstoqueNegativo());
         response.setEstoqueAtual(produtoVendido.getEstoqueAtual());
+        // RN-NOVA-7 (V0.10.0, #461) — reversão de RN-NOVA-6: badge fracionável volta ao Orçamento,
+        // lida ao vivo do Produto (valor final, já com fracionavelOverride resolvido).
+        response.setFracionavel(produtoVendido.getFracionavel());
         if (fichaTecnicaProduto != null) {
             response.setAlgumInsumoNaoFracionavel(fichaTecnicaProduto.stream()
                     .anyMatch(i -> i.getInsumo() != null && Boolean.FALSE.equals(i.getInsumo().getFracionavel())));

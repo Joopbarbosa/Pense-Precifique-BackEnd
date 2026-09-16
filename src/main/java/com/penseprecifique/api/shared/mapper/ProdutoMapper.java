@@ -39,8 +39,14 @@ public class ProdutoMapper {
         response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
         response.setAtivo(produto.getAtivo());
         // RN-051 — mesmo cálculo de toDetalheResponse, para a listagem não precisar de dois nomes de campo.
+        // ⚠️ NÃO usar Produto.fracionavel (RN-NOVA-2/override) aqui — este campo trava quantidadeTravada
+        // em Nova/Editar Produção (PDT-CEN-034), precisa refletir sempre o estado real dos insumos.
         response.setAlgumInsumoNaoFracionavel(itens.stream()
                 .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel())));
+        // RN-NOVA-2 (V0.10.0, #299) — campo NOVO e separado, só para o badge editável da aba Ficha
+        // Técnica de Produto — nunca usado como gate de negócio.
+        response.setFracionavel(produto.getFracionavel());
+        response.setFracionavelOverride(produto.getFracionavelOverride());
         response.setCreatedAt(produto.getCreatedAt());
         response.setUpdatedAt(produto.getUpdatedAt());
         return response;
@@ -66,8 +72,12 @@ public class ProdutoMapper {
         response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
         response.setAtivo(produto.getAtivo());
         // RN-051 — cálculo trivial de agregação sobre dado já mapeado por item, sem ramificação de regra de negócio.
+        // ⚠️ Mesma ressalva de toResponse() — este campo é gate de negócio (PDT-CEN-034), nunca lido do override.
         response.setAlgumInsumoNaoFracionavel(itens.stream()
                 .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel())));
+        // RN-NOVA-2 (V0.10.0, #299) — campo novo, só para o badge editável da aba Ficha Técnica.
+        response.setFracionavel(produto.getFracionavel());
+        response.setFracionavelOverride(produto.getFracionavelOverride());
         response.setFichaTecnica(itens.stream().map(this::toFichaTecnicaItemResponse).toList());
         response.setCreatedAt(produto.getCreatedAt());
         response.setUpdatedAt(produto.getUpdatedAt());
@@ -126,6 +136,7 @@ public class ProdutoMapper {
             custoUnitario = item.getProdutoBase().getPrecoCusto();
             response.setProdutoBaseId(item.getProdutoBase().getId());
             response.setNomeProdutoBase(item.getProdutoBase().getNome());
+            response.setTipoProdutoBase(item.getProdutoBase().getTipo()); // RN-NOVA-8/#462
         }
 
         response.setCustoUnitario(custoUnitario);

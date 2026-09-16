@@ -1,13 +1,11 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.domain.entity.Insumo;
-import com.penseprecifique.api.shared.domain.entity.LoteCompra;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.AcaoResolucaoVinculo;
@@ -16,6 +14,7 @@ import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.SubstituicaoInsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.response.insumo.InsumoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.MovimentacaoInsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.ProdutoRelacionadoResponse;
@@ -41,6 +40,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -70,25 +70,40 @@ public class InsumoService {
     private final InsumoMapper insumoMapper;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final FichaTecnicaService fichaTecnicaService;
-    private final LoteCompraService loteCompraService;
     private final ProducaoRepository producaoRepository;
     private final OrcamentoRepository orcamentoRepository;
     private final ProdutoRepository produtoRepository;
     private final ProdutoService produtoService;
 
     @Transactional(readOnly = true)
-    public Page<InsumoResponseDTO> listar(String busca, Pageable pageable) {
+    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_INSUMO,
                 "nome, numero, custoUnitario, estoqueAtual, createdAt");
 
-        Page<Insumo> pagina = (busca != null && !busca.isBlank())
-                ? insumoRepository.findByUsuarioIdAndNomeContainingIgnoreCaseAndDeletedAtIsNull(
-                        usuarioId, busca, pageableOrdenado)
-                : insumoRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId, pageableOrdenado);
+        // #336 (V0.10.0) — filtro de status agora é server-side (era client-side sobre a janela
+        // paginada, causa raiz confirmada de "insumo inativado não aparece no filtro de inativados").
+        String buscaNormalizada = (busca != null && !busca.isBlank()) ? busca : null;
+        Page<Insumo> pagina = insumoRepository.buscarComFiltros(usuarioId, buscaNormalizada, ativo, pageableOrdenado);
 
         Page<InsumoResponseDTO> mapeado = pagina.map(insumoMapper::toResponse);
         return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
+    }
+
+    // RN-NOVA-4 (V0.10.0, #336) — contadores agregados no backend, endpoint separado (GET
+    // /insumos, o Page<> nativo do Spring, não carrega campo extra sem quebrar contrato — DT-NOVA-1
+    // revisado em DECISOES_V0.10.0.md). Chamado 1x por carregamento de tela, não por filtro clicado.
+    @Transactional(readOnly = true)
+    public InsumoContagensResponse contagens() {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        return new InsumoContagensResponse(
+                insumoRepository.countByUsuarioIdAndDeletedAtIsNull(usuarioId),
+                insumoRepository.countByUsuarioIdAndAtivoAndDeletedAtIsNull(usuarioId, true),
+                insumoRepository.countByUsuarioIdAndAtivoAndDeletedAtIsNull(usuarioId, false),
+                insumoRepository.contarEstoqueBaixo(usuarioId),
+                insumoRepository.countByUsuarioIdAndDeletedAtIsNullAndEstoqueAtualLessThan(usuarioId, BigDecimal.ZERO),
+                insumoRepository.countByUsuarioIdAndDeletedAtIsNullAndEstoqueAtualGreaterThan(usuarioId, BigDecimal.ZERO)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -113,11 +128,19 @@ public class InsumoService {
         usuarioRepository.lockPorId(usuarioId);
         insumo.setNumero(NumeroSequencialUtil.proximoNumero(
                 insumoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Insumo::getNumero)));
-        insumo = insumoRepository.save(insumo);
 
-        LoteCompra loteCompra = loteCompraService.criarLote(usuario, LocalDateTime.now());
-        loteCompraService.registrarCompraIndividual(
-                insumo, request.quantidadeCompradaInicial(), request.precoTotalCompraInicial(), loteCompra.getId());
+        // RN-NOVA-1 (V0.10.0, #442, altera INS-003) — cadastro de insumo NÃO gera mais
+        // MovimentacaoInsumo/LoteCompra automáticos. Custo unitário é calculado e persistido direto
+        // a partir do custo e quantidade informados (mesma fórmula/escala de
+        // LoteCompraService#registrarCompraIndividual para o caso trivial de insumo novo, sem estoque
+        // anterior a ponderar) — estoqueAtual permanece 0 (default da entidade), sem histórico de
+        // movimentação. Entrada de estoque real passa a exigir sempre "Registrar compra" ou "Entrada
+        // manual", igual a qualquer entrada subsequente.
+        BigDecimal custoUnitario = request.precoTotalCompraInicial()
+                .divide(request.quantidadeCompradaInicial(), 6, RoundingMode.HALF_UP);
+        insumo.setCustoUnitario(custoUnitario);
+
+        insumo = insumoRepository.save(insumo);
 
         return insumoMapper.toResponse(insumo);
     }

@@ -3,7 +3,6 @@ package com.penseprecifique.api.produto;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
-import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.produto.FichaTecnicaItemRequest;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
@@ -13,7 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -53,9 +54,14 @@ public class FichaTecnicaService {
             } else {
                 Produto produtoBase = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getProdutoBaseId(), usuarioId)
                         .orElseThrow(() -> new ResourceNotFoundException("Produto base não encontrado: " + req.getProdutoBaseId()));
-                if (produtoBase.getTipo() != TipoProduto.PRODUTO || !Boolean.TRUE.equals(produtoBase.getAtivo())) {
-                    throw new BusinessException("Apenas produtos ativos do tipo Produto podem ser usados como componente de ficha técnica.");
+                // RN-NOVA-8 (V0.10.0, #462) — PDT-015 revisada: aceita Produto OU Customização como
+                // componente, ambos ativos (antes só PRODUTO; CUSTOMIZACAO era BLOQUEIO).
+                if (!Boolean.TRUE.equals(produtoBase.getAtivo())) {
+                    throw new BusinessException("Apenas produtos/customizações ativos podem ser usados como componente de ficha técnica.");
                 }
+                // RN-NOVA-9 (V0.10.0, #462, DT-NOVA-3) — proteção contra ciclo direto/indireto no
+                // grafo de componentes, ampliada por RN-NOVA-8 aceitar mais um tipo de componente.
+                validarSemCiclo(produto, produtoBase);
                 builder.produtoBase(produtoBase).insumo(null);
             }
 
@@ -103,6 +109,42 @@ public class FichaTecnicaService {
                 throw new BusinessException("Quantidade aceita no máximo 2 casas decimais.");
             }
         }
+    }
+
+    /**
+     * RN-NOVA-9 (V0.10.0, #462, DT-NOVA-3) — proteção contra ciclo direto/indireto no grafo de
+     * componentes de ficha técnica. Percorre (DFS, em memória, limite de 20 níveis) a cadeia de
+     * fichas técnicas a partir do componente sendo adicionado, bloqueando se ela alcançar de volta
+     * o próprio produto/customização cuja ficha técnica está sendo salva.
+     */
+    private void validarSemCiclo(Produto produto, Produto componente) {
+        if (formaCiclo(componente.getId(), produto.getId(), new HashSet<>(), 0)) {
+            throw new BusinessException(
+                    "Não é possível adicionar '" + componente.getNome() + "' como componente de '"
+                            + produto.getNome() + "': formaria um ciclo (um deles acabaria dependendo "
+                            + "do custo do outro, direta ou indiretamente).");
+        }
+    }
+
+    private boolean formaCiclo(UUID atualId, UUID alvoId, Set<UUID> visitados, int profundidade) {
+        if (profundidade > 20) {
+            throw new BusinessException(
+                    "Cadeia de componentes profunda demais para verificar (mais de 20 níveis) — "
+                            + "revise a ficha técnica antes de tentar novamente.");
+        }
+        if (atualId.equals(alvoId)) {
+            return true;
+        }
+        if (!visitados.add(atualId)) {
+            return false;
+        }
+        for (FichaTecnicaItem item : fichaTecnicaItemRepository.findByProdutoId(atualId)) {
+            if (item.getProdutoBase() != null
+                    && formaCiclo(item.getProdutoBase().getId(), alvoId, visitados, profundidade + 1)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private BigDecimal calcularPrecoCusto(List<FichaTecnicaItem> itens) {

@@ -72,6 +72,17 @@ public class Produto {
     @Builder.Default
     private Boolean permitirEstoqueNegativo = true;
 
+    /** RN-NOVA-2 (V0.10.0, #299, altera PDT-016) — valor atual exibido. Deriva ao vivo da ficha
+     * técnica enquanto fracionavelOverride = false; fica congelado quando a artesã edita manualmente. */
+    @Column(name = "fracionavel", nullable = false)
+    @Builder.Default
+    private Boolean fracionavel = true;
+
+    /** true quando a artesã já editou fracionavel manualmente — trava o recálculo automático. */
+    @Column(name = "fracionavel_override", nullable = false)
+    @Builder.Default
+    private Boolean fracionavelOverride = false;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean ativo = true;

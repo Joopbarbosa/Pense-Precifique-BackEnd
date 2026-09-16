@@ -73,6 +73,11 @@ public class Orcamento {
     @Column(name = "data_sinal_pago")
     private LocalDateTime dataSinalPago;
 
+    /** DT-NOVA-4 (V0.10.0, #466) — setado uma única vez na transição para PAGO, nunca sobrescrito
+     * depois; mesmo padrão de dataSinalPago/dataEstornoSinal (evento pontual, não status atual). */
+    @Column(name = "data_pagamento")
+    private LocalDateTime dataPagamento;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "metodo_sinal_recebido", length = 20)
     private MetodoPagamento metodoSinalRecebido;

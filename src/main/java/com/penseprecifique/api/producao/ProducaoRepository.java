@@ -26,6 +26,19 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
     // RN-073/UC-036 — produções filhas de uma divisão (DIVISAO) ou agrupamento (AGRUPAMENTO).
     List<Producao> findByProducaoOrigemId(UUID producaoOrigemId);
 
+    // RN-NOVA-4 (V0.10.0, #336) — contadores por filtro (badges da Lista/Kanban de Produção),
+    // mesmo padrão já usado por ProdutoRepository#contarPorTipo.
+    long countByUsuarioId(UUID usuarioId);
+
+    @Query("SELECT p.estado as estado, COUNT(p) as quantidade FROM Producao p " +
+            "WHERE p.usuario.id = :usuarioId GROUP BY p.estado")
+    List<ContagemPorEstado> contarPorEstado(@Param("usuarioId") UUID usuarioId);
+
+    interface ContagemPorEstado {
+        EstadoProducao getEstado();
+        Long getQuantidade();
+    }
+
     /**
      * #158/RN-NOVA-6 — busca por numero (PRD-N) OU nome de produto (via producao_produtos), filtro por
      * estado e por intervalo de dataInicio (#184/#192 — RN-NOVA-2, usado tanto pela Listagem quanto

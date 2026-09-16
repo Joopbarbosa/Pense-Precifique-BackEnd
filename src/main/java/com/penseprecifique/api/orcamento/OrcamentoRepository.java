@@ -59,11 +59,18 @@ public interface OrcamentoRepository extends JpaRepository<Orcamento, UUID> {
 
     long countByUsuarioIdAndStatusInAndDeletedAtIsNull(UUID usuarioId, List<StatusOrcamento> statuses);
 
-    @Query("SELECT COALESCE(SUM(o.total), 0) FROM Orcamento o WHERE o.usuario.id = :uid AND o.status = :status AND o.deletedAt IS NULL")
-    BigDecimal sumTotalByStatus(@Param("uid") UUID uid, @Param("status") StatusOrcamento status);
+    // DT-NOVA-4 (V0.10.0, #466) — receita usava status = PAGO (igualdade exata) para achar
+    // orçamentos pagos. Com RN-NOVA-10 (PAGO deixa de ser terminal, ENTREGUE vem depois), isso
+    // faria a receita cair assim que um orçamento avançasse pra ENTREGUE — troca por dataPagamento
+    // IS NOT NULL, setado uma única vez na transição pra PAGO e nunca sobrescrito (mesmo motivo
+    // que já mudou o preview de documentos no frontend). sumTotalPagoNoPeriodo também troca
+    // updatedAt por dataPagamento — updatedAt muda de novo quando o orçamento avança pra ENTREGUE,
+    // o que atribuiria a receita ao mês errado.
+    @Query("SELECT COALESCE(SUM(o.total), 0) FROM Orcamento o WHERE o.usuario.id = :uid AND o.dataPagamento IS NOT NULL AND o.deletedAt IS NULL")
+    BigDecimal sumTotalPago(@Param("uid") UUID uid);
 
-    @Query("SELECT COALESCE(SUM(o.total), 0) FROM Orcamento o WHERE o.usuario.id = :uid AND o.status = :status AND o.updatedAt >= :inicio AND o.updatedAt < :fim AND o.deletedAt IS NULL")
-    BigDecimal sumTotalByStatusAndPeriodo(@Param("uid") UUID uid, @Param("status") StatusOrcamento status, @Param("inicio") LocalDateTime inicio, @Param("fim") LocalDateTime fim);
+    @Query("SELECT COALESCE(SUM(o.total), 0) FROM Orcamento o WHERE o.usuario.id = :uid AND o.dataPagamento >= :inicio AND o.dataPagamento < :fim AND o.deletedAt IS NULL")
+    BigDecimal sumTotalPagoNoPeriodo(@Param("uid") UUID uid, @Param("inicio") LocalDateTime inicio, @Param("fim") LocalDateTime fim);
 
     List<Orcamento> findTop5ByUsuarioIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID usuarioId);
 }

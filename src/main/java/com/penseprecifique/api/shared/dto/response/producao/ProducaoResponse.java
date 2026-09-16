@@ -1,6 +1,7 @@
 package com.penseprecifique.api.shared.dto.response.producao;
 
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.shared.domain.enums.TipoOrigemProducao;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -21,6 +22,10 @@ public class ProducaoResponse {
     private String observacoes;
     private List<ProducaoProdutoResponse> produtos;
     private List<AlertaInsumoResponse> alertasInsumos;
+    // #470 (V0.10.0) — achado do Frontend: já existia em ProducaoDetalheResponse, faltava aqui
+    // pra decidir sem round-trip se a opção "Desagrupar" cabe no menu de 3 pontinhos da listagem
+    // (RN-NOVA-5/#450, RN-NOVA-11/#469).
+    private TipoOrigemProducao tipoOrigem;
 
     // #156 — mesmo formato de ProducaoDetalheResponse.historicoStatus; front usa pra distinguir
     // TRAVADA_USUARIO de TRAVADA_SISTEMA na listagem sem precisar abrir o detalhe (getBadgeEstado).

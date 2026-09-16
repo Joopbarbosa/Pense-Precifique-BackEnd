@@ -30,4 +30,7 @@ public class OrcamentoItemResponse {
     private boolean algumInsumoNaoFracionavel;
     private boolean permitirEstoqueNegativo;
     private BigDecimal estoqueAtual;
+    /** RN-NOVA-7 (V0.10.0, #461) — fracionável do Produto vendido (valor final, já considerando
+     * fracionavelOverride), lido ao vivo a cada resposta — não é snapshot como precoUnitario. */
+    private Boolean fracionavel;
 }

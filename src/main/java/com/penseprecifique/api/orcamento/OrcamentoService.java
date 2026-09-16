@@ -76,6 +76,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -183,29 +184,41 @@ public class OrcamentoService {
             if (produto == null) {
                 continue;
             }
-            BigDecimal solicitada = BigDecimal.valueOf(item.getQuantidade());
-            BigDecimal estoqueAtual = produto.getEstoqueAtual();
-            if (estoqueAtual.compareTo(solicitada) >= 0) {
-                continue;
-            }
-
-            ItemSemEstoqueResponse resposta = new ItemSemEstoqueResponse();
-            resposta.setProdutoId(produto.getId());
-            resposta.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
-            resposta.setNomeProduto(produto.getNome());
-            resposta.setQuantidadeSolicitada(solicitada);
-            resposta.setEstoqueAtual(estoqueAtual);
-            resposta.setQuantidadeFaltante(solicitada.subtract(estoqueAtual));
-
-            Object[] vinculo = vinculoAtivoPorProduto.get(produto.getId());
-            if (vinculo != null) {
-                resposta.setProducaoVinculadaId((UUID) vinculo[1]);
-                resposta.setIdentificadorProducaoVinculada(
-                        IdentificadorFormatter.formatar("PRD", (Integer) vinculo[2]));
-            }
-            semEstoque.add(resposta);
+            montarItemSemEstoque(produto, BigDecimal.valueOf(item.getQuantidade()), vinculoAtivoPorProduto)
+                    .ifPresent(semEstoque::add);
+        }
+        // Achado do teste manual (V0.10.0) — Customização também é produzível, mas ficava de fora
+        // do card "Estoque insuficiente" (nunca oferecia "Criar produção"/"Vincular à produção
+        // existente"/"Visualizar produção" pra ela).
+        for (OrcamentoItemCustomizacao c : buscarCustomizacoesDosItens(itens)) {
+            montarItemSemEstoque(c.getProduto(), BigDecimal.valueOf(c.getQuantidade()), vinculoAtivoPorProduto)
+                    .ifPresent(semEstoque::add);
         }
         return semEstoque;
+    }
+
+    private Optional<ItemSemEstoqueResponse> montarItemSemEstoque(Produto produto, BigDecimal solicitada,
+                                                                    Map<UUID, Object[]> vinculoAtivoPorProduto) {
+        BigDecimal estoqueAtual = produto.getEstoqueAtual();
+        if (estoqueAtual.compareTo(solicitada) >= 0) {
+            return Optional.empty();
+        }
+
+        ItemSemEstoqueResponse resposta = new ItemSemEstoqueResponse();
+        resposta.setProdutoId(produto.getId());
+        resposta.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
+        resposta.setNomeProduto(produto.getNome());
+        resposta.setQuantidadeSolicitada(solicitada);
+        resposta.setEstoqueAtual(estoqueAtual);
+        resposta.setQuantidadeFaltante(solicitada.subtract(estoqueAtual));
+
+        Object[] vinculo = vinculoAtivoPorProduto.get(produto.getId());
+        if (vinculo != null) {
+            resposta.setProducaoVinculadaId((UUID) vinculo[1]);
+            resposta.setIdentificadorProducaoVinculada(
+                    IdentificadorFormatter.formatar("PRD", (Integer) vinculo[2]));
+        }
+        return Optional.of(resposta);
     }
 
     public OrcamentoDetalheResponse criar(OrcamentoRequest request) {
@@ -692,6 +705,13 @@ public class OrcamentoService {
             quantidadeAcumulada.merge(produto.getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
             produtosPorId.putIfAbsent(produto.getId(), produto);
         }
+        // Achado do teste manual (V0.10.0) — Customização também consome estoque próprio (tem
+        // ficha técnica/rendimento igual a Produto), mas ficava de fora do aviso de estoque.
+        for (OrcamentoItemCustomizacao c : buscarCustomizacoesDosItens(itens)) {
+            Produto produto = c.getProduto();
+            quantidadeAcumulada.merge(produto.getId(), BigDecimal.valueOf(c.getQuantidade()), BigDecimal::add);
+            produtosPorId.putIfAbsent(produto.getId(), produto);
+        }
 
         List<AvisoEstoqueResponse> avisos = new ArrayList<>();
         for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumulada.entrySet()) {
@@ -902,10 +922,9 @@ public class OrcamentoService {
                 break;
 
             case FINALIZADO:
-                orcamento.setStatus(StatusOrcamento.ENTREGUE);
-                break;
-
-            case ENTREGUE:
+                // RN-NOVA-10 (V0.10.0, #466, altera ORC-005) — PAGO agora vem antes de ENTREGUE
+                // (era o inverso). O gatilho de geração do Recibo de Pagamento é o mesmo de sempre
+                // (transição PARA PAGO), só o momento no ciclo de vida mudou.
                 BigDecimal valorSinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
                         ? orcamento.getValorSinal()
                         : BigDecimal.ZERO;
@@ -919,7 +938,15 @@ public class OrcamentoService {
                         .totalQuitado(orcamento.getTotal())
                         .build());
 
+                // DT-NOVA-4 (V0.10.0, #466) — setado uma única vez, nunca sobrescrito depois; o
+                // frontend passa a checar este campo (não o status atual) pra manter o Recibo de
+                // Pagamento visível mesmo depois do orçamento avançar pra ENTREGUE.
+                orcamento.setDataPagamento(LocalDateTime.now());
                 orcamento.setStatus(StatusOrcamento.PAGO);
+                break;
+
+            case PAGO:
+                orcamento.setStatus(StatusOrcamento.ENTREGUE);
                 break;
 
             default:
@@ -1182,15 +1209,37 @@ public class OrcamentoService {
     }
 
     private List<ProducaoProdutoRequest> produtosDoOrcamentoComoRequest(UUID orcamentoId) {
-        return orcamentoItemRepository.findByOrcamentoId(orcamentoId)
-                .stream()
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamentoId);
+        List<ProducaoProdutoRequest> produtos = new ArrayList<>(itens.stream()
                 .map(item -> {
                     ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
                     produtoRequest.setProdutoId(item.getProdutoVendido().getId());
                     produtoRequest.setQuantidade(BigDecimal.valueOf(item.getQuantidade()));
                     return produtoRequest;
                 })
-                .toList();
+                .toList());
+        // Achado do teste manual (V0.10.0) — Customização também é produzível (tem ficha técnica/
+        // rendimento igual a Produto), mas ficava de fora da criação/sincronização de Produção a
+        // partir do Orçamento; downstream (produtosPendentesDeSincronizacao) já mescla por
+        // produtoId, então entradas duplicadas do mesmo produto somam corretamente.
+        for (OrcamentoItemCustomizacao c : buscarCustomizacoesDosItens(itens)) {
+            ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
+            produtoRequest.setProdutoId(c.getProduto().getId());
+            produtoRequest.setQuantidade(BigDecimal.valueOf(c.getQuantidade()));
+            produtos.add(produtoRequest);
+        }
+        return produtos;
+    }
+
+    /** Achado do teste manual (V0.10.0) — busca em lote (1 query) as customizações anexadas a uma
+     *  lista de itens do orçamento; usada por todo o tratamento de estoque/produção que precisa
+     *  considerar Customização junto do produto principal de cada item. */
+    private List<OrcamentoItemCustomizacao> buscarCustomizacoesDosItens(List<OrcamentoItem> itens) {
+        if (itens.isEmpty()) {
+            return List.of();
+        }
+        return orcamentoItemCustomizacaoRepository.findByOrcamentoItemIdIn(
+                itens.stream().map(OrcamentoItem::getId).toList());
     }
 
     /**
@@ -1273,6 +1322,26 @@ public class OrcamentoService {
                     // orçamento (nunca o valor atual)
                     .catalogoReferencia(catalogoReferenciaMovimentacao(item))
                     .precoVendido(item.getPrecoUnitario())
+                    .referenciaId(orcamento.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
+                    .estornada(false)
+                    .build());
+        }
+        // Achado do teste manual (V0.10.0) — Customização também precisa baixar o próprio estoque
+        // ao finalizar; antes, só o produto principal de cada item baixava.
+        for (OrcamentoItemCustomizacao c : buscarCustomizacoesDosItens(itens)) {
+            Produto produto = c.getProduto();
+            BigDecimal quantidadeBaixa = BigDecimal.valueOf(c.getQuantidade());
+            produto.setEstoqueAtual(produto.getEstoqueAtual().subtract(quantidadeBaixa));
+            produtoRepository.save(produto);
+
+            movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                    .produto(produto)
+                    .tipo(TipoMovimentacaoProduto.SAIDA)
+                    .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
+                    .quantidade(quantidadeBaixa)
+                    .catalogoReferencia(IdentificadorFormatter.formatar("PRO", produto.getNumero()) + " - Customização")
+                    .precoVendido(c.getPrecoUnitario())
                     .referenciaId(orcamento.getId())
                     .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
                     .estornada(false)
@@ -1372,6 +1441,25 @@ public class OrcamentoService {
                     .estornada(false)
                     .build());
         }
+        // Achado do teste manual (V0.10.0) — espelha baixarEstoque: reversão de Customização
+        // também precisa devolver o próprio estoque, mesmo critério da baixa.
+        for (OrcamentoItemCustomizacao c : buscarCustomizacoesDosItens(itens)) {
+            Produto produto = c.getProduto();
+            BigDecimal quantidadeReversao = BigDecimal.valueOf(c.getQuantidade());
+            produto.setEstoqueAtual(produto.getEstoqueAtual().add(quantidadeReversao));
+            produtoRepository.save(produto);
+
+            movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                    .produto(produto)
+                    .tipo(TipoMovimentacaoProduto.ENTRADA)
+                    .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
+                    .quantidade(quantidadeReversao)
+                    .observacao(motivo)
+                    .referenciaId(orcamento.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
+                    .estornada(false)
+                    .build());
+        }
     }
 
     /**
@@ -1393,6 +1481,13 @@ public class OrcamentoService {
         for (OrcamentoItem item : itens) {
             Produto produto = item.getProdutoVendido();
             quantidadeAcumulada.merge(produto.getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
+            produtosPorId.putIfAbsent(produto.getId(), produto);
+        }
+        // Achado do teste manual (V0.10.0) — mesmo critério de calcularAvisosEstoque: Customização
+        // participa do bloqueio/aviso de estoque negativo, não só o produto principal.
+        for (OrcamentoItemCustomizacao c : buscarCustomizacoesDosItens(itens)) {
+            Produto produto = c.getProduto();
+            quantidadeAcumulada.merge(produto.getId(), BigDecimal.valueOf(c.getQuantidade()), BigDecimal::add);
             produtosPorId.putIfAbsent(produto.getId(), produto);
         }
 

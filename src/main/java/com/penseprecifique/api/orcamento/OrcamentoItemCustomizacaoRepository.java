@@ -10,5 +10,10 @@ public interface OrcamentoItemCustomizacaoRepository extends JpaRepository<Orcam
 
     List<OrcamentoItemCustomizacao> findByOrcamentoItemId(UUID orcamentoItemId);
 
+    // Achado do teste manual (V0.10.0) — estoque/produção do orçamento precisam considerar as
+    // customizações anexadas, não só o produto principal de cada item; batched pro orçamento
+    // inteiro (1 query), nunca 1 lookup por item.
+    List<OrcamentoItemCustomizacao> findByOrcamentoItemIdIn(List<UUID> orcamentoItemIds);
+
     void deleteByOrcamentoItemId(UUID orcamentoItemId);
 }

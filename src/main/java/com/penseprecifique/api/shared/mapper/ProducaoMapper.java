@@ -44,6 +44,7 @@ public class ProducaoMapper {
         response.setAlertasInsumos(alertasInsumos);
         response.setHistoricoStatus(historicoStatus.stream().map(this::toHistoricoStatusResponse).toList());
         response.setOrcamentosVinculados(orcamentosVinculados.stream().map(this::toProducaoOrcamentoResponse).toList());
+        response.setTipoOrigem(producao.getTipoOrigem());
         return response;
     }
 

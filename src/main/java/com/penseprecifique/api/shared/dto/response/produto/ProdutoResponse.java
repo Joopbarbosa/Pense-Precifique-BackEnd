@@ -33,6 +33,10 @@ public class ProdutoResponse {
     private boolean permitirEstoqueNegativo;
     private boolean ativo;
     private boolean algumInsumoNaoFracionavel;
+    /** RN-NOVA-2 (V0.10.0, #299) — valor atual exibido/editável (persistido, calculado+override). */
+    private Boolean fracionavel;
+    /** true quando a artesã já editou fracionavel manualmente. */
+    private Boolean fracionavelOverride;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

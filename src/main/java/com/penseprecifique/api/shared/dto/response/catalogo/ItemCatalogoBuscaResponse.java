@@ -24,4 +24,8 @@ public class ItemCatalogoBuscaResponse {
     private boolean algumInsumoNaoFracionavel;
     private boolean permitirEstoqueNegativo;
     private BigDecimal estoqueAtual;
+    /** #473 — fracionavel do Produto vendido (valor final calculado+override, RN-NOVA-2/#299),
+     *  mesmo campo já exposto em OrcamentoItemResponse (RN-NOVA-7/#461) — badge fracionável na
+     *  busca de item de catálogo dentro do Orçamento. */
+    private Boolean fracionavel;
 }

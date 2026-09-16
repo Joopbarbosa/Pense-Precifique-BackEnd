@@ -94,6 +94,24 @@ class ItemCatalogoBuscaOrcamentoIT {
     }
 
     /**
+     * #473 — achado da tarefa #461 (RN-NOVA-7): ItemCatalogoBuscaResponse não expunha `fracionavel`
+     * do Produto vendido, deixando a busca de item de catálogo dentro do Orçamento sem a badge que
+     * o restante do fluxo (ficha técnica, item avulso, item de orçamento já criado) já mostra.
+     */
+    @Test
+    void respostaExpoeFracionavelDoProduto() {
+        seedUsuarioECatalogo();
+        ItemCatalogo item = novoItem("Kit Convite Floral", 1);
+        item.getProduto().setFracionavel(false);
+        produtoRepository.save(item.getProduto());
+
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, Pageable.unpaged());
+
+        assertEquals(1, resultado.getContent().size());
+        assertEquals(false, resultado.getContent().get(0).getFracionavel());
+    }
+
+    /**
      * RN-NOVA-23 (#313, P-B006) — Caminho A: catalogoId precisa estar presente para o Frontend
      * chamar GET /catalogos/{catalogoId}/itens e montar a calculadora de preço após selecionar o
      * item na busca (a busca sozinha não carrega quantidadePacote/customizacoesAnexadas).

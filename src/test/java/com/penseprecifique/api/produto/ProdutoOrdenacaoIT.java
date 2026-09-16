@@ -98,11 +98,11 @@ class ProdutoOrdenacaoIT {
         seed();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "usuario.email"));
         assertThrows(BusinessException.class,
-                () -> produtoService.listar(null, null, null, pageable));
+                () -> produtoService.listar(null, null, null, null, pageable));
     }
 
     private List<UUID> idsNaOrdem(Sort sort) {
-        Page<ProdutoResponse> pagina = produtoService.listar(null, null, null, PageRequest.of(0, 20, sort));
+        Page<ProdutoResponse> pagina = produtoService.listar(null, null, null, null, PageRequest.of(0, 20, sort));
         return pagina.getContent().stream().map(ProdutoResponse::getId).toList();
     }
 }

@@ -33,8 +33,9 @@ public class ProdutoController {
             @RequestParam(required = false) TipoProduto tipo,
             @RequestParam(required = false) String busca,
             @RequestParam(required = false, defaultValue = "false") boolean semCatalogo,
+            @RequestParam(required = false) Boolean ativo,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(produtoService.listar(tipo, busca, semCatalogo, pageable));
+        return ResponseEntity.ok(produtoService.listar(tipo, busca, semCatalogo, ativo, pageable));
     }
 
     @GetMapping("/contagens")
