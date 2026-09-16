@@ -1033,9 +1033,11 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
 
         List<ProducaoProdutoRequest> pendentes = produtosPendentesDeSincronizacao(orcamento.getId(), producao.getId());
-        if (!pendentes.isEmpty()) {
-            producaoService.adicionarProdutosDeOrcamento(producao.getId(), pendentes, usuarioId, orcamento);
-        }
+        // #395/D-004: sempre chama adicionarProdutosDeOrcamento, mesmo com pendentes vazio — é onde
+        // vive o guard de RN-PROD-VINC-02 (só AGUARDANDO_INICIO aceita vínculo). Pular a chamada
+        // quando não há produto a sincronizar deixava esse caminho (ex.: orçamento sem itens, ou
+        // link novo sem nada pendente) gravar orcamento_producoes sem checar o estado da produção.
+        producaoService.adicionarProdutosDeOrcamento(producao.getId(), pendentes, usuarioId, orcamento);
 
         if (orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamento.getId(), producao.getId()).isEmpty()) {
             orcamentoProducaoRepository.save(OrcamentoProducao.builder()
