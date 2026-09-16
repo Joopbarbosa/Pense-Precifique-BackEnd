@@ -167,6 +167,7 @@ public class ProdutoService {
     public ProdutoDetalheResponse cadastrar(ProdutoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         validarRendimento(request);
+        validarCsosn(request);
 
         Usuario usuario = getUsuarioAutenticado();
         Produto produto = produtoMapper.toEntity(request, usuario);
@@ -215,6 +216,7 @@ public class ProdutoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
 
         validarRendimento(request);
+        validarCsosn(request);
 
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
         BigDecimal margemLucroAntigo = produto.getMargemLucro();
@@ -600,6 +602,17 @@ public class ProdutoService {
         boolean temFichaTecnica = request.getFichaTecnica() != null && !request.getFichaTecnica().isEmpty();
         if (temFichaTecnica && (request.getRendimento() == null || request.getRendimento().compareTo(BigDecimal.ZERO) <= 0)) {
             throw new BusinessException("Rendimento é obrigatório e deve ser maior que zero quando a ficha técnica está preenchida.");
+        }
+    }
+
+    /** RN-NOVA-13 (#489) — CSOSN, quando preenchido, só aceita um dos códigos válidos do Simples
+     * Nacional. Continua opcional — ausência não bloqueia nada (CEN-NOVO-13). */
+    private static final java.util.Set<String> CSOSN_VALIDOS = java.util.Set.of(
+            "101", "102", "103", "201", "202", "203", "300", "400", "500", "900");
+
+    private void validarCsosn(ProdutoRequest request) {
+        if (request.getCsosn() != null && !CSOSN_VALIDOS.contains(request.getCsosn())) {
+            throw new BusinessException("O código CSOSN informado não é válido.");
         }
     }
 

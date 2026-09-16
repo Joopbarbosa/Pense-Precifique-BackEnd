@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -50,4 +51,25 @@ public class ProdutoRequest {
     @NotNull
     @Valid
     private List<FichaTecnicaItemRequest> fichaTecnica = new ArrayList<>();
+
+    /**
+     * #489 — campos fiscais mínimos (RN-NOVA-12/13), todos opcionais. Preparação para emissão
+     * futura de NFC-e/NF-e — sem cálculo de imposto nesta versão.
+     */
+    @Pattern(regexp = "\\d{8}|\\d{12}|\\d{13}|\\d{14}", message = "Código de barras deve ter 8, 12, 13 ou 14 dígitos")
+    private String codigoBarras;
+
+    @Pattern(regexp = "\\d{8}", message = "NCM deve ter 8 dígitos")
+    private String ncm;
+
+    @Pattern(regexp = "\\d{4}", message = "CFOP deve ter 4 dígitos")
+    private String cfop;
+
+    private String cest;
+
+    private String unidadeComercial;
+
+    /** RN-NOVA-13 — validado contra a lista fechada em ProdutoService, não aqui (mensagem de
+     * negócio própria, ver CEN-NOVO-13). */
+    private String csosn;
 }
