@@ -35,6 +35,7 @@ public class CaixaTurnoService {
 
     private final CaixaTurnoRepository caixaTurnoRepository;
     private final CaixaMovimentoRepository caixaMovimentoRepository;
+    private final VendaCaixaPagamentoRepository vendaCaixaPagamentoRepository;
     private final UsuarioRepository usuarioRepository;
 
     /** RN-NOVA-6 — bloqueia se já existir turno ABERTO; índice único parcial é a rede de segurança
@@ -111,10 +112,10 @@ public class CaixaTurnoService {
 
         BigDecimal somaSuprimento = caixaMovimentoRepository.somarPorTipo(turno.getId(), TipoCaixaMovimento.SUPRIMENTO);
         BigDecimal somaSangria = caixaMovimentoRepository.somarPorTipo(turno.getId(), TipoCaixaMovimento.SANGRIA);
-        // RN-NOVA-9 — falta somar as VendaCaixaPagamento em DINHEIRO das vendas deste turno.
-        // VendaCaixaPagamento ainda não existe neste ponto da implementação (#487, mesmo pocket) —
-        // completado em CaixaTurnoService quando #487 for implementado (ver decisoes-caixa.md).
-        BigDecimal valorEsperado = turno.getValorAbertura().add(somaSuprimento).subtract(somaSangria);
+        // RN-NOVA-9 — completa a fórmula com as vendas em DINHEIRO do turno, agora que
+        // VendaCaixaPagamento existe (#487, mesmo pocket — ver decisoes-caixa.md).
+        BigDecimal somaVendasDinheiro = vendaCaixaPagamentoRepository.somarPagamentosDinheiroPorTurno(turno.getId());
+        BigDecimal valorEsperado = turno.getValorAbertura().add(somaSuprimento).subtract(somaSangria).add(somaVendasDinheiro);
 
         turno.setValorFechamentoEsperado(valorEsperado);
         turno.setValorFechamentoInformado(request.valorFechamentoInformado());
