@@ -83,31 +83,6 @@ public class Produto {
     @Builder.Default
     private Boolean fracionavelOverride = false;
 
-    /**
-     * #489 — campos fiscais mínimos (RN-NOVA-12/13, V0.12.0), todos opcionais: nenhum é exigido
-     * para salvar/vender um produto (Orçamento ou Caixa) nesta versão. Preparação para emissão
-     * futura de NFC-e/NF-e (fora de escopo) — sem cálculo de imposto, sem validação cruzada entre
-     * eles. Beneficia igualmente Orçamento e Caixa (não é campo exclusivo de nenhum dos dois).
-     */
-    @Column(name = "codigo_barras")
-    private String codigoBarras;
-
-    @Column(name = "ncm")
-    private String ncm;
-
-    @Column(name = "cfop")
-    private String cfop;
-
-    @Column(name = "cest")
-    private String cest;
-
-    @Column(name = "unidade_comercial")
-    private String unidadeComercial;
-
-    /** RN-NOVA-13 — lista fechada de códigos válidos, validada em ProdutoService. */
-    @Column(name = "csosn")
-    private String csosn;
-
     @Column(nullable = false)
     @Builder.Default
     private Boolean ativo = true;

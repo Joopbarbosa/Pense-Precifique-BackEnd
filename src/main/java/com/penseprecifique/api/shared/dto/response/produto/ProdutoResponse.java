@@ -37,13 +37,6 @@ public class ProdutoResponse {
     private Boolean fracionavel;
     /** true quando a artesã já editou fracionavel manualmente. */
     private Boolean fracionavelOverride;
-    /** #489 — campos fiscais mínimos, todos opcionais (RN-NOVA-12/13). */
-    private String codigoBarras;
-    private String ncm;
-    private String cfop;
-    private String cest;
-    private String unidadeComercial;
-    private String csosn;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

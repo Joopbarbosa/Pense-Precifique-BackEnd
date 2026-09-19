@@ -43,10 +43,6 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
     // filtros desta query (`IS NULL OR` = sem filtro). Bind direto em `=`, não em LOWER/CONCAT —
     // não sofre do problema de inferência de tipo nulo do Postgres que motivou splitar `busca` em
     // método separado (ver javadoc acima).
-    // #487 (V0.12.0) — achado de integração do Frontend do Caixa: UC-NOVO-1 pede busca "por nome
-    // ou código de barras" na venda rápida; a busca de produto (usada também por Orçamento/
-    // Produção) só cobria nome até esta tarefa. Código de barras é sempre igualdade exata (leitor
-    // de código de barras emite o valor completo, nunca um prefixo) — nome continua LIKE parcial.
     @Query("""
         SELECT p FROM Produto p
         WHERE p.usuario.id = :usuarioId
@@ -57,7 +53,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
             NOT EXISTS (SELECT 1 FROM ItemCatalogo ic WHERE ic.produto = p AND ic.deletedAt IS NULL)
             AND NOT EXISTS (SELECT 1 FROM ItemCatalogoCustomizacao icc WHERE icc.produto = p AND icc.itemCatalogo.deletedAt IS NULL)
         ))
-        AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%')) OR p.codigoBarras = :busca)
+        AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%')))
     """)
     Page<Produto> buscarComBusca(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoProduto tipo,
                                   @Param("semCatalogo") boolean semCatalogo, @Param("busca") String busca,

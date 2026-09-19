@@ -47,12 +47,6 @@ public class ProdutoMapper {
         // Técnica de Produto — nunca usado como gate de negócio.
         response.setFracionavel(produto.getFracionavel());
         response.setFracionavelOverride(produto.getFracionavelOverride());
-        response.setCodigoBarras(produto.getCodigoBarras());
-        response.setNcm(produto.getNcm());
-        response.setCfop(produto.getCfop());
-        response.setCest(produto.getCest());
-        response.setUnidadeComercial(produto.getUnidadeComercial());
-        response.setCsosn(produto.getCsosn());
         response.setCreatedAt(produto.getCreatedAt());
         response.setUpdatedAt(produto.getUpdatedAt());
         return response;
@@ -84,12 +78,6 @@ public class ProdutoMapper {
         // RN-NOVA-2 (V0.10.0, #299) — campo novo, só para o badge editável da aba Ficha Técnica.
         response.setFracionavel(produto.getFracionavel());
         response.setFracionavelOverride(produto.getFracionavelOverride());
-        response.setCodigoBarras(produto.getCodigoBarras());
-        response.setNcm(produto.getNcm());
-        response.setCfop(produto.getCfop());
-        response.setCest(produto.getCest());
-        response.setUnidadeComercial(produto.getUnidadeComercial());
-        response.setCsosn(produto.getCsosn());
         response.setFichaTecnica(itens.stream().map(this::toFichaTecnicaItemResponse).toList());
         response.setCreatedAt(produto.getCreatedAt());
         response.setUpdatedAt(produto.getUpdatedAt());
@@ -111,12 +99,6 @@ public class ProdutoMapper {
                 .estoqueMinimo(request.getEstoqueMinimo())
                 .permitirEstoqueNegativo(request.getPermitirEstoqueNegativo() != null ? request.getPermitirEstoqueNegativo() : true)
                 .ativo(true)
-                .codigoBarras(request.getCodigoBarras())
-                .ncm(request.getNcm())
-                .cfop(request.getCfop())
-                .cest(request.getCest())
-                .unidadeComercial(request.getUnidadeComercial())
-                .csosn(request.getCsosn())
                 .build();
     }
 
@@ -132,12 +114,6 @@ public class ProdutoMapper {
         if (request.getPermitirEstoqueNegativo() != null) {
             produto.setPermitirEstoqueNegativo(request.getPermitirEstoqueNegativo());
         }
-        produto.setCodigoBarras(request.getCodigoBarras());
-        produto.setNcm(request.getNcm());
-        produto.setCfop(request.getCfop());
-        produto.setCest(request.getCest());
-        produto.setUnidadeComercial(request.getUnidadeComercial());
-        produto.setCsosn(request.getCsosn());
         // precoCusto e estoqueAtual só mudam via movimentação/recálculo de ficha
         // precoVenda/margemLucro/override (RN-038a) são recalculados/ajustados pelo ProdutoService logo em seguida
     }
