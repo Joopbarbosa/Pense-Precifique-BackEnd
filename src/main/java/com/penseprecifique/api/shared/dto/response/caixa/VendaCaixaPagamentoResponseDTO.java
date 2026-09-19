@@ -6,5 +6,7 @@ import java.util.UUID;
 public record VendaCaixaPagamentoResponseDTO(
         UUID id,
         UUID metodoPagamentoId,
-        BigDecimal valor
+        BigDecimal valor,
+        Integer parcelas,
+        BigDecimal taxaPercentualAplicada
 ) {}

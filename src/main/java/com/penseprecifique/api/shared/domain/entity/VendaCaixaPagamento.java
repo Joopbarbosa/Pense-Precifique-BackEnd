@@ -32,4 +32,15 @@ public class VendaCaixaPagamento {
 
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal valor;
+
+    /** #487 (V0.12.0) — só preenchido em Cartão de Crédito parcelado; nulo nos demais métodos.
+     * Fica na linha de pagamento (e não em {@link VendaCaixa}) porque a venda pode dividir entre
+     * métodos: parte em dinheiro à vista e parte em crédito 3x, na mesma venda. */
+    @Column
+    private Integer parcelas;
+
+    /** Snapshot da taxa vigente no momento da venda — mudar a taxa em Configurações depois não
+     * reescreve o histórico (mesma disciplina de congelamento de preço usada nos itens). */
+    @Column(name = "taxa_percentual_aplicada", precision = 5, scale = 2)
+    private BigDecimal taxaPercentualAplicada;
 }
