@@ -22,6 +22,8 @@ public record VendaCaixaResponseDTO(
         BigDecimal total,
         BigDecimal troco,
         String cancelamentoMotivo,
+        /** #487 (V0.12.0) — só preenchido em venda cancelada: se o estoque voltou ou não. */
+        Boolean estoqueRetornado,
         List<VendaCaixaItemResponseDTO> itens,
         List<VendaCaixaPagamentoResponseDTO> pagamentos
 ) {}

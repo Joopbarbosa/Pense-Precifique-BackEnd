@@ -14,5 +14,7 @@ public record CaixaTurnoResponseDTO(
         BigDecimal valorFechamentoEsperado,
         BigDecimal valorFechamentoInformado,
         BigDecimal diferenca,
+        /** #488 (V0.12.0) — preenchida só quando o fechamento teve diferença. */
+        String fechamentoJustificativa,
         StatusCaixaTurno status
 ) {}

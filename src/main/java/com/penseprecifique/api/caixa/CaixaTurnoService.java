@@ -11,6 +11,7 @@ import com.penseprecifique.api.shared.dto.request.caixa.CaixaMovimentoRequestDTO
 import com.penseprecifique.api.shared.dto.request.caixa.FecharCaixaTurnoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.CaixaMovimentoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.CaixaTurnoResponseDTO;
+import com.penseprecifique.api.shared.dto.response.caixa.FechamentoPreviaResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class CaixaTurnoService {
+
+    /** Mesmo mínimo já exigido no motivo de sangria (`CaixaMovimentoRequestDTO`). */
+    private static final int JUSTIFICATIVA_MINIMA = 30;
 
     private final CaixaTurnoRepository caixaTurnoRepository;
     private final CaixaMovimentoRepository caixaMovimentoRepository;
@@ -103,7 +107,33 @@ public class CaixaTurnoService {
                 .stream().map(this::toMovimentoResponse).toList();
     }
 
-    /** RN-NOVA-9 — calcula e grava a diferença, nunca bloqueia o fechamento. */
+    /**
+     * #488 (V0.12.0) — prévia do fechamento, sem persistir. Existe porque a justificativa só é
+     * exigida quando há diferença, e o Frontend precisa saber o valor esperado antes de enviar.
+     * Mesmo padrão dos endpoints `simular-*` de Produção/Orçamento: reaproveita o cálculo real,
+     * nunca duplica a fórmula.
+     */
+    @Transactional(readOnly = true)
+    public FechamentoPreviaResponseDTO previaFechamento(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        CaixaTurno turno = caixaTurnoRepository.findByIdAndUsuarioIdAndStatus(id, usuarioId, StatusCaixaTurno.ABERTO)
+                .orElseThrow(() -> new ResourceNotFoundException("Caixa aberto não encontrado"));
+
+        BigDecimal somaSuprimento = caixaMovimentoRepository.somarPorTipo(turno.getId(), TipoCaixaMovimento.SUPRIMENTO);
+        BigDecimal somaSangria = caixaMovimentoRepository.somarPorTipo(turno.getId(), TipoCaixaMovimento.SANGRIA);
+        BigDecimal somaVendasDinheiro = vendaCaixaPagamentoRepository.somarPagamentosDinheiroPorTurno(turno.getId());
+
+        return new FechamentoPreviaResponseDTO(
+                turno.getValorAbertura(), somaSuprimento, somaSangria, somaVendasDinheiro,
+                calcularValorEsperado(turno, somaSuprimento, somaSangria, somaVendasDinheiro));
+    }
+
+    /** RN-NOVA-9 — calcula e grava a diferença, nunca bloqueia o fechamento.
+     *
+     * <p>#488 (V0.12.0): diferença passou a exigir justificativa de no mínimo 30 caracteres — mesmo
+     * mínimo já usado no motivo de sangria. A validação é condicional (só com diferença), por isso
+     * vive aqui e não como {@code @Size} no DTO. O valor esperado é recalculado no servidor, nunca
+     * aceito da prévia que o cliente consultou. */
     @Transactional
     public CaixaTurnoResponseDTO fecharTurno(UUID id, FecharCaixaTurnoRequestDTO request) {
         UUID usuarioId = getUsuarioIdAutenticado();
@@ -115,15 +145,31 @@ public class CaixaTurnoService {
         // RN-NOVA-9 — completa a fórmula com as vendas em DINHEIRO do turno, agora que
         // VendaCaixaPagamento existe (#487, mesmo pocket — ver decisoes-caixa.md).
         BigDecimal somaVendasDinheiro = vendaCaixaPagamentoRepository.somarPagamentosDinheiroPorTurno(turno.getId());
-        BigDecimal valorEsperado = turno.getValorAbertura().add(somaSuprimento).subtract(somaSangria).add(somaVendasDinheiro);
+        BigDecimal valorEsperado = calcularValorEsperado(turno, somaSuprimento, somaSangria, somaVendasDinheiro);
+        BigDecimal diferenca = request.valorFechamentoInformado().subtract(valorEsperado);
+
+        if (diferenca.compareTo(BigDecimal.ZERO) != 0) {
+            String justificativa = request.justificativa() == null ? "" : request.justificativa().trim();
+            if (justificativa.length() < JUSTIFICATIVA_MINIMA) {
+                throw new BusinessException(
+                        "Houve diferença no fechamento. Justifique com pelo menos "
+                                + JUSTIFICATIVA_MINIMA + " caracteres.");
+            }
+            turno.setFechamentoJustificativa(justificativa);
+        }
 
         turno.setValorFechamentoEsperado(valorEsperado);
         turno.setValorFechamentoInformado(request.valorFechamentoInformado());
-        turno.setDiferenca(request.valorFechamentoInformado().subtract(valorEsperado));
+        turno.setDiferenca(diferenca);
         turno.setDataFechamento(LocalDateTime.now());
         turno.setStatus(StatusCaixaTurno.FECHADO);
 
         return toResponse(caixaTurnoRepository.save(turno));
+    }
+
+    private BigDecimal calcularValorEsperado(CaixaTurno turno, BigDecimal suprimentos,
+                                             BigDecimal sangrias, BigDecimal vendasDinheiro) {
+        return turno.getValorAbertura().add(suprimentos).subtract(sangrias).add(vendasDinheiro);
     }
 
     private UUID getUsuarioIdAutenticado() {
@@ -136,7 +182,8 @@ public class CaixaTurnoService {
     private CaixaTurnoResponseDTO toResponse(CaixaTurno t) {
         return new CaixaTurnoResponseDTO(
                 t.getId(), t.getDataAbertura(), t.getValorAbertura(), t.getDataFechamento(),
-                t.getValorFechamentoEsperado(), t.getValorFechamentoInformado(), t.getDiferenca(), t.getStatus());
+                t.getValorFechamentoEsperado(), t.getValorFechamentoInformado(), t.getDiferenca(),
+                t.getFechamentoJustificativa(), t.getStatus());
     }
 
     private CaixaMovimentoResponseDTO toMovimentoResponse(CaixaMovimento m) {

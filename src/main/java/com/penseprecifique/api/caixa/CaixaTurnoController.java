@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.request.caixa.CaixaMovimentoRequestDTO
 import com.penseprecifique.api.shared.dto.request.caixa.FecharCaixaTurnoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.CaixaMovimentoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.CaixaTurnoResponseDTO;
+import com.penseprecifique.api.shared.dto.response.caixa.FechamentoPreviaResponseDTO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,12 @@ public class CaixaTurnoController {
     @GetMapping("/turnos/atual")
     public ResponseEntity<CaixaTurnoResponseDTO> buscarTurnoAberto() {
         return ResponseEntity.ok(caixaTurnoService.buscarTurnoAberto());
+    }
+
+    /** #488 (V0.12.0) — valor esperado antes de fechar, para a tela saber se cobra justificativa. */
+    @GetMapping("/turnos/{id}/fechamento-previa")
+    public ResponseEntity<FechamentoPreviaResponseDTO> previaFechamento(@PathVariable UUID id) {
+        return ResponseEntity.ok(caixaTurnoService.previaFechamento(id));
     }
 
     @PostMapping("/turnos/{id}/fechar")

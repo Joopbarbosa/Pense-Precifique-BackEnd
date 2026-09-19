@@ -51,6 +51,11 @@ public class CaixaTurno {
     @Column(precision = 15, scale = 2)
     private BigDecimal diferenca;
 
+    /** #488 (V0.12.0) — obrigatória (mín. 30 caracteres) só quando houve diferença no fechamento;
+     * validada no Service por ser regra condicional. */
+    @Column(name = "fechamento_justificativa", columnDefinition = "TEXT")
+    private String fechamentoJustificativa;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private StatusCaixaTurno status;

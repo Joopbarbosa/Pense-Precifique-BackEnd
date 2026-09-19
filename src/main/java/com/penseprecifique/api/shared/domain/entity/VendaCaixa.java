@@ -72,4 +72,10 @@ public class VendaCaixa {
     /** Obrigatório só quando status = CANCELADA (RN-NOVA-4). */
     @Column(name = "cancelamento_motivo", columnDefinition = "TEXT")
     private String cancelamentoMotivo;
+
+    /** #487 (V0.12.0) — escolha da usuária ao cancelar: o estoque da venda voltou ou não.
+     * Nulo em venda não cancelada e nas canceladas antes desta versão, quando devolver era o
+     * único comportamento possível. */
+    @Column(name = "estoque_retornado")
+    private Boolean estoqueRetornado;
 }
