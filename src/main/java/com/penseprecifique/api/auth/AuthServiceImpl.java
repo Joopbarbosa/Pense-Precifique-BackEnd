@@ -1,5 +1,6 @@
 package com.penseprecifique.api.auth;
 
+import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelService;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.auth.CadastroRequestDTO;
 import com.penseprecifique.api.shared.dto.request.auth.LoginRequestDTO;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -18,11 +20,13 @@ public class AuthServiceImpl implements AuthService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final MetodoPagamentoConfiguravelService metodoPagamentoService;
 
     @Value("${jwt.expiration-ms}")
     private long expirationMs;
 
     @Override
+    @Transactional
     public AuthResponseDTO register(CadastroRequestDTO request) {
         if (!request.senha().equals(request.confirmarSenha())) {
             throw new BusinessException("As senhas não coincidem");
@@ -38,6 +42,9 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         usuarioRepository.save(usuario);
+        // DT-NOVA-6 — seed eager (não lazy como Empresa/ConfiguracaoPrecificacao, ver AUT-004):
+        // Caixa exige pelo menos 1 método existente na primeira venda.
+        metodoPagamentoService.seedMetodosPadrao(usuario);
 
         String token = jwtTokenProvider.generateToken(usuario);
         return new AuthResponseDTO(token, usuario.getId(), usuario.getEmail(), expirationMs);

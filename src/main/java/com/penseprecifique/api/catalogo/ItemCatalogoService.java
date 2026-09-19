@@ -78,7 +78,8 @@ public class ItemCatalogoService {
                 ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim(), pageable)
                 : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId, pageable);
         return itens.map(item -> itemCatalogoMapper.toBuscaResponse(item,
-                fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId())));
+                fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId()),
+                customizacaoRepository.findByItemCatalogoId(item.getId())));
     }
 
     /**

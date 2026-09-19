@@ -53,7 +53,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
             NOT EXISTS (SELECT 1 FROM ItemCatalogo ic WHERE ic.produto = p AND ic.deletedAt IS NULL)
             AND NOT EXISTS (SELECT 1 FROM ItemCatalogoCustomizacao icc WHERE icc.produto = p AND icc.itemCatalogo.deletedAt IS NULL)
         ))
-        AND LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
+        AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%')))
     """)
     Page<Produto> buscarComBusca(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoProduto tipo,
                                   @Param("semCatalogo") boolean semCatalogo, @Param("busca") String busca,

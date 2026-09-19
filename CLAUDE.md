@@ -3,7 +3,7 @@
 > Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`. Projeto pré-produção
 > (primeiro deploy estável com usuários reais = v1). Caminho:
 > `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Última atualização: 12/09/2026 (Retomada V0.9.0) · Branch padrão atual: `feature/V0.9.0`
+> Última atualização: 19/09/2026 (Retomada V0.12.0) · Branch padrão atual: `feature/V0.12.0`
 > Se este arquivo e o prompt da sessão divergirem, este arquivo vence.
 >
 > Histórico de versões (V0.5 a V0.8.2) migrado para os `regras-*.md`/`decisoes-*.md` de cada
@@ -67,8 +67,10 @@ antigo extinto desde o refactor V0.5):
 
 ```
 com/penseprecifique/api/
-├── auth/ catalogo/ cliente/ dashboard/ empresa/ insumo/ orcamento/ producao/ produto/
+├── auth/ caixa/ catalogo/ cliente/ dashboard/ empresa/ insumo/ orcamento/ producao/ produto/
 │   → *Controller, *Service(+Impl quando houver), *Repository de cada módulo
+│   (`caixa/`, V0.12.0: VendaCaixa/VendaCaixaItem/VendaCaixaPagamento, CaixaTurno/CaixaMovimento —
+│   `empresa/` também ganhou `MetodoPagamentoConfiguravel`, ver seção 3 sobre a colisão de nome)
 ├── pdf/               # PdfService, PdfMapper (ver seção própria)
 ├── shared/
 │   ├── domain/{entity,enums,converter}/   # entidades JPA, enums, converters
@@ -108,6 +110,13 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
 - **Regra de negócio já existe em algum módulo?** Checar `docs-pense-precifique/modulos/[MODULO]/
   regras-[modulo].md` antes de assumir que não existe — regras de outros módulos costumam já ter
   resolvido o mesmo problema (ex.: XOR de origem, padrão calculado+override).
+- **Entidade nova cujo nome "óbvio" já existe como enum/classe em outro módulo?** Conferir
+  `shared/domain/enums/`/`shared/domain/entity/` inteiro antes de nomear — achado real (V0.12.0):
+  a entidade nova de método de pagamento configurável não pôde se chamar `MetodoPagamento` porque
+  já existia `shared.domain.enums.MetodoPagamento` (enum fixo, usado por `Orcamento`); como as duas
+  vivem no mesmo package (`shared.domain.entity`), o nome simples vencia o import wildcard do enum
+  em 4 arquivos de Orçamento/PDF — só descoberto ao compilar de verdade (`mvn clean`), não no
+  incremental do host. Renomeada para `MetodoPagamentoConfiguravel`.
 
 ---
 
@@ -179,6 +188,15 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   (fuzzing): parâmetro de path/query com tipo incompatível (`MethodArgumentTypeMismatchException`)
   não estava coberto e caía no handler genérico — ao adicionar handler novo, sempre checar contra
   esse contrato antes de deixar algo cair no `Exception.class` por omissão.
+- **Campo condicional por tipo/discriminador é sempre coluna nullable + validação em `Service`,
+  nunca `@Inheritance`** (reforçado em V0.12.0, `MetodoPagamentoConfiguravel.taxaMaquininha`/
+  `maxParcelas`, só aceitos para tipos de cartão) — o projeto não usa herança JPA em nenhuma
+  entidade; mesmo princípio já usado por `FichaTecnicaItem.componenteTipo`.
+- **Extensão de enum compartilhado entre módulos exige `mvn clean` antes de considerar "sem
+  impacto"** (achado V0.12.0, `#490` — `ReferenciaMovimentacaoTipo` ganhando `CAIXA` quebrou um
+  switch exaustivo em `InsumoService`, módulo não relacionado, só visível em build limpo, nunca no
+  incremental do host). Rodar `mvn clean package` sempre que um enum usado por switch exaustivo em
+  mais de um módulo ganhar um valor novo.
 
 ---
 
@@ -189,6 +207,10 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   em código novo de Produção.
 - **Pacote flat antigo** (`controller/`/`service/`/`repository/` soltos na raiz de `api/`) foi
   extinto no refactor V0.5 — não replicar, seguir a estrutura por módulo da seção 2.
+- **`docker-compose.yml` fixa `TZ=America/Sao_Paulo` nos serviços `db`/`backend`** (V0.12.0,
+  achado do teste manual — container rodava em UTC puro por padrão, todo `LocalDateTime.now()` do
+  projeto ficava 3h à frente do horário real). Não remover essa env var nem assumir fuso do
+  container sem checar — é a correção da raiz, não um workaround local num módulo específico.
 
 ---
 

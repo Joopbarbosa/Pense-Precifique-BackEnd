@@ -299,6 +299,11 @@ public class InsumoService {
                 Integer numero = numeroOrcamentoPorId.get(mov.getReferenciaId());
                 yield numero != null ? IdentificadorFormatter.formatar("ORC", numero) : "ORC-?";
             }
+            // #490 (V0.12.0) — CAIXA é valor novo de ReferenciaMovimentacaoTipo, mas só válido em
+            // movimentacoes_produto (venda de Caixa nunca movimenta Insumo, RN-NOVA-1). Constraint
+            // chk_mov_insumo_referencia_tipo não inclui CAIXA — nenhuma linha real chega aqui.
+            case CAIXA -> throw new IllegalStateException(
+                    "MovimentacaoInsumo não pode ter referência do tipo CAIXA — Caixa só movimenta Produto.");
         };
     }
 

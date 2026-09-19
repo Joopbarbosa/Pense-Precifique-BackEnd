@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -28,4 +29,8 @@ public class ItemCatalogoBuscaResponse {
      *  mesmo campo já exposto em OrcamentoItemResponse (RN-NOVA-7/#461) — badge fracionável na
      *  busca de item de catálogo dentro do Orçamento. */
     private Boolean fracionavel;
+    /** #487 (V0.12.0) — customizações fixas anexadas ao item, com preço, para o Caixa montar o
+     *  preview do carrinho sem round-trip extra (reabertura de RN-NOVA-1, ver decisoes-caixa.md).
+     *  Orçamento (único consumidor até aqui) ignora este campo — não muda seu comportamento. */
+    private List<CustomizacaoAnexadaResponse> customizacoesFixas;
 }

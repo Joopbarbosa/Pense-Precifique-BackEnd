@@ -49,11 +49,14 @@ public class ItemCatalogoMapper {
         response.setProdutoId(entidade.getProduto().getId());
         response.setProdutoNome(entidade.getProduto().getNome());
         response.setQuantidade(entidade.getQuantidade());
+        response.setPrecoVenda(entidade.getProduto().getPrecoVenda());
         return response;
     }
 
-    public ItemCatalogoBuscaResponse toBuscaResponse(ItemCatalogo item, List<FichaTecnicaItem> fichaTecnicaProduto) {
+    public ItemCatalogoBuscaResponse toBuscaResponse(ItemCatalogo item, List<FichaTecnicaItem> fichaTecnicaProduto,
+                                                       List<ItemCatalogoCustomizacao> customizacoesFixas) {
         ItemCatalogoBuscaResponse response = new ItemCatalogoBuscaResponse();
+        response.setCustomizacoesFixas(customizacoesFixas.stream().map(this::toCustomizacaoAnexadaResponse).toList());
         response.setId(item.getId());
         response.setProdutoId(item.getProduto().getId());
         response.setCatalogoId(item.getCatalogo().getId());
