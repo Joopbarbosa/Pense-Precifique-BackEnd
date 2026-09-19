@@ -56,7 +56,7 @@ class EmpresaConfiguracaoUnicidadeUsuarioIT {
             futures.add(pool.submit(() -> {
                 SecurityContextHolder.getContext().setAuthentication(
                         new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
-                EmpresaRequestDTO req = new EmpresaRequestDTO("Empresa Concorrente", null, null, null, null);
+                EmpresaRequestDTO req = new EmpresaRequestDTO("Empresa Concorrente", null, null, null, null, null);
                 barreira.await();
                 try {
                     return empresaService.upsertEmpresa(req);
