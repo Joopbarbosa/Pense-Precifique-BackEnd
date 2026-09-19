@@ -113,7 +113,7 @@ class MetodoPagamentoConfiguravelServiceIT {
                 .filter(m -> m.tipo() == TipoMetodoPagamento.PIX).findFirst().orElseThrow();
 
         MetodoPagamentoConfiguravelResponseDTO atualizado = metodoPagamentoService.atualizar(
-                pix.id(), new MetodoPagamentoConfiguravelUpdateRequestDTO(false, null, null));
+                pix.id(), new MetodoPagamentoConfiguravelUpdateRequestDTO(false, null, null, null, null, null));
 
         assertFalse(atualizado.ativo());
     }
@@ -129,12 +129,12 @@ class MetodoPagamentoConfiguravelServiceIT {
                 .filter(m -> m.tipo() == TipoMetodoPagamento.DINHEIRO).findFirst().orElseThrow().id();
 
         MetodoPagamentoConfiguravelResponseDTO atualizado = metodoPagamentoService.atualizar(
-                idCartaoCredito, new MetodoPagamentoConfiguravelUpdateRequestDTO(null, new BigDecimal("2.50"), null));
+                idCartaoCredito, new MetodoPagamentoConfiguravelUpdateRequestDTO(null, new BigDecimal("2.50"), null, null, null, null));
         assertEquals(new BigDecimal("2.50"), atualizado.taxaMaquininha());
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
                 metodoPagamentoService.atualizar(idDinheiro,
-                        new MetodoPagamentoConfiguravelUpdateRequestDTO(null, new BigDecimal("1.00"), null)));
+                        new MetodoPagamentoConfiguravelUpdateRequestDTO(null, new BigDecimal("1.00"), null, null, null, null)));
         assertEquals("Taxa da maquininha só se aplica a Cartão Crédito ou Cartão Débito.", ex.getMessage());
     }
 
@@ -147,13 +147,13 @@ class MetodoPagamentoConfiguravelServiceIT {
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
                 metodoPagamentoService.atualizar(idPix,
-                        new MetodoPagamentoConfiguravelUpdateRequestDTO(null, null, "Pix Rápido")));
+                        new MetodoPagamentoConfiguravelUpdateRequestDTO(null, null, "Pix Rápido", null, null, null)));
         assertEquals("Não é possível alterar o nome de um método fixo.", ex.getMessage());
 
         MetodoPagamentoConfiguravelResponseDTO outro = metodoPagamentoService.criar(
                 new MetodoPagamentoConfiguravelRequestDTO(TipoMetodoPagamento.OUTRO, "Fiado"));
         MetodoPagamentoConfiguravelResponseDTO renomeado = metodoPagamentoService.atualizar(
-                outro.id(), new MetodoPagamentoConfiguravelUpdateRequestDTO(null, null, "Fiado da Ana"));
+                outro.id(), new MetodoPagamentoConfiguravelUpdateRequestDTO(null, null, "Fiado da Ana", null, null, null));
         assertEquals("Fiado da Ana", renomeado.nome());
     }
 
@@ -162,6 +162,6 @@ class MetodoPagamentoConfiguravelServiceIT {
         novoUsuarioAutenticado("not-found");
         assertThrows(ResourceNotFoundException.class, () ->
                 metodoPagamentoService.atualizar(UUID.randomUUID(),
-                        new MetodoPagamentoConfiguravelUpdateRequestDTO(false, null, null)));
+                        new MetodoPagamentoConfiguravelUpdateRequestDTO(false, null, null, null, null, null)));
     }
 }

@@ -2,11 +2,14 @@ package com.penseprecifique.api.empresa;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
+import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoTaxaParcela;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoMetodoPagamento;
 import com.penseprecifique.api.shared.dto.request.config.MetodoPagamentoConfiguravelRequestDTO;
 import com.penseprecifique.api.shared.dto.request.config.MetodoPagamentoConfiguravelUpdateRequestDTO;
+import com.penseprecifique.api.shared.dto.request.config.TaxaParcelaRequestDTO;
 import com.penseprecifique.api.shared.dto.response.config.MetodoPagamentoConfiguravelResponseDTO;
+import com.penseprecifique.api.shared.dto.response.config.TaxaParcelaResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -36,6 +40,7 @@ public class MetodoPagamentoConfiguravelService {
             TipoMetodoPagamento.CARTAO_CREDITO, TipoMetodoPagamento.CARTAO_DEBITO);
 
     private final MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
+    private final MetodoPagamentoTaxaParcelaRepository metodoPagamentoTaxaParcelaRepository;
     private final UsuarioRepository usuarioRepository;
 
     /** RN-NOVA-15 — seed eager, chamado por AuthServiceImpl#register (DT-NOVA-6). */
@@ -125,7 +130,63 @@ public class MetodoPagamentoConfiguravelService {
             metodo.setNome(novoNome);
         }
 
+        aplicarParcelamento(metodo, request);
+
         return toResponse(metodoPagamentoRepository.save(metodo));
+    }
+
+    /**
+     * #491 (V0.12.0) — parcelamento só existe em Cartão de Crédito. Com taxa uniforme, a taxa
+     * vigente continua sendo a `taxaMaquininha`; com taxa variável, exige uma entrada por parcela
+     * de 1 até `maxParcelas` (sem buraco), porque a venda precisa saber a taxa de qualquer parcela
+     * que a usuária escolher no Caixa.
+     */
+    private void aplicarParcelamento(MetodoPagamentoConfiguravel metodo,
+                                     MetodoPagamentoConfiguravelUpdateRequestDTO request) {
+        if (request.maxParcelas() == null && request.taxaParcelaUniforme() == null
+                && request.taxasParcela() == null) {
+            return;
+        }
+        if (metodo.getTipo() != TipoMetodoPagamento.CARTAO_CREDITO) {
+            throw new BusinessException("Parcelamento só se aplica a Cartão Crédito.");
+        }
+
+        if (request.maxParcelas() != null) metodo.setMaxParcelas(request.maxParcelas());
+        if (request.taxaParcelaUniforme() != null) metodo.setTaxaParcelaUniforme(request.taxaParcelaUniforme());
+
+        boolean uniforme = !Boolean.FALSE.equals(metodo.getTaxaParcelaUniforme());
+        if (uniforme) {
+            metodoPagamentoTaxaParcelaRepository.deleteByMetodoPagamentoId(metodo.getId());
+            return;
+        }
+
+        Integer maxParcelas = metodo.getMaxParcelas();
+        if (maxParcelas == null) {
+            throw new BusinessException("Informe a parcela máxima antes de definir a taxa por parcela.");
+        }
+        List<TaxaParcelaRequestDTO> taxas = request.taxasParcela() == null ? List.of() : request.taxasParcela();
+        Set<Integer> parcelasInformadas = taxas.stream().map(TaxaParcelaRequestDTO::parcela).collect(Collectors.toSet());
+        if (parcelasInformadas.size() != taxas.size()) {
+            throw new BusinessException("A mesma parcela foi informada mais de uma vez.");
+        }
+        for (int parcela = 1; parcela <= maxParcelas; parcela++) {
+            if (!parcelasInformadas.contains(parcela)) {
+                throw new BusinessException("Informe a taxa da parcela " + parcela + ".");
+            }
+        }
+        if (parcelasInformadas.stream().anyMatch(p -> p > maxParcelas)) {
+            throw new BusinessException("Há taxa informada para uma parcela acima da parcela máxima.");
+        }
+
+        metodoPagamentoTaxaParcelaRepository.deleteByMetodoPagamentoId(metodo.getId());
+        metodoPagamentoTaxaParcelaRepository.flush();
+        metodoPagamentoTaxaParcelaRepository.saveAll(taxas.stream()
+                .map(t -> MetodoPagamentoTaxaParcela.builder()
+                        .metodoPagamentoId(metodo.getId())
+                        .parcela(t.parcela())
+                        .taxa(t.taxa())
+                        .build())
+                .toList());
     }
 
     private UUID getUsuarioIdAutenticado() {
@@ -136,8 +197,15 @@ public class MetodoPagamentoConfiguravelService {
     }
 
     private MetodoPagamentoConfiguravelResponseDTO toResponse(MetodoPagamentoConfiguravel m) {
+        List<TaxaParcelaResponseDTO> taxasParcela = Boolean.FALSE.equals(m.getTaxaParcelaUniforme())
+                ? metodoPagamentoTaxaParcelaRepository.findByMetodoPagamentoIdOrderByParcelaAsc(m.getId()).stream()
+                        .map(t -> new TaxaParcelaResponseDTO(t.getParcela(), t.getTaxa()))
+                        .toList()
+                : List.of();
+
         return new MetodoPagamentoConfiguravelResponseDTO(
                 m.getId(), m.getTipo(), m.getNome(), m.isAfetaCaixaFisico(),
-                m.getTaxaMaquininha(), m.getAtivo(), m.getOrdem());
+                m.getTaxaMaquininha(), m.getAtivo(), m.getOrdem(),
+                m.getMaxParcelas(), m.getTaxaParcelaUniforme(), taxasParcela);
     }
 }

@@ -54,6 +54,16 @@ public class MetodoPagamentoConfiguravel {
     @Column(name = "taxa_maquininha", precision = 5, scale = 2)
     private BigDecimal taxaMaquininha;
 
+    /** #491 (V0.12.0) — parcelamento, só aceito em CARTAO_CREDITO (CHECK na V48; débito não
+     * parcela). Nulo = método não parcela. */
+    @Column(name = "max_parcelas")
+    private Integer maxParcelas;
+
+    /** TRUE: {@link #taxaMaquininha} vale para toda parcela. FALSE: a taxa vem de
+     * {@link MetodoPagamentoTaxaParcela}, uma linha por parcela. */
+    @Column(name = "taxa_parcela_uniforme")
+    private Boolean taxaParcelaUniforme;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean ativo = true;
