@@ -301,11 +301,20 @@ public class PdfMapper {
     }
 
     private PdfMicroservicoEmpresaPayload toEmpresaPayload(String nomeEmpresa, String emailEmpresa, String telefoneEmpresa) {
+        return toEmpresaPayload(nomeEmpresa, emailEmpresa, telefoneEmpresa, null);
+    }
+
+    /**
+     * OpenProject #519 (RN-NOVA-8) — Catálogo é o 1º documento a de fato popular {@code logoUrl}
+     * (os outros 5 sempre mandam {@code null}, decisão de MVP registrada acima): agora que existe
+     * upload de imagem no sistema (R2, #518), {@code Empresa.logoUrl} pode estar preenchido.
+     */
+    private PdfMicroservicoEmpresaPayload toEmpresaPayload(String nomeEmpresa, String emailEmpresa, String telefoneEmpresa, String logoUrl) {
         return PdfMicroservicoEmpresaPayload.builder()
             .nome(nomeEmpresa)
             .email(emailEmpresa)
             .whatsapp(telefoneEmpresa)
-            .logoUrl(null)
+            .logoUrl(logoUrl)
             .build();
     }
 
@@ -462,6 +471,54 @@ public class PdfMapper {
             return "—";
         }
         return dias + (dias == 1 ? " dia útil" : " dias úteis");
+    }
+
+    /**
+     * OpenProject #519 (RN-NOVA-8/DT-NOVA-5) — Catálogo é o único documento sem cliente/valores/
+     * datas de pedido (é uma listagem de itens pra artesã enviar pra cliente final), por isso não
+     * reaproveita {@code ItemPdfData}/{@code toXxxPdfData} de Orçamento — schema próprio, mais
+     * enxuto.
+     */
+    public CatalogoPdfData toCatalogoPdfData(Catalogo catalogo, Empresa empresa, List<ItemCatalogo> itens) {
+        return CatalogoPdfData.builder()
+            .numeroFormatado(String.valueOf(catalogo.getNumero()))
+            .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
+            .emailEmpresa(empresa != null ? empresa.getEmail() : null)
+            .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
+            .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
+            .nomeCatalogo(catalogo.getNome())
+            .itens(itens.stream()
+                .map(item -> ItemCatalogoPdfData.builder()
+                    .nome(item.getNome())
+                    .descricao(item.getDescricao())
+                    .fotoUrl(item.getFotoUrl())
+                    .build())
+                .toList())
+            .build();
+    }
+
+    public PdfMicroservicoCatalogoPayload toCatalogoMicroservicoPayload(CatalogoPdfData dados) {
+        PdfMicroservicoEmpresaPayload empresa = toEmpresaPayload(
+            dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa(), dados.getLogoUrlEmpresa());
+
+        List<PdfMicroservicoItemCatalogoPayload> itens = dados.getItens().stream()
+            .map(item -> PdfMicroservicoItemCatalogoPayload.builder()
+                .nome(item.getNome())
+                .descricao(item.getDescricao())
+                .fotoUrl(item.getFotoUrl())
+                .build())
+            .toList();
+
+        PdfMicroservicoDocumentoCatalogoPayload documento = PdfMicroservicoDocumentoCatalogoPayload.builder()
+            .numeroFormatado(dados.getNumeroFormatado())
+            .nome(dados.getNomeCatalogo())
+            .itens(itens)
+            .build();
+
+        return PdfMicroservicoCatalogoPayload.builder()
+            .empresa(empresa)
+            .documento(documento)
+            .build();
     }
 
 }

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.pdf;
 
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoCatalogoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoPdfMultaPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboEstornoPayload;
@@ -18,6 +19,7 @@ public class PdfService {
     private final OrcamentoPdfPayloadService orcamentoPdfPayloadService;
     private final ReciboPdfPayloadService reciboPdfPayloadService;
     private final ReciboPagamentoPdfPayloadService reciboPagamentoPdfPayloadService;
+    private final CatalogoPdfPayloadService catalogoPdfPayloadService;
 
     /**
      * Delega ao microsserviço pense-precifique-pdf (fluxo D do PRD). Epic #248 completa (5/5
@@ -103,5 +105,16 @@ public class PdfService {
     public String gerarPreviewHtmlReciboEstornoSinal(UUID orcamentoId) {
         PdfMicroservicoReciboEstornoPayload payload = reciboPdfPayloadService.montarPayloadReciboEstorno(orcamentoId);
         return pdfMicroservicoClient.gerarHtml("recibo-estorno", orcamentoId, payload);
+    }
+
+    /**
+     * OpenProject #519 (RN-NOVA-8) — 6º tipo de documento no PdfMapper Pattern, 1º que não deriva
+     * de Orçamento. Mesmo padrão dos demais (#262): leitura de banco em
+     * {@link CatalogoPdfPayloadService}, bean injetado, chamada HTTP fora de qualquer
+     * {@code @Transactional}.
+     */
+    public byte[] gerarPdfCatalogo(UUID catalogoId) {
+        PdfMicroservicoCatalogoPayload payload = catalogoPdfPayloadService.montarPayloadCatalogo(catalogoId);
+        return pdfMicroservicoClient.gerarPdf("catalogo", catalogoId, payload);
     }
 }
