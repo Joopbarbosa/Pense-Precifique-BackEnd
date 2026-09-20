@@ -309,6 +309,12 @@ public class PdfMapper {
             .build();
     }
 
+    /** V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio (não tem mais "o produto
+     * vendido" único); item avulso (RN-054) continua exibindo o nome do Produto. */
+    private String nomeItemVendido(OrcamentoItem item) {
+        return item.getItemCatalogo() != null ? item.getItemCatalogo().getNome() : item.getProduto().getNome();
+    }
+
     private List<ItemPdfData> mapearItens(List<OrcamentoItem> itens,
             Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
         if (itens == null || itens.isEmpty()) {
@@ -316,7 +322,7 @@ public class PdfMapper {
         }
         return itens.stream()
             .map(item -> ItemPdfData.builder()
-                .nomeProduto(item.getProdutoVendido().getNome())
+                .nomeProduto(nomeItemVendido(item))
                 .customizacoes(formatarCustomizacoes(
                         customizacoesPorItem != null ? customizacoesPorItem.get(item.getId()) : null))
                 .quantidade(item.getQuantidade() != null ? item.getQuantidade().toString() : "—")
