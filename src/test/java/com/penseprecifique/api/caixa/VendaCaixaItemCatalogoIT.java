@@ -2,7 +2,7 @@ package com.penseprecifique.api.caixa;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.catalogo.CatalogoRepository;
-import com.penseprecifique.api.catalogo.ItemCatalogoCustomizacaoRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelService;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -30,9 +30,15 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Reabertura de RN-NOVA-1 (V0.12.0, #487) — achado do teste manual do usuário: "o correto é ter
  * produtos e catálogos e eu posso adicionar customização em um produto ou catálogo". Venda de
- * Caixa passa a aceitar origem XOR ItemCatalogo/Produto direto, com customizações fixas
- * (expandidas automaticamente do Catálogo) e ad-hoc (escolhidas na hora, para as duas origens) —
- * ver modulos/CAIXA/decisoes-caixa.md.
+ * Caixa passa a aceitar origem XOR ItemCatalogo/Produto direto, com customizações ad-hoc
+ * (escolhidas na hora, para as duas origens) — ver modulos/CAIXA/decisoes-caixa.md.
+ *
+ * <p>V0.13.0 (#516, RN-NOVA-1/9) — Item de Catálogo passou de "1 produto principal + customizações
+ * anexadas" (cada uma com preço próprio, somado ao subtotal do item) para composição livre de N
+ * componentes sem preço próprio (RN-NOVA-2/3 — o preço já é do item inteiro). Vender um item de
+ * Catálogo agora baixa/reverte o estoque de TODOS os componentes, mas eles não aparecem mais em
+ * {@code VendaCaixaItemResponseDTO.customizacoes()} (isso continua exclusivo da customização
+ * ad-hoc, RN-030) — a verificação passa a ser via estoque + {@code ItemCatalogoComponenteRepository}.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class VendaCaixaItemCatalogoIT {
@@ -41,7 +47,7 @@ class VendaCaixaItemCatalogoIT {
     @Autowired ProdutoRepository produtoRepository;
     @Autowired CatalogoRepository catalogoRepository;
     @Autowired ItemCatalogoRepository itemCatalogoRepository;
-    @Autowired ItemCatalogoCustomizacaoRepository itemCatalogoCustomizacaoRepository;
+    @Autowired ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     @Autowired CaixaTurnoService caixaTurnoService;
     @Autowired VendaCaixaService vendaCaixaService;
     @Autowired MetodoPagamentoConfiguravelService metodoPagamentoService;
@@ -71,46 +77,55 @@ class VendaCaixaItemCatalogoIT {
                 .estoqueAtual(estoqueAtual).permitirEstoqueNegativo(true).ativo(true).build());
     }
 
+    /** V0.13.0 (#516) — monta um Item de Catálogo direto no banco (bypass do Service, mesmo
+     * espírito do teste original) com N componentes Produto-base, preço fixo já calculado. */
+    private ItemCatalogo criarItemCatalogo(Catalogo catalogo, BigDecimal precoVenda, Produto... componentes) {
+        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
+                .catalogo(catalogo).nome("Kit Teste").tempoProducao(0)
+                .precoVenda(precoVenda).override(true).build());
+        for (Produto componente : componentes) {
+            itemCatalogoComponenteRepository.save(ItemCatalogoComponente.builder()
+                    .itemCatalogo(item).produtoBase(componente).quantidade(BigDecimal.ONE).build());
+        }
+        return item;
+    }
+
     private UUID metodoDinheiroId() {
         return metodoPagamentoService.listar().stream()
                 .filter(m -> m.tipo() == TipoMetodoPagamento.DINHEIRO).findFirst().orElseThrow().id();
     }
 
     @Test
-    void vendeItemDeCatalogoComCustomizacaoFixaExpandidaAutomaticamente() {
+    void vendeItemDeCatalogoComComponentesBaixaEstoqueDeTodosEles() {
         seedUsuario();
         Produto produtoPrincipal = criarProduto("Caixa de Bombom", TipoProduto.PRODUTO, new BigDecimal("20.00"), new BigDecimal("10"));
-        Produto customizacaoFixa = criarProduto("Laço Personalizado", TipoProduto.CUSTOMIZACAO, new BigDecimal("5.00"), new BigDecimal("10"));
+        Produto segundoComponente = criarProduto("Laço Personalizado", TipoProduto.CUSTOMIZACAO, new BigDecimal("5.00"), new BigDecimal("10"));
         Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
                 .usuario(usuario).numero(1).nome("Catálogo Teste").ativo(true).build());
-        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
-                .catalogo(catalogo).produto(produtoPrincipal).quantidadePacote(1)
-                .precoVenda(new BigDecimal("20.00")).build());
-        itemCatalogoCustomizacaoRepository.save(ItemCatalogoCustomizacao.builder()
-                .itemCatalogo(item).produto(customizacaoFixa).quantidade(BigDecimal.ONE).build());
+        ItemCatalogo item = criarItemCatalogo(catalogo, new BigDecimal("20.00"), produtoPrincipal, segundoComponente);
 
         VendaCaixaRequestDTO request = new VendaCaixaRequestDTO(
                 null,
                 List.of(new VendaCaixaItemRequestDTO(item.getId(), null, BigDecimal.ONE, null)),
                 null, null,
-                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("25.00"), null)),
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("20.00"), null)),
                 null);
 
         Object resultado = vendaCaixaService.registrarVenda(request);
         assertInstanceOf(VendaCaixaResponseDTO.class, resultado);
         VendaCaixaResponseDTO venda = (VendaCaixaResponseDTO) resultado;
 
-        // 20.00 (item) + 5.00 (customização fixa) = 25.00
-        assertEquals(0, new BigDecimal("25.00").compareTo(venda.total()));
+        // preço do item já é fixo (override) — 20.00, sem soma adicional por componente (RN-NOVA-2/3)
+        assertEquals(0, new BigDecimal("20.00").compareTo(venda.total()));
         assertEquals(1, venda.itens().size());
         assertEquals(item.getId(), venda.itens().get(0).itemCatalogoId());
-        assertEquals(1, venda.itens().get(0).customizacoes().size());
-        assertEquals(customizacaoFixa.getId(), venda.itens().get(0).customizacoes().get(0).produtoId());
+        // componentes de catálogo não viram "customizacoes" na resposta (RN-030 é só ad-hoc)
+        assertEquals(0, venda.itens().get(0).customizacoes().size());
 
         Produto principalAtualizado = produtoRepository.findById(produtoPrincipal.getId()).orElseThrow();
-        Produto customizacaoAtualizada = produtoRepository.findById(customizacaoFixa.getId()).orElseThrow();
+        Produto segundoAtualizado = produtoRepository.findById(segundoComponente.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("9").compareTo(principalAtualizado.getEstoqueAtual()));
-        assertEquals(0, new BigDecimal("9").compareTo(customizacaoAtualizada.getEstoqueAtual()));
+        assertEquals(0, new BigDecimal("9").compareTo(segundoAtualizado.getEstoqueAtual()));
     }
 
     @Test
@@ -141,23 +156,19 @@ class VendaCaixaItemCatalogoIT {
     }
 
     @Test
-    void cancelamentoReverteEstoqueDoItemDeCatalogoEDaCustomizacao() {
+    void cancelamentoReverteEstoqueDeTodosOsComponentesDoItemDeCatalogo() {
         seedUsuario();
         Produto produtoPrincipal = criarProduto("Caixa de Bombom", TipoProduto.PRODUTO, new BigDecimal("20.00"), new BigDecimal("10"));
-        Produto customizacaoFixa = criarProduto("Laço Personalizado", TipoProduto.CUSTOMIZACAO, new BigDecimal("5.00"), new BigDecimal("10"));
+        Produto segundoComponente = criarProduto("Laço Personalizado", TipoProduto.CUSTOMIZACAO, new BigDecimal("5.00"), new BigDecimal("10"));
         Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
                 .usuario(usuario).numero(1).nome("Catálogo Teste").ativo(true).build());
-        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
-                .catalogo(catalogo).produto(produtoPrincipal).quantidadePacote(1)
-                .precoVenda(new BigDecimal("20.00")).build());
-        itemCatalogoCustomizacaoRepository.save(ItemCatalogoCustomizacao.builder()
-                .itemCatalogo(item).produto(customizacaoFixa).quantidade(BigDecimal.ONE).build());
+        ItemCatalogo item = criarItemCatalogo(catalogo, new BigDecimal("20.00"), produtoPrincipal, segundoComponente);
 
         VendaCaixaRequestDTO request = new VendaCaixaRequestDTO(
                 null,
                 List.of(new VendaCaixaItemRequestDTO(item.getId(), null, BigDecimal.ONE, null)),
                 null, null,
-                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("25.00"), null)),
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("20.00"), null)),
                 null);
         VendaCaixaResponseDTO venda = (VendaCaixaResponseDTO) vendaCaixaService.registrarVenda(request);
 
@@ -165,9 +176,9 @@ class VendaCaixaItemCatalogoIT {
                 new CancelarVendaCaixaRequestDTO("Cliente desistiu da compra no balcão", SENHA_TESTE, true));
 
         Produto principalRevertido = produtoRepository.findById(produtoPrincipal.getId()).orElseThrow();
-        Produto customizacaoRevertida = produtoRepository.findById(customizacaoFixa.getId()).orElseThrow();
+        Produto segundoRevertido = produtoRepository.findById(segundoComponente.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("10").compareTo(principalRevertido.getEstoqueAtual()));
-        assertEquals(0, new BigDecimal("10").compareTo(customizacaoRevertida.getEstoqueAtual()));
+        assertEquals(0, new BigDecimal("10").compareTo(segundoRevertido.getEstoqueAtual()));
 
         VendaCaixaResponseDTO vendaCancelada = vendaCaixaService.buscarPorId(venda.id());
         assertEquals(StatusVendaCaixa.CANCELADA, vendaCancelada.status());
@@ -179,9 +190,7 @@ class VendaCaixaItemCatalogoIT {
         Produto produto = criarProduto("Produto Qualquer", TipoProduto.PRODUTO, new BigDecimal("10.00"), new BigDecimal("10"));
         Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
                 .usuario(usuario).numero(1).nome("Catálogo Teste").ativo(true).build());
-        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
-                .catalogo(catalogo).produto(produto).quantidadePacote(1)
-                .precoVenda(new BigDecimal("10.00")).build());
+        ItemCatalogo item = criarItemCatalogo(catalogo, new BigDecimal("10.00"), produto);
 
         VendaCaixaRequestDTO request = new VendaCaixaRequestDTO(
                 null,

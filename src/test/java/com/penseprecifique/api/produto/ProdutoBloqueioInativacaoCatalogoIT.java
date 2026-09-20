@@ -7,7 +7,7 @@ import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
-import com.penseprecifique.api.shared.dto.request.catalogo.CustomizacaoAnexadaRequest;
+import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoComponenteRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoRequest;
 import com.penseprecifique.api.shared.dto.response.catalogo.CatalogoResponse;
 import com.penseprecifique.api.shared.dto.response.produto.CatalogoVinculadoResponse;
@@ -28,10 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * #237/PDT-013 — inativação de Produto passa a ser bloqueada se ele estiver vinculado a algum
- * item de Catálogo, seja como produto principal do item ou como customização anexada a um item de
- * outro produto. Mudança retroativa em cima de RN-045/CAT-006 (que continua existindo, bloqueando
- * a *venda* de item já inativado como segunda camada de proteção).
+ * #237/PDT-013 — inativação de Produto passa a ser bloqueada se ele estiver vinculado como
+ * componente de algum Item de Catálogo. V0.13.0 (#516, RN-NOVA-1) — item de Catálogo passou de "1
+ * produto principal + customizações anexadas" para composição livre de N componentes; "produto
+ * principal" e "customização anexada" viraram o mesmo tipo de vínculo (componente). Mudança
+ * retroativa em cima de RN-045/CAT-006 (que continua existindo, bloqueando a *venda* de item já
+ * inativado como segunda camada de proteção).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ProdutoBloqueioInativacaoCatalogoIT {
@@ -67,6 +69,19 @@ class ProdutoBloqueioInativacaoCatalogoIT {
         return response.getId();
     }
 
+    private ItemCatalogoRequest itemComComponentes(String nome, UUID... produtoBaseIds) {
+        ItemCatalogoRequest item = new ItemCatalogoRequest();
+        item.setNome(nome);
+        item.setTempoProducao(0);
+        item.setComponentes(List.of(produtoBaseIds).stream().map(id -> {
+            ItemCatalogoComponenteRequest req = new ItemCatalogoComponenteRequest();
+            req.setProdutoBaseId(id);
+            req.setQuantidade(BigDecimal.ONE);
+            return req;
+        }).toList());
+        return item;
+    }
+
     @Test
     void inativarSemVinculoEmCatalogoFuncionaNormalmente() {
         // PDT-CEN-037
@@ -80,16 +95,13 @@ class ProdutoBloqueioInativacaoCatalogoIT {
     }
 
     @Test
-    void inativarProdutoPrincipalDeItemCatalogoBloqueiaComListaDeCatalogos() {
+    void inativarComponenteDeItemCatalogoBloqueiaComListaDeCatalogos() {
         // PDT-CEN-038
         seedUsuario();
         Produto produto = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
         UUID catalogoId = novoCatalogo("Catálogo Bolos");
 
-        ItemCatalogoRequest item = new ItemCatalogoRequest();
-        item.setProdutoId(produto.getId());
-        item.setQuantidadePacote(1);
-        itemCatalogoService.adicionar(catalogoId, item);
+        itemCatalogoService.adicionar(catalogoId, itemComComponentes("Kit Bolo", produto.getId()));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> produtoService.inativar(produto.getId()));
         assertTrue(ex.getMessage().contains("Catálogo Bolos"), "mensagem deveria citar o catálogo vinculado: " + ex.getMessage());
@@ -99,53 +111,39 @@ class ProdutoBloqueioInativacaoCatalogoIT {
     }
 
     @Test
-    void inativarProdutoUsadoComoCustomizacaoAnexadaTambemBloqueia() {
-        // PDT-CEN-039 — cobre o segundo caso de vínculo (customização anexada, não produto principal)
+    void inativarProdutoUsadoComoSegundoComponenteTambemBloqueia() {
+        // PDT-CEN-039 — cobre o segundo componente do mesmo item (antigo caso de "customização anexada")
         seedUsuario();
-        Produto produtoPrincipal = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        Produto customizacao = novoProduto("Topo de bolo", TipoProduto.CUSTOMIZACAO, new BigDecimal("1.0000"));
+        Produto principal = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
+        Produto segundo = novoProduto("Topo de bolo", TipoProduto.CUSTOMIZACAO, new BigDecimal("1.0000"));
         UUID catalogoId = novoCatalogo("Catálogo Bolos");
 
-        ItemCatalogoRequest item = new ItemCatalogoRequest();
-        item.setProdutoId(produtoPrincipal.getId());
-        item.setQuantidadePacote(1);
-        CustomizacaoAnexadaRequest customizacaoReq = new CustomizacaoAnexadaRequest();
-        customizacaoReq.setProdutoId(customizacao.getId());
-        customizacaoReq.setQuantidade(BigDecimal.ONE);
-        item.setCustomizacoesAnexadas(List.of(customizacaoReq));
-        itemCatalogoService.adicionar(catalogoId, item);
+        itemCatalogoService.adicionar(catalogoId, itemComComponentes("Kit Bolo", principal.getId(), segundo.getId()));
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> produtoService.inativar(customizacao.getId()));
+                () -> produtoService.inativar(segundo.getId()));
         assertTrue(ex.getMessage().contains("Catálogo Bolos"));
 
-        Produto inalterado = produtoRepository.findById(customizacao.getId()).orElseThrow();
+        Produto inalterado = produtoRepository.findById(segundo.getId()).orElseThrow();
         assertTrue(inalterado.getAtivo());
     }
 
     @Test
-    void catalogosVinculadosListaAmbosOsPapeis() {
+    void catalogosVinculadosListaAmbosOsComponentes() {
         seedUsuario();
-        Produto produtoPrincipal = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
-        Produto customizacao = novoProduto("Topo de bolo", TipoProduto.CUSTOMIZACAO, new BigDecimal("1.0000"));
+        Produto principal = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
+        Produto segundo = novoProduto("Topo de bolo", TipoProduto.CUSTOMIZACAO, new BigDecimal("1.0000"));
         UUID catalogoId = novoCatalogo("Catálogo Bolos");
 
-        ItemCatalogoRequest item = new ItemCatalogoRequest();
-        item.setProdutoId(produtoPrincipal.getId());
-        item.setQuantidadePacote(1);
-        CustomizacaoAnexadaRequest customizacaoReq = new CustomizacaoAnexadaRequest();
-        customizacaoReq.setProdutoId(customizacao.getId());
-        customizacaoReq.setQuantidade(BigDecimal.ONE);
-        item.setCustomizacoesAnexadas(List.of(customizacaoReq));
-        itemCatalogoService.adicionar(catalogoId, item);
+        itemCatalogoService.adicionar(catalogoId, itemComComponentes("Kit Bolo", principal.getId(), segundo.getId()));
 
-        List<CatalogoVinculadoResponse> vinculadosPrincipal = produtoService.catalogosVinculados(produtoPrincipal.getId());
-        List<CatalogoVinculadoResponse> vinculadosCustomizacao = produtoService.catalogosVinculados(customizacao.getId());
+        List<CatalogoVinculadoResponse> vinculadosPrincipal = produtoService.catalogosVinculados(principal.getId());
+        List<CatalogoVinculadoResponse> vinculadosSegundo = produtoService.catalogosVinculados(segundo.getId());
 
         assertEquals(1, vinculadosPrincipal.size());
         assertEquals("Catálogo Bolos", vinculadosPrincipal.get(0).getNome());
-        assertEquals(1, vinculadosCustomizacao.size());
-        assertEquals("Catálogo Bolos", vinculadosCustomizacao.get(0).getNome());
+        assertEquals(1, vinculadosSegundo.size());
+        assertEquals("Catálogo Bolos", vinculadosSegundo.get(0).getNome());
     }
 
     @Test
@@ -166,10 +164,7 @@ class ProdutoBloqueioInativacaoCatalogoIT {
         Produto produto = novoProduto("Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
         UUID catalogoId = novoCatalogo("Catálogo Bolos");
 
-        ItemCatalogoRequest itemReq = new ItemCatalogoRequest();
-        itemReq.setProdutoId(produto.getId());
-        itemReq.setQuantidadePacote(1);
-        var itemResponse = itemCatalogoService.adicionar(catalogoId, itemReq);
+        var itemResponse = itemCatalogoService.adicionar(catalogoId, itemComComponentes("Kit Bolo", produto.getId()));
 
         assertThrows(BusinessException.class, () -> produtoService.inativar(produto.getId()));
 

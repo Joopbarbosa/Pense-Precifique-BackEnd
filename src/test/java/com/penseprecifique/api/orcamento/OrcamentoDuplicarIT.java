@@ -1,6 +1,7 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.catalogo.CatalogoRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -13,6 +14,7 @@ import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -56,6 +58,7 @@ class OrcamentoDuplicarIT {
     @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
     @Autowired CatalogoRepository catalogoRepository;
     @Autowired ItemCatalogoRepository itemCatalogoRepository;
+    @Autowired ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     @Autowired ProducaoRepository producaoRepository;
 
     private Usuario usuario;
@@ -95,9 +98,12 @@ class OrcamentoDuplicarIT {
         Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
                 .usuario(usuario).numero(proximoNumeroCatalogo++).nome("Catálogo Teste " + UUID.randomUUID()).ativo(true).build());
         Produto produto = novoProduto(precoVenda);
-        return itemCatalogoRepository.save(ItemCatalogo.builder()
-                .catalogo(catalogo).produto(produto).quantidadePacote(1)
-                .precoVenda(precoVenda).build());
+        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
+                .catalogo(catalogo).nome("Item Catálogo Teste").tempoProducao(0)
+                .precoVenda(precoVenda).override(true).build());
+        itemCatalogoComponenteRepository.save(ItemCatalogoComponente.builder()
+                .itemCatalogo(item).produtoBase(produto).quantidade(BigDecimal.ONE).build());
+        return item;
     }
 
     private OrcamentoItemRequest itemDeCatalogo(ItemCatalogo itemCatalogo, int quantidade) {

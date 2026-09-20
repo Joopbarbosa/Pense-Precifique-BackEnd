@@ -1,16 +1,17 @@
 package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
-import com.penseprecifique.api.shared.dto.request.catalogo.CustomizacaoAnexadaRequest;
+import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoComponenteRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoPreviewRequest;
 import com.penseprecifique.api.shared.dto.response.catalogo.CatalogoResponse;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoPrecoSugeridoResponse;
-import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,10 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * CAT-013 — POST /catalogos/{catalogoId}/itens/preview-preco. Mesmo cálculo de CAT-003
- * (ItemCatalogoService#calcularPrecoSugerido), exposto sem persistir nada. Desde #239 (V0.7),
- * o preço sugerido herda produto.precoVenda × quantidadePacote (+ precoVenda das customizações
- * anexadas × quantidade) — Catálogo não tem margem própria.
+ * CAT-013 — POST /catalogos/{catalogoId}/itens/preview-preco. V0.13.0 (#516, RN-NOVA-1/2/3):
+ * Item de Catálogo passou de "herda produto.precoVenda × quantidadePacote" (CAT-003) para
+ * composição livre de N componentes (Insumo XOR Produto-base) com custo/margem/mão de obra
+ * próprios, mesmo cálculo de {@code ItemCatalogoService#calcularCustoTotal}/
+ * {@code calcularPrecoSugerido}, exposto sem persistir nada.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ItemCatalogoPreviewPrecoIT {
@@ -37,23 +39,32 @@ class ItemCatalogoPreviewPrecoIT {
     @Autowired CatalogoService catalogoService;
     @Autowired ItemCatalogoService itemCatalogoService;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired InsumoRepository insumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
 
     private int proximoNumeroProduto = 1;
+    private int proximoNumeroInsumo = 1;
 
-    private UUID seedUsuario() {
+    private Usuario seedUsuario() {
         Usuario usuario = usuarioRepository.save(Usuario.builder()
                 .email("preview-preco-" + UUID.randomUUID() + "@test.com")
                 .senhaHash("x").ativo(true).build());
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
-        return usuario.getId();
+        return usuario;
     }
 
-    private Produto novoProduto(Usuario usuario, String nome, TipoProduto tipo, BigDecimal custo, BigDecimal precoVenda) {
+    private Produto novoProdutoBase(Usuario usuario, String nome, BigDecimal precoCusto) {
         return produtoRepository.save(Produto.builder()
-                .usuario(usuario).numero(proximoNumeroProduto++).nome(nome).tipo(tipo).tempoProducao(60)
-                .precoCusto(custo).precoVenda(precoVenda).build());
+                .usuario(usuario).numero(proximoNumeroProduto++).nome(nome).tipo(TipoProduto.PRODUTO)
+                .tempoProducao(0).precoCusto(precoCusto).precoVenda(new BigDecimal("10.00")).build());
+    }
+
+    private Insumo novoInsumo(Usuario usuario, String nome, BigDecimal custoUnitario) {
+        return insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(proximoNumeroInsumo++).nome(nome).unidadeMedida("un")
+                .custoUnitario(custoUnitario).estoqueAtual(BigDecimal.TEN).fracionavel(true)
+                .permitirEstoqueNegativo(true).build());
     }
 
     private UUID novoCatalogo(String nome) {
@@ -63,55 +74,71 @@ class ItemCatalogoPreviewPrecoIT {
         return response.getId();
     }
 
-    @Test
-    void previewSemCustomizacoes() {
-        UUID usuarioId = seedUsuario();
-        Usuario usuario = usuarioRepository.findById(usuarioId).orElseThrow();
-        Produto produto = novoProduto(usuario, "Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"), new BigDecimal("10.00"));
-        UUID catalogoId = novoCatalogo("Catálogo Bolos");
+    private ItemCatalogoComponenteRequest componenteProdutoBase(UUID produtoBaseId, BigDecimal quantidade) {
+        ItemCatalogoComponenteRequest req = new ItemCatalogoComponenteRequest();
+        req.setProdutoBaseId(produtoBaseId);
+        req.setQuantidade(quantidade);
+        return req;
+    }
 
-        ItemCatalogoPreviewRequest request = new ItemCatalogoPreviewRequest();
-        request.setProdutoId(produto.getId());
-        request.setQuantidadePacote(10);
-
-        ItemCatalogoPrecoSugeridoResponse response = itemCatalogoService.previewPreco(catalogoId, request);
-
-        // precoSugerido = produto.precoVenda(10.00) x quantidadePacote(10) = 100.00
-        assertEquals(0, new BigDecimal("100.00").compareTo(response.getPrecoSugerido()));
+    private ItemCatalogoComponenteRequest componenteInsumo(UUID insumoId, BigDecimal quantidade) {
+        ItemCatalogoComponenteRequest req = new ItemCatalogoComponenteRequest();
+        req.setInsumoId(insumoId);
+        req.setQuantidade(quantidade);
+        return req;
     }
 
     @Test
-    void previewComCustomizacaoAnexada() {
-        UUID usuarioId = seedUsuario();
-        Usuario usuario = usuarioRepository.findById(usuarioId).orElseThrow();
-        Produto produto = novoProduto(usuario, "Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"), new BigDecimal("10.00"));
-        Produto customizacao = novoProduto(usuario, "Topo", TipoProduto.CUSTOMIZACAO, new BigDecimal("2.0000"), new BigDecimal("5.00"));
-        UUID catalogoId = novoCatalogo("Catálogo Bolos");
+    void previewSemMaoDeObraNemMargem() {
+        Usuario usuario = seedUsuario();
+        Produto base = novoProdutoBase(usuario, "Sabonete", new BigDecimal("2.5000"));
+        UUID catalogoId = novoCatalogo("Catálogo Kits");
 
         ItemCatalogoPreviewRequest request = new ItemCatalogoPreviewRequest();
-        request.setProdutoId(produto.getId());
-        request.setQuantidadePacote(10);
-        CustomizacaoAnexadaRequest customizacaoReq = new CustomizacaoAnexadaRequest();
-        customizacaoReq.setProdutoId(customizacao.getId());
-        customizacaoReq.setQuantidade(BigDecimal.ONE);
-        request.setCustomizacoesAnexadas(List.of(customizacaoReq));
+        request.setComponentes(List.of(componenteProdutoBase(base.getId(), new BigDecimal("3"))));
+        request.setTempoProducao(0);
 
         ItemCatalogoPrecoSugeridoResponse response = itemCatalogoService.previewPreco(catalogoId, request);
 
-        // precoSugerido = produto.precoVenda(10.00) x 10 + customizacao.precoVenda(5.00) x 1 = 105.00
-        assertEquals(0, new BigDecimal("105.00").compareTo(response.getPrecoSugerido()));
+        // custoComponentes = 2.50 x 3 = 7.50; sem valorHora configurado (default 0), custoMaoDeObra = 0
+        assertEquals(0, new BigDecimal("7.50").compareTo(response.getCustoComponentes()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(response.getCustoMaoDeObra()));
+        assertEquals(0, new BigDecimal("7.50").compareTo(response.getCustoTotal()));
+        // sem margem informada, precoSugerido = custoTotal
+        assertEquals(0, new BigDecimal("7.50").setScale(2).compareTo(response.getPrecoSugerido()));
+    }
+
+    @Test
+    void previewComComponenteInsumoEMargem() {
+        Usuario usuario = seedUsuario();
+        Produto base = novoProdutoBase(usuario, "Sabonete", new BigDecimal("2.5000"));
+        Insumo fita = novoInsumo(usuario, "Fita", new BigDecimal("1.0000"));
+        UUID catalogoId = novoCatalogo("Catálogo Kits");
+
+        ItemCatalogoPreviewRequest request = new ItemCatalogoPreviewRequest();
+        request.setComponentes(List.of(
+                componenteProdutoBase(base.getId(), new BigDecimal("2")),
+                componenteInsumo(fita.getId(), new BigDecimal("3"))));
+        request.setTempoProducao(0);
+        request.setMargemLucro(new BigDecimal("20"));
+
+        ItemCatalogoPrecoSugeridoResponse response = itemCatalogoService.previewPreco(catalogoId, request);
+
+        // custoComponentes = (2.50 x 2) + (1.00 x 3) = 5.00 + 3.00 = 8.00
+        assertEquals(0, new BigDecimal("8.00").compareTo(response.getCustoComponentes()));
+        // precoSugerido = 8.00 x (1 + 20/100) = 9.60
+        assertEquals(0, new BigDecimal("9.60").compareTo(response.getPrecoSugerido()));
     }
 
     @Test
     void previewNaoPersisteNadaNoBanco() {
-        UUID usuarioId = seedUsuario();
-        Usuario usuario = usuarioRepository.findById(usuarioId).orElseThrow();
-        Produto produto = novoProduto(usuario, "Bolo", TipoProduto.PRODUTO, new BigDecimal("2.0000"), new BigDecimal("10.00"));
-        UUID catalogoId = novoCatalogo("Catálogo Bolos");
+        Usuario usuario = seedUsuario();
+        Produto base = novoProdutoBase(usuario, "Sabonete", new BigDecimal("2.5000"));
+        UUID catalogoId = novoCatalogo("Catálogo Kits");
 
         ItemCatalogoPreviewRequest request = new ItemCatalogoPreviewRequest();
-        request.setProdutoId(produto.getId());
-        request.setQuantidadePacote(10);
+        request.setComponentes(List.of(componenteProdutoBase(base.getId(), BigDecimal.ONE)));
+        request.setTempoProducao(0);
 
         itemCatalogoService.previewPreco(catalogoId, request);
 
@@ -119,26 +146,13 @@ class ItemCatalogoPreviewPrecoIT {
     }
 
     @Test
-    void previewProdutoSemCustoLancaErroRN044() {
-        UUID usuarioId = seedUsuario();
-        Usuario usuario = usuarioRepository.findById(usuarioId).orElseThrow();
-        Produto produtoSemCusto = novoProduto(usuario, "SemCusto", TipoProduto.PRODUTO, BigDecimal.ZERO, new BigDecimal("10.00"));
-        UUID catalogoId = novoCatalogo("Catálogo Bolos");
-
-        ItemCatalogoPreviewRequest request = new ItemCatalogoPreviewRequest();
-        request.setProdutoId(produtoSemCusto.getId());
-        request.setQuantidadePacote(10);
-
-        assertThrows(BusinessException.class, () -> itemCatalogoService.previewPreco(catalogoId, request));
-    }
-
-    @Test
     void previewCatalogoInexistenteLancaResourceNotFound() {
-        seedUsuario();
+        Usuario usuario = seedUsuario();
+        Produto base = novoProdutoBase(usuario, "Sabonete", new BigDecimal("2.5000"));
 
         ItemCatalogoPreviewRequest request = new ItemCatalogoPreviewRequest();
-        request.setProdutoId(UUID.randomUUID());
-        request.setQuantidadePacote(10);
+        request.setComponentes(List.of(componenteProdutoBase(base.getId(), BigDecimal.ONE)));
+        request.setTempoProducao(0);
 
         assertThrows(ResourceNotFoundException.class, () -> itemCatalogoService.previewPreco(UUID.randomUUID(), request));
     }
