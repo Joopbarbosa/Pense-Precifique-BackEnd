@@ -175,6 +175,11 @@ public class ItemCatalogoService {
         ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
         item.setDeletedAt(LocalDateTime.now());
         itemCatalogoRepository.save(item);
+        // #518 — remover o item não pode deixar o objeto órfão no R2 (custo de armazenamento sem
+        // nenhuma referência viva); melhor esforço, mesma semântica de uploadFoto/removerFoto.
+        if (item.getFotoUrl() != null) {
+            r2StorageClient.deletarPorUrl(item.getFotoUrl());
+        }
     }
 
     /**
