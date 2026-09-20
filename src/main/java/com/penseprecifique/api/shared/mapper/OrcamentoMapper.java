@@ -3,6 +3,7 @@ package com.penseprecifique.api.shared.mapper;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItemComponente;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -76,25 +77,55 @@ public class OrcamentoMapper {
     }
 
     public OrcamentoItemResponse toItemResponse(OrcamentoItem item) {
-        return toItemResponse(item, null, null);
+        return toItemResponse(item, null, null, null);
     }
 
     public OrcamentoItemResponse toItemResponse(OrcamentoItem item, List<OrcamentoItemCustomizacao> customizacoes) {
-        return toItemResponse(item, customizacoes, null);
+        return toItemResponse(item, customizacoes, null, null);
     }
 
     public OrcamentoItemResponse toItemResponse(OrcamentoItem item, List<OrcamentoItemCustomizacao> customizacoes,
                                                  List<FichaTecnicaItem> fichaTecnicaProduto) {
+        return toItemResponse(item, customizacoes, fichaTecnicaProduto, null);
+    }
+
+    /**
+     * V0.13.0 (#516, RN-NOVA-1) — item de Catálogo deixou de ter "o produto vendido" único
+     * (composição livre de N componentes, Insumo XOR Produto-base). {@code fichaTecnicaProduto}
+     * (origem avulsa) e {@code componentesCatalogo} (origem Catálogo) são mutuamente exclusivos,
+     * mesma XOR de {@code item.getProduto()}/{@code item.getItemCatalogo()} — o chamador só
+     * preenche o que se aplica à origem do item.
+     */
+    public OrcamentoItemResponse toItemResponse(OrcamentoItem item, List<OrcamentoItemCustomizacao> customizacoes,
+                                                 List<FichaTecnicaItem> fichaTecnicaProduto,
+                                                 List<OrcamentoItemComponente> componentesCatalogo) {
         OrcamentoItemResponse response = new OrcamentoItemResponse();
         response.setId(item.getId());
-        Produto produtoVendido = item.getProdutoVendido();
-        response.setProdutoId(produtoVendido.getId());
-        response.setNomeProduto(produtoVendido.getNome());
         if (item.getItemCatalogo() != null) {
             response.setItemCatalogoId(item.getItemCatalogo().getId());
             response.setCatalogoIdentificador(
                     IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero()));
             response.setCatalogoNome(item.getItemCatalogo().getCatalogo().getNome());
+            // Item de Catálogo tem nome próprio desde RN-NOVA-1 (V0.13.0) — sem produtoId nem
+            // badges de estoque/fracionável de um único produto (estoque agora é por componente,
+            // N deles; ver Divergência de Premissa em decisoes-catalogo.md).
+            response.setNomeProduto(item.getItemCatalogo().getNome());
+            if (componentesCatalogo != null) {
+                response.setAlgumInsumoNaoFracionavel(algumComponenteNaoFracionavel(componentesCatalogo));
+            }
+        } else {
+            Produto produto = item.getProduto();
+            response.setProdutoId(produto.getId());
+            response.setNomeProduto(produto.getNome());
+            response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
+            response.setEstoqueAtual(produto.getEstoqueAtual());
+            // RN-NOVA-7 (V0.10.0, #461) — reversão de RN-NOVA-6: badge fracionável volta ao
+            // Orçamento, lida ao vivo do Produto (valor final, já com fracionavelOverride resolvido).
+            response.setFracionavel(produto.getFracionavel());
+            if (fichaTecnicaProduto != null) {
+                response.setAlgumInsumoNaoFracionavel(fichaTecnicaProduto.stream()
+                        .anyMatch(i -> i.getInsumo() != null && Boolean.FALSE.equals(i.getInsumo().getFracionavel())));
+            }
         }
         // ORC-020 (REVISÃO)/RN-NOVA-23 (#313) — margemAplicada volta a ser exposta nas duas origens,
         // não só na avulsa (achado do Passo 0: mapper restringia a leitura só ao branch else).
@@ -105,16 +136,15 @@ public class OrcamentoMapper {
         if (customizacoes != null) {
             response.setCustomizacoes(customizacoes.stream().map(this::toItemCustomizacaoResponse).toList());
         }
-        response.setPermitirEstoqueNegativo(produtoVendido.getPermitirEstoqueNegativo());
-        response.setEstoqueAtual(produtoVendido.getEstoqueAtual());
-        // RN-NOVA-7 (V0.10.0, #461) — reversão de RN-NOVA-6: badge fracionável volta ao Orçamento,
-        // lida ao vivo do Produto (valor final, já com fracionavelOverride resolvido).
-        response.setFracionavel(produtoVendido.getFracionavel());
-        if (fichaTecnicaProduto != null) {
-            response.setAlgumInsumoNaoFracionavel(fichaTecnicaProduto.stream()
-                    .anyMatch(i -> i.getInsumo() != null && Boolean.FALSE.equals(i.getInsumo().getFracionavel())));
-        }
         return response;
+    }
+
+    /** #238/DECISOES_GLOBAIS — mesmo cálculo agregado de {@code ItemCatalogoMapper} (V0.13.0),
+     * aplicado ao snapshot de componentes de um item de orçamento em vez da composição viva do
+     * catálogo; deliberadamente não compartilhado entre os dois (tipos de componente diferentes). */
+    private boolean algumComponenteNaoFracionavel(List<OrcamentoItemComponente> componentes) {
+        return componentes.stream()
+                .anyMatch(c -> c.getInsumo() != null && Boolean.FALSE.equals(c.getInsumo().getFracionavel()));
     }
 
     public OrcamentoItemCustomizacaoResponse toItemCustomizacaoResponse(OrcamentoItemCustomizacao c) {
