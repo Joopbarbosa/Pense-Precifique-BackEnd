@@ -18,10 +18,11 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
      * P-F005/#251 (V0.8.1) — substitui os 4 finders derivados por nome que existiam antes
      * (com/sem tipo x com/sem busca) para acomodar uma 3ª dimensão de filtro (semCatalogo, aba
      * "Produto" da venda avulsa) sem explodir a combinatória de nomes. {@code semCatalogo=true}
-     * exclui produtos referenciados por um ItemCatalogo não excluído, seja como produto principal
-     * do item ou como customização anexada a um item de outro produto (mesmo critério de vínculo
-     * usado em {@code ProdutoService#listarCatalogosVinculados}). Sem {@code busca} — ver método
-     * abaixo para a variante com busca, separada pelo mesmo motivo já documentado em
+     * exclui produtos referenciados como componente (Produto-base) de algum Item de Catálogo não
+     * excluído (V0.13.0/#516, RN-NOVA-1 — antes da composição em N componentes, a checagem
+     * distinguia produto principal de customização anexada; hoje é um único vínculo de componente,
+     * mesmo critério usado em {@code ProdutoService#listarCatalogosVinculados}). Sem {@code busca}
+     * — ver método abaixo para a variante com busca, separada pelo mesmo motivo já documentado em
      * {@code ItemCatalogoRepository} (bind de parâmetro nulo dentro de LOWER/CONCAT infere tipo
      * incompatível no Postgres).
      */
@@ -31,10 +32,9 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
         AND p.deletedAt IS NULL
         AND (:tipo IS NULL OR p.tipo = :tipo)
         AND (:ativo IS NULL OR p.ativo = :ativo)
-        AND (:semCatalogo = false OR (
-            NOT EXISTS (SELECT 1 FROM ItemCatalogo ic WHERE ic.produto = p AND ic.deletedAt IS NULL)
-            AND NOT EXISTS (SELECT 1 FROM ItemCatalogoCustomizacao icc WHERE icc.produto = p AND icc.itemCatalogo.deletedAt IS NULL)
-        ))
+        AND (:semCatalogo = false OR
+            NOT EXISTS (SELECT 1 FROM ItemCatalogoComponente icc WHERE icc.produtoBase = p AND icc.itemCatalogo.deletedAt IS NULL)
+        )
     """)
     Page<Produto> buscar(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoProduto tipo,
                           @Param("semCatalogo") boolean semCatalogo, @Param("ativo") Boolean ativo, Pageable pageable);
@@ -49,10 +49,9 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
         AND p.deletedAt IS NULL
         AND (:tipo IS NULL OR p.tipo = :tipo)
         AND (:ativo IS NULL OR p.ativo = :ativo)
-        AND (:semCatalogo = false OR (
-            NOT EXISTS (SELECT 1 FROM ItemCatalogo ic WHERE ic.produto = p AND ic.deletedAt IS NULL)
-            AND NOT EXISTS (SELECT 1 FROM ItemCatalogoCustomizacao icc WHERE icc.produto = p AND icc.itemCatalogo.deletedAt IS NULL)
-        ))
+        AND (:semCatalogo = false OR
+            NOT EXISTS (SELECT 1 FROM ItemCatalogoComponente icc WHERE icc.produtoBase = p AND icc.itemCatalogo.deletedAt IS NULL)
+        )
         AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%')))
     """)
     Page<Produto> buscarComBusca(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoProduto tipo,

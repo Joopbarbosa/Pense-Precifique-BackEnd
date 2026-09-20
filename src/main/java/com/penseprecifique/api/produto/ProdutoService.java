@@ -3,8 +3,7 @@ package com.penseprecifique.api.produto;
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.ConfiguracaoPrecificacao;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
-import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
-import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -28,8 +27,7 @@ import com.penseprecifique.api.shared.dto.response.produto.ProdutoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProdutoMapper;
-import com.penseprecifique.api.catalogo.ItemCatalogoCustomizacaoRepository;
-import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -82,8 +80,7 @@ public class ProdutoService {
     private final ConfiguracaoPrecificacaoRepository configuracaoPrecificacaoRepository;
     private final ProdutoMapper produtoMapper;
     private final UsuarioRepository usuarioRepository;
-    private final ItemCatalogoRepository itemCatalogoRepository;
-    private final ItemCatalogoCustomizacaoRepository itemCatalogoCustomizacaoRepository;
+    private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     private final ItemCatalogoService itemCatalogoService;
 
     /**
@@ -342,10 +339,9 @@ public class ProdutoService {
 
     private List<Catalogo> listarCatalogosVinculados(UUID produtoId) {
         Map<UUID, Catalogo> catalogosPorId = new LinkedHashMap<>();
-        itemCatalogoRepository.findByProdutoIdAndDeletedAtIsNull(produtoId)
-                .forEach(item -> catalogosPorId.putIfAbsent(item.getCatalogo().getId(), item.getCatalogo()));
-        itemCatalogoCustomizacaoRepository.findItensCatalogoPorProdutoComoCustomizacao(produtoId)
-                .forEach((ItemCatalogo item) -> catalogosPorId.putIfAbsent(item.getCatalogo().getId(), item.getCatalogo()));
+        itemCatalogoComponenteRepository.findByProdutoBaseId(produtoId)
+                .forEach(componente -> catalogosPorId.putIfAbsent(
+                        componente.getItemCatalogo().getCatalogo().getId(), componente.getItemCatalogo().getCatalogo()));
         return List.copyOf(catalogosPorId.values());
     }
 
@@ -368,11 +364,10 @@ public class ProdutoService {
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
 
-        List<ItemCatalogo> itensPrincipal = itemCatalogoRepository.findByProdutoIdAndDeletedAtIsNull(id);
-        List<ItemCatalogoCustomizacao> customizacoesAnexadas = itemCatalogoCustomizacaoRepository.findByProdutoId(id);
+        List<ItemCatalogoComponente> componentesCatalogo = itemCatalogoComponenteRepository.findByProdutoBaseId(id);
         List<FichaTecnicaItem> componentesEmOutrosProdutos = fichaTecnicaItemRepository.findByProdutoBaseId(id);
 
-        boolean temVinculoCatalogo = !itensPrincipal.isEmpty() || !customizacoesAnexadas.isEmpty();
+        boolean temVinculoCatalogo = !componentesCatalogo.isEmpty();
         boolean temVinculoComponente = !componentesEmOutrosProdutos.isEmpty();
 
         if (!temVinculoCatalogo && !temVinculoComponente) {
@@ -388,7 +383,7 @@ public class ProdutoService {
         }
 
         if (temVinculoCatalogo) {
-            resolverVinculoCatalogo(usuarioId, itensPrincipal, customizacoesAnexadas, request.getCatalogo());
+            resolverVinculoCatalogo(usuarioId, componentesCatalogo, request.getCatalogo());
         }
         if (temVinculoComponente) {
             resolverVinculoComponente(usuarioId, componentesEmOutrosProdutos, request.getComponente());
@@ -401,26 +396,26 @@ public class ProdutoService {
         produtoRepository.save(produto);
     }
 
-    private void resolverVinculoCatalogo(UUID usuarioId, List<ItemCatalogo> itensPrincipal,
-                                          List<ItemCatalogoCustomizacao> customizacoesAnexadas,
+    /** V0.13.0 (DT-NOVA-1) — unifica os antigos blocos "item principal"/"customização anexada" num
+     * único tipo de vínculo (ITEM_CATALOGO_COMPONENTE), já que RN-NOVA-1 elimina essa distinção. */
+    private void resolverVinculoCatalogo(UUID usuarioId, List<ItemCatalogoComponente> componentesCatalogo,
                                           ResolucaoVinculoCatalogoRequest request) {
         if (request.getAcao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
-            removerVinculosCatalogo(itensPrincipal, customizacoesAnexadas);
+            removerVinculosCatalogo(componentesCatalogo);
         } else {
-            aplicarSubstituicoesCatalogo(usuarioId, itensPrincipal, customizacoesAnexadas, request.getSubstituicoes());
+            aplicarSubstituicoesCatalogo(usuarioId, componentesCatalogo, request.getSubstituicoes());
         }
     }
 
-    private void removerVinculosCatalogo(List<ItemCatalogo> itensPrincipal, List<ItemCatalogoCustomizacao> customizacoesAnexadas) {
-        LocalDateTime agora = LocalDateTime.now();
-        itensPrincipal.forEach(item -> item.setDeletedAt(agora));
-        itemCatalogoRepository.saveAll(itensPrincipal);
-
-        itemCatalogoCustomizacaoRepository.deleteAll(customizacoesAnexadas);
+    /** RN-NOVA-1 exige pelo menos 1 componente por item — remover o vínculo aqui pode deixar um item
+     * sem nenhum componente; mesma decisão já tomada para ficha técnica em removerVinculosComponente
+     * (a resolução de vínculo não reforça esse mínimo de volta, quem detecta é a tela de edição do
+     * item de catálogo). */
+    private void removerVinculosCatalogo(List<ItemCatalogoComponente> componentesCatalogo) {
+        itemCatalogoComponenteRepository.deleteAll(componentesCatalogo);
     }
 
-    private void aplicarSubstituicoesCatalogo(UUID usuarioId, List<ItemCatalogo> itensPrincipal,
-                                               List<ItemCatalogoCustomizacao> customizacoesAnexadas,
+    private void aplicarSubstituicoesCatalogo(UUID usuarioId, List<ItemCatalogoComponente> componentesCatalogo,
                                                List<SubstituicaoVinculoProdutoRequest> substituicoes) {
         List<SubstituicaoVinculoProdutoRequest> lista = substituicoes != null ? substituicoes : List.of();
         Map<UUID, SubstituicaoVinculoProdutoRequest> porVinculoId = new HashMap<>();
@@ -428,22 +423,14 @@ public class ProdutoService {
             porVinculoId.put(sub.getVinculoId(), sub);
         }
 
-        for (ItemCatalogo item : itensPrincipal) {
-            SubstituicaoVinculoProdutoRequest sub = exigirSubstituicao(porVinculoId, item.getId(),
-                    TipoVinculoProduto.ITEM_CATALOGO_PRINCIPAL, "item de catálogo");
+        for (ItemCatalogoComponente componente : componentesCatalogo) {
+            SubstituicaoVinculoProdutoRequest sub = exigirSubstituicao(porVinculoId, componente.getId(),
+                    TipoVinculoProduto.ITEM_CATALOGO_COMPONENTE, "componente de item de catálogo");
             Produto novoProduto = buscarProdutoDoUsuario(sub.getNovoProdutoId(), usuarioId);
             validarProdutoTemCusto(novoProduto);
-            substituirProdutoPrincipal(item, novoProduto);
-        }
-
-        for (ItemCatalogoCustomizacao customizacao : customizacoesAnexadas) {
-            SubstituicaoVinculoProdutoRequest sub = exigirSubstituicao(porVinculoId, customizacao.getId(),
-                    TipoVinculoProduto.CUSTOMIZACAO_ANEXADA, "customização anexada");
-            Produto novoProduto = buscarProdutoDoUsuario(sub.getNovoProdutoId(), usuarioId);
-            if (novoProduto.getTipo() != TipoProduto.CUSTOMIZACAO) {
-                throw new BusinessException("O produto substituto deve ser do tipo Customização.");
-            }
-            substituirCustomizacaoAnexada(customizacao, novoProduto);
+            componente.setProdutoBase(novoProduto);
+            itemCatalogoComponenteRepository.save(componente);
+            itemCatalogoService.recalcularAposSubstituicaoComponente(componente.getItemCatalogo().getId());
         }
     }
 
@@ -493,32 +480,6 @@ public class ProdutoService {
             fichaTecnicaItemRepository.save(componente);
             recalcularPrecoCustoPersistido(componente.getProduto().getId());
         }
-    }
-
-    /** Padrão calculado+override (RN-038a/RN-042): só recalcula precoVenda se o item não estiver em override. */
-    private void substituirProdutoPrincipal(ItemCatalogo item, Produto novoProduto) {
-        List<ItemCatalogoCustomizacao> customizacoesDoItem = itemCatalogoCustomizacaoRepository.findByItemCatalogoId(item.getId());
-        item.setProduto(novoProduto);
-        BigDecimal precoSugerido = itemCatalogoService.calcularPrecoSugerido(
-                novoProduto, item.getQuantidadePacote(), customizacoesDoItem);
-        if (!Boolean.TRUE.equals(item.getOverride())) {
-            item.setPrecoVenda(precoSugerido);
-        }
-        itemCatalogoRepository.save(item);
-    }
-
-    private void substituirCustomizacaoAnexada(ItemCatalogoCustomizacao customizacao, Produto novoProduto) {
-        customizacao.setProduto(novoProduto);
-        itemCatalogoCustomizacaoRepository.save(customizacao);
-
-        ItemCatalogo item = customizacao.getItemCatalogo();
-        List<ItemCatalogoCustomizacao> todasCustomizacoes = itemCatalogoCustomizacaoRepository.findByItemCatalogoId(item.getId());
-        BigDecimal precoSugerido = itemCatalogoService.calcularPrecoSugerido(
-                item.getProduto(), item.getQuantidadePacote(), todasCustomizacoes);
-        if (!Boolean.TRUE.equals(item.getOverride())) {
-            item.setPrecoVenda(precoSugerido);
-        }
-        itemCatalogoRepository.save(item);
     }
 
     private Produto buscarProdutoDoUsuario(UUID produtoId, UUID usuarioId) {
