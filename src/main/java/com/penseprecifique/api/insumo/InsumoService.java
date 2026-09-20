@@ -1,6 +1,7 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Producao;
@@ -13,7 +14,12 @@ import com.penseprecifique.api.shared.dto.request.insumo.BaixaManualInsumoReques
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.request.insumo.ResolucaoVinculoCatalogoInsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.request.insumo.ResolucaoVinculoFichaTecnicaInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.SubstituicaoInsumoRequestDTO;
+import com.penseprecifique.api.shared.dto.request.insumo.SubstituicaoVinculoCatalogoInsumoRequestDTO;
+import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoService;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoContagensResponse;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.MovimentacaoInsumoResponseDTO;
@@ -74,6 +80,8 @@ public class InsumoService {
     private final OrcamentoRepository orcamentoRepository;
     private final ProdutoRepository produtoRepository;
     private final ProdutoService produtoService;
+    private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
+    private final ItemCatalogoService itemCatalogoService;
 
     @Transactional(readOnly = true)
     public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, Pageable pageable) {
@@ -166,6 +174,7 @@ public class InsumoService {
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
         validarSemVinculoFichaTecnica(insumo);
+        validarSemVinculoCatalogo(insumo);
         insumo.setDeletedAt(LocalDateTime.now());
         insumoRepository.save(insumo);
     }
@@ -174,15 +183,27 @@ public class InsumoService {
      * INS-010 — inativação reversível: {@code ativo=false}, insumo continua existindo (deletedAt
      * permanece null). INS-011 — só é permitida se o insumo não estiver em ficha técnica de nenhum
      * produto não excluído — produto inativado ainda pode voltar a vender, então continua contando
-     * como uso.
+     * como uso. V0.13.0 (#516, RN-NOVA-1) — também não pode estar em uso como componente de Item de
+     * Catálogo (vínculo novo, não existia antes desta versão).
      */
     public void inativar(UUID id) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
         validarSemVinculoFichaTecnica(insumo);
+        validarSemVinculoCatalogo(insumo);
         insumo.setAtivo(false);
         insumoRepository.save(insumo);
+    }
+
+    private void validarSemVinculoCatalogo(Insumo insumo) {
+        List<ItemCatalogoComponente> vinculados = itemCatalogoComponenteRepository.findByInsumoId(insumo.getId());
+        if (!vinculados.isEmpty()) {
+            String nomes = vinculados.stream().map(c -> c.getItemCatalogo().getNome()).collect(Collectors.joining(", "));
+            throw new BusinessException("Insumo " + insumo.getNome()
+                    + " está vinculado ao(s) item(ns) de catálogo: " + nomes
+                    + ". Resolva os vínculos (POST /insumos/{id}/resolver-vinculos) antes de continuar.");
+        }
     }
 
     private void validarSemVinculoFichaTecnica(Insumo insumo) {
@@ -206,16 +227,29 @@ public class InsumoService {
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
 
-        List<Produto> vinculados = fichaTecnicaItemRepository.findProdutosByInsumoId(id);
-        if (vinculados.isEmpty()) {
+        List<Produto> vinculadosFichaTecnica = fichaTecnicaItemRepository.findProdutosByInsumoId(id);
+        List<ItemCatalogoComponente> vinculadosCatalogo = itemCatalogoComponenteRepository.findByInsumoId(id);
+
+        boolean temVinculoFichaTecnica = !vinculadosFichaTecnica.isEmpty();
+        boolean temVinculoCatalogo = !vinculadosCatalogo.isEmpty();
+
+        if (!temVinculoFichaTecnica && !temVinculoCatalogo) {
             throw new BusinessException("Insumo " + insumo.getNome() + " não possui vínculos pendentes de resolução.");
         }
+        if (temVinculoFichaTecnica && request.fichaTecnica() == null) {
+            throw new BusinessException("Insumo " + insumo.getNome()
+                    + " possui vínculo de ficha técnica pendente — o bloco \"fichaTecnica\" é obrigatório.");
+        }
+        if (temVinculoCatalogo && request.catalogo() == null) {
+            throw new BusinessException("Insumo " + insumo.getNome()
+                    + " possui vínculo de catálogo pendente — o bloco \"catalogo\" é obrigatório.");
+        }
 
-        if (request.acao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
-            vinculados.forEach(produto -> produto.setAtivo(false));
-            produtoRepository.saveAll(vinculados);
-        } else {
-            aplicarSubstituicoes(id, usuarioId, vinculados, request.substituicoes());
+        if (temVinculoFichaTecnica) {
+            resolverVinculoFichaTecnica(id, usuarioId, vinculadosFichaTecnica, request.fichaTecnica());
+        }
+        if (temVinculoCatalogo) {
+            resolverVinculoCatalogo(usuarioId, vinculadosCatalogo, request.catalogo());
         }
 
         switch (request.operacao()) {
@@ -225,7 +259,17 @@ public class InsumoService {
         insumoRepository.save(insumo);
     }
 
-    private void aplicarSubstituicoes(UUID insumoId, UUID usuarioId, List<Produto> vinculados,
+    private void resolverVinculoFichaTecnica(UUID insumoId, UUID usuarioId, List<Produto> vinculados,
+                                              ResolucaoVinculoFichaTecnicaInsumoRequestDTO request) {
+        if (request.acao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
+            vinculados.forEach(produto -> produto.setAtivo(false));
+            produtoRepository.saveAll(vinculados);
+        } else {
+            aplicarSubstituicoesFichaTecnica(insumoId, usuarioId, vinculados, request.substituicoes());
+        }
+    }
+
+    private void aplicarSubstituicoesFichaTecnica(UUID insumoId, UUID usuarioId, List<Produto> vinculados,
                                        List<SubstituicaoInsumoRequestDTO> substituicoes) {
         List<SubstituicaoInsumoRequestDTO> lista = substituicoes != null ? substituicoes : List.of();
         Set<UUID> produtoIdsVinculados = vinculados.stream().map(Produto::getId).collect(Collectors.toSet());
@@ -242,6 +286,34 @@ public class InsumoService {
             fichaTecnicaService.substituirInsumoEmProduto(
                     substituicao.produtoId(), insumoId, substituicao.novoInsumoId(), usuarioId);
             produtoService.recalcularPrecoCustoPersistido(substituicao.produtoId());
+        }
+    }
+
+    /** V0.13.0 (#516, DT-NOVA-1) — vínculo novo: Insumo usado como componente de Item de Catálogo. */
+    private void resolverVinculoCatalogo(UUID usuarioId, List<ItemCatalogoComponente> vinculados,
+                                          ResolucaoVinculoCatalogoInsumoRequestDTO request) {
+        if (request.acao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
+            itemCatalogoComponenteRepository.deleteAll(vinculados);
+            return;
+        }
+        List<SubstituicaoVinculoCatalogoInsumoRequestDTO> lista = request.substituicoes() != null
+                ? request.substituicoes() : List.of();
+        Map<UUID, SubstituicaoVinculoCatalogoInsumoRequestDTO> porVinculoId = lista.stream()
+                .collect(Collectors.toMap(SubstituicaoVinculoCatalogoInsumoRequestDTO::vinculoId, s -> s));
+
+        for (ItemCatalogoComponente componente : vinculados) {
+            SubstituicaoVinculoCatalogoInsumoRequestDTO sub = porVinculoId.get(componente.getId());
+            if (sub == null) {
+                throw new BusinessException("Falta substituição para o vínculo de componente de item de catálogo (id " + componente.getId() + ").");
+            }
+            Insumo novoInsumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(sub.novoInsumoId(), usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + sub.novoInsumoId()));
+            if (!Boolean.TRUE.equals(novoInsumo.getAtivo())) {
+                throw new BusinessException("O insumo substituto está inativo e não pode ser usado. Reative-o para continuar.");
+            }
+            componente.setInsumo(novoInsumo);
+            itemCatalogoComponenteRepository.save(componente);
+            itemCatalogoService.recalcularAposSubstituicaoComponente(componente.getItemCatalogo().getId());
         }
     }
 
