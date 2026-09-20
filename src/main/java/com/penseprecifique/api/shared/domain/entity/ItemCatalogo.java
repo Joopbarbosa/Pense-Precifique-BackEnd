@@ -43,6 +43,14 @@ public class ItemCatalogo {
     @Builder.Default
     private Boolean override = false;
 
+    /** RN-NOVA-6 — URL pública do objeto no R2, nunca o binário. Opcional. */
+    @Column(name = "foto_url", length = 500)
+    private String fotoUrl;
+
+    /** RN-NOVA-7 — mesmo texto exibido depois no PDF do catálogo (#519). Máx. 150 caracteres. */
+    @Column(name = "descricao", length = 150)
+    private String descricao;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -36,4 +37,8 @@ public class ItemCatalogoRequest {
     /** Se nulo, o Service usa o precoSugerido calculado; se preenchido e diferente, aciona override
      * (mesmo modelo calculado+override de Produto, PDT-005). */
     private BigDecimal precoVenda;
+
+    /** RN-NOVA-7 — texto opcional, também exibido no PDF do catálogo (#519). */
+    @Size(max = 150, message = "A descrição não pode ter mais de 150 caracteres")
+    private String descricao;
 }

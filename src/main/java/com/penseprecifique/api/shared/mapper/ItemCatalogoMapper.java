@@ -24,6 +24,7 @@ public class ItemCatalogoMapper {
                 .nome(request.getNome())
                 .tempoProducao(request.getTempoProducao())
                 .margemLucro(request.getMargemLucro())
+                .descricao(request.getDescricao())
                 .build();
         // precoVenda/override dependem do cálculo de precoSugerido (RN-NOVA-3) — o Service resolve depois
     }
@@ -75,6 +76,8 @@ public class ItemCatalogoMapper {
         response.setPrecoVenda(item.getPrecoVenda());
         response.setOverride(Boolean.TRUE.equals(item.getOverride()));
         response.setComponentes(componentes.stream().map(this::toComponenteResponse).toList());
+        response.setFotoUrl(item.getFotoUrl());
+        response.setDescricao(item.getDescricao());
         // custoTotal/precoSugerido (RN-NOVA-2/3) não são preenchidos aqui — calculados e setados pelo
         // Service, mesmo padrão já usado para custoTotalLote/precoSugerido de Produto
         return response;

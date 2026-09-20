@@ -26,4 +26,8 @@ public class ItemCatalogoResponse {
     /** RN-NOVA-4 — true quando qualquer componente está inativo/excluído; item permanece mas fica
      * bloqueado para venda. */
     private boolean bloqueadoParaVenda;
+    /** RN-NOVA-6 — URL pública do objeto no R2; null quando o item não tem foto. */
+    private String fotoUrl;
+    /** RN-NOVA-7 — também exibida no PDF do catálogo (#519). */
+    private String descricao;
 }

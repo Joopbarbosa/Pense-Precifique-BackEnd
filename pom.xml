@@ -124,6 +124,33 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!--
+            Cloudflare R2 (compatível S3) — upload de foto do Item de Catálogo, DT-NOVA-4.
+            Exclui o apache-client (default do módulo "s3" para chamadas síncronas): a versão de
+            httpclient5 que ele traz colidia em runtime com outra já resolvida no classpath do
+            projeto (NoClassDefFoundError em org.apache.hc.client5.http.ssl.TlsSocketStrategy,
+            classe só existente a partir do httpclient5 5.4+) — url-connection-client é o cliente
+            HTTP síncrono mais leve da AWS SDK v2 (só java.net.HttpURLConnection, zero dependência
+            de terceiros), suficiente para put/delete de objeto, sem overhead de conexões
+            concorrentes que só importaria em alto volume de upload simultâneo.
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.55.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>2.55.1</version>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

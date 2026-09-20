@@ -1,6 +1,7 @@
 package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
+import com.penseprecifique.api.infra.storage.R2StorageClient;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -26,11 +27,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -47,6 +51,10 @@ public class ItemCatalogoService {
     private static final BigDecimal CEM = new BigDecimal("100");
     private static final BigDecimal SESSENTA = new BigDecimal("60");
 
+    /** RN-NOVA-6 — só JPG/PNG (mesmos 2 content-types que os navegadores enviam pra esses formatos). */
+    private static final Set<String> FORMATOS_FOTO_ACEITOS = Set.of("image/jpeg", "image/png");
+    private static final long TAMANHO_MAXIMO_FOTO_BYTES = 5L * 1024 * 1024;
+
     private final ItemCatalogoRepository itemCatalogoRepository;
     private final ItemCatalogoComponenteRepository componenteRepository;
     private final CatalogoRepository catalogoRepository;
@@ -55,6 +63,7 @@ public class ItemCatalogoService {
     private final ConfiguracaoPrecificacaoRepository configuracaoPrecificacaoRepository;
     private final ItemCatalogoMapper itemCatalogoMapper;
     private final UsuarioRepository usuarioRepository;
+    private final R2StorageClient r2StorageClient;
 
     // ---------------------------------------------------------------
     // Consultas
@@ -144,6 +153,7 @@ public class ItemCatalogoService {
         item.setNome(request.getNome());
         item.setTempoProducao(request.getTempoProducao());
         item.setMargemLucro(request.getMargemLucro() != null ? request.getMargemLucro() : margemLucroAntigo);
+        item.setDescricao(request.getDescricao());
 
         // componentes são recriados do zero (não têm soft delete próprio, mesmo padrão já usado
         // pelas antigas customizações anexadas)
@@ -165,6 +175,59 @@ public class ItemCatalogoService {
         ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
         item.setDeletedAt(LocalDateTime.now());
         itemCatalogoRepository.save(item);
+    }
+
+    /**
+     * RN-NOVA-6/DT-NOVA-4 — valida formato/tamanho ANTES de subir pro R2 (nunca confia só na
+     * validação do Frontend). Substitui a foto anterior, se houver — remoção do objeto antigo é
+     * melhor esforço (não falha a troca se o objeto antigo já não existir mais no bucket).
+     */
+    public ItemCatalogoResponse uploadFoto(UUID itemId, MultipartFile arquivo) {
+        ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
+        validarArquivoFoto(arquivo);
+
+        String extensao = "image/png".equals(arquivo.getContentType()) ? "png" : "jpg";
+        String key = "catalogo/item-catalogo/" + item.getId() + "/" + UUID.randomUUID() + "." + extensao;
+
+        byte[] conteudo;
+        try {
+            conteudo = arquivo.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException("Não foi possível ler o arquivo enviado. Tente novamente.");
+        }
+
+        String fotoUrlAntiga = item.getFotoUrl();
+        String novaUrl = r2StorageClient.upload(key, conteudo, arquivo.getContentType());
+        item.setFotoUrl(novaUrl);
+        item = itemCatalogoRepository.save(item);
+        if (fotoUrlAntiga != null) {
+            r2StorageClient.deletarPorUrl(fotoUrlAntiga);
+        }
+
+        return montarResponse(item);
+    }
+
+    public ItemCatalogoResponse removerFoto(UUID itemId) {
+        ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
+        if (item.getFotoUrl() != null) {
+            r2StorageClient.deletarPorUrl(item.getFotoUrl());
+            item.setFotoUrl(null);
+            item = itemCatalogoRepository.save(item);
+        }
+        return montarResponse(item);
+    }
+
+    /** RN-NOVA-6 — CEN-NOVO-5 (formato) e CEN-NOVO-6 (tamanho), nesta ordem (mesma ordem do UC-NOVO-1). */
+    private void validarArquivoFoto(MultipartFile arquivo) {
+        if (arquivo == null || arquivo.isEmpty()) {
+            throw new BusinessException("Selecione um arquivo de imagem.");
+        }
+        if (!FORMATOS_FOTO_ACEITOS.contains(arquivo.getContentType())) {
+            throw new BusinessException("Só são aceitos arquivos JPG ou PNG.");
+        }
+        if (arquivo.getSize() > TAMANHO_MAXIMO_FOTO_BYTES) {
+            throw new BusinessException("Arquivo muito grande. O tamanho máximo permitido é 5MB.");
+        }
     }
 
     // ---------------------------------------------------------------
