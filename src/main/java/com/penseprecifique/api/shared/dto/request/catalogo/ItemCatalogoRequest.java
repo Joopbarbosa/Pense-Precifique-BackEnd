@@ -2,29 +2,38 @@ package com.penseprecifique.api.shared.dto.request.catalogo;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Getter
 @Setter
 public class ItemCatalogoRequest {
 
-    @NotNull(message = "O produto é obrigatório")
-    private UUID produtoId;
+    @NotBlank(message = "O nome é obrigatório")
+    private String nome;
 
-    @NotNull(message = "A quantidade de pacote é obrigatória")
-    @Min(value = 1, message = "A quantidade de pacote deve ser pelo menos 1")
-    private Integer quantidadePacote;
-
-    /** Se nulo, o Service usa o precoSugerido calculado; se preenchido e diferente, aciona override (RN-038a). */
-    private BigDecimal precoVenda;
-
+    /** RN-NOVA-1 — pelo menos 1 componente (Produto, Customização ou Insumo). */
+    @NotEmpty(message = "É preciso pelo menos 1 componente")
     @Valid
-    private List<CustomizacaoAnexadaRequest> customizacoesAnexadas = new ArrayList<>();
+    private List<ItemCatalogoComponenteRequest> componentes;
+
+    /** RN-NOVA-2 — mesmo conceito de Produto.tempoProducao. */
+    @NotNull(message = "O tempo de produção é obrigatório")
+    @Min(value = 0, message = "O tempo de produção não pode ser negativo")
+    private Integer tempoProducao;
+
+    /** RN-NOVA-3 — margem própria do item. Mesmo campo opcional a nível de DTO que
+     * {@code ProdutoRequest.margemLucro} — pré-preenchimento com a margem padrão de Configurações é
+     * responsabilidade do Frontend, não do Backend (mesmo padrão já usado em Produto). */
+    private BigDecimal margemLucro;
+
+    /** Se nulo, o Service usa o precoSugerido calculado; se preenchido e diferente, aciona override
+     * (mesmo modelo calculado+override de Produto, PDT-005). */
+    private BigDecimal precoVenda;
 }

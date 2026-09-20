@@ -2,25 +2,26 @@ package com.penseprecifique.api.shared.dto.request.catalogo;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.List;
-import java.util.UUID;
 
+/** CAT-013 — preview ao vivo do custo/preço sugerido, sem persistir nada (RN-NOVA-2/3, V0.13.0). */
 @Getter
 @Setter
 public class ItemCatalogoPreviewRequest {
 
-    @NotNull(message = "O produto é obrigatório")
-    private UUID produtoId;
-
-    @NotNull(message = "A quantidade de pacote é obrigatória")
-    @Min(value = 1, message = "A quantidade de pacote deve ser pelo menos 1")
-    private Integer quantidadePacote;
-
+    @NotEmpty(message = "É preciso pelo menos 1 componente")
     @Valid
-    private List<CustomizacaoAnexadaRequest> customizacoesAnexadas = new ArrayList<>();
+    private List<ItemCatalogoComponenteRequest> componentes;
+
+    @NotNull(message = "O tempo de produção é obrigatório")
+    @Min(value = 0, message = "O tempo de produção não pode ser negativo")
+    private Integer tempoProducao;
+
+    private BigDecimal margemLucro;
 }

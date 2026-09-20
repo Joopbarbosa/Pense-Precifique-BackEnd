@@ -8,14 +8,17 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+/** RN-NOVA-1 (V0.13.0, #516) — componente de um Item de Catálogo: Insumo XOR Produto/Customização,
+ * mesmo formato de {@code FichaTecnicaItemRequest}. */
 @Getter
 @Setter
-public class CustomizacaoAnexadaRequest {
+public class ItemCatalogoComponenteRequest {
 
-    @NotNull(message = "O produto da customização é obrigatório")
-    private UUID produtoId;
+    private UUID insumoId;
+
+    private UUID produtoBaseId;
 
     @NotNull(message = "A quantidade é obrigatória")
-    @DecimalMin(value = "0.0001", message = "A quantidade deve ser maior que zero")
+    @DecimalMin(value = "0.001", message = "A quantidade deve ser maior que zero")
     private BigDecimal quantidade;
 }
