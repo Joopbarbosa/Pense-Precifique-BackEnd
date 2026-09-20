@@ -46,10 +46,4 @@ public class VendaCaixaItem {
 
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal subtotal;
-
-    /** Produto vendido, seja via Catálogo (item_catalogo) ou direto (produto) — mesmo helper de
-     *  {@code OrcamentoItem#getProdutoVendido()}. */
-    public Produto getProdutoVendido() {
-        return itemCatalogo != null ? itemCatalogo.getProduto() : produto;
-    }
 }
