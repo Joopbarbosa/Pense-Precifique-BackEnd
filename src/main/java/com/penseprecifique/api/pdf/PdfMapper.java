@@ -492,6 +492,7 @@ public class PdfMapper {
                     .nome(item.getNome())
                     .descricao(item.getDescricao())
                     .fotoUrl(item.getFotoUrl())
+                    .precoVenda(formatarMoeda(item.getPrecoVenda()))
                     .build())
                 .toList())
             .build();
@@ -506,6 +507,7 @@ public class PdfMapper {
                 .nome(item.getNome())
                 .descricao(item.getDescricao())
                 .fotoUrl(item.getFotoUrl())
+                .precoVenda(item.getPrecoVenda())
                 .build())
             .toList();
 

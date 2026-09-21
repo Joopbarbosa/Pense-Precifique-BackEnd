@@ -9,4 +9,5 @@ public class ItemCatalogoPdfData {
     private String nome;
     private String descricao;
     private String fotoUrl;
+    private String precoVenda;
 }
