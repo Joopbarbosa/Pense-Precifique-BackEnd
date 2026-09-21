@@ -473,8 +473,11 @@ public class ProdutoService {
                 throw new BusinessException("Falta substituição para o vínculo de componente de ficha técnica (id " + componente.getId() + ").");
             }
             Produto novoProdutoBase = buscarProdutoDoUsuario(sub.getNovoProdutoId(), usuarioId);
-            if (novoProdutoBase.getTipo() != TipoProduto.PRODUTO || !Boolean.TRUE.equals(novoProdutoBase.getAtivo())) {
-                throw new BusinessException("Apenas produtos ativos do tipo Produto podem ser usados como componente de ficha técnica.");
+            // #436 (RN-NOVA-8/#462) — alinhado a FichaTecnicaService.salvarFichaTecnica: aceita
+            // Produto OU Customização como substituto, ambos ativos (antes só PRODUTO era aceito
+            // aqui, ficando desalinhado da regra vigente no fluxo principal).
+            if (!Boolean.TRUE.equals(novoProdutoBase.getAtivo())) {
+                throw new BusinessException("Apenas produtos/customizações ativos podem ser usados como componente de ficha técnica.");
             }
             componente.setProdutoBase(novoProdutoBase);
             fichaTecnicaItemRepository.save(componente);
