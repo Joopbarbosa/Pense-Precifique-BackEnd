@@ -1,6 +1,7 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.catalogo.CatalogoRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -8,6 +9,7 @@ import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -53,10 +55,20 @@ class OrcamentoMargemAplicadaIT {
     @Autowired ProdutoRepository produtoRepository;
     @Autowired CatalogoRepository catalogoRepository;
     @Autowired ItemCatalogoRepository itemCatalogoRepository;
+    @Autowired ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     @Autowired OrcamentoItemRepository orcamentoItemRepository;
 
     private Usuario usuario;
     private Cliente cliente;
+
+    private ItemCatalogo novoItemCatalogo(Catalogo catalogo, Produto produto, BigDecimal precoVenda) {
+        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
+                .catalogo(catalogo).nome("Item Catálogo Teste").tempoProducao(0)
+                .precoVenda(precoVenda).override(true).build());
+        itemCatalogoComponenteRepository.save(ItemCatalogoComponente.builder()
+                .itemCatalogo(item).produtoBase(produto).quantidade(BigDecimal.ONE).build());
+        return item;
+    }
 
     private void seedUsuarioECliente() {
         usuario = usuarioRepository.save(Usuario.builder()
@@ -111,9 +123,7 @@ class OrcamentoMargemAplicadaIT {
                 .usuario(usuario).numero(1).nome("Produto Catálogo").tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(new BigDecimal("100")).permitirEstoqueNegativo(true)
                 .precoVenda(new BigDecimal("20.00")).build());
-        ItemCatalogo itemCatalogo = itemCatalogoRepository.save(ItemCatalogo.builder()
-                .catalogo(catalogo).produto(produto).quantidadePacote(1)
-                .precoVenda(new BigDecimal("20.00")).build());
+        ItemCatalogo itemCatalogo = novoItemCatalogo(catalogo, produto, new BigDecimal("20.00"));
 
         OrcamentoItemRequest item = new OrcamentoItemRequest();
         item.setItemCatalogoId(itemCatalogo.getId());
@@ -139,9 +149,7 @@ class OrcamentoMargemAplicadaIT {
                 .usuario(usuario).numero(1).nome("Produto Sem Margem").tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(new BigDecimal("100")).permitirEstoqueNegativo(true)
                 .precoVenda(new BigDecimal("15.00")).build());
-        ItemCatalogo itemCatalogo = itemCatalogoRepository.save(ItemCatalogo.builder()
-                .catalogo(catalogo).produto(produto).quantidadePacote(1)
-                .precoVenda(new BigDecimal("15.00")).build());
+        ItemCatalogo itemCatalogo = novoItemCatalogo(catalogo, produto, new BigDecimal("15.00"));
 
         OrcamentoItemRequest item = new OrcamentoItemRequest();
         item.setItemCatalogoId(itemCatalogo.getId());

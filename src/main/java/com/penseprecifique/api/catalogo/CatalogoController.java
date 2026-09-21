@@ -1,5 +1,6 @@
 package com.penseprecifique.api.catalogo;
 
+import com.penseprecifique.api.pdf.PdfService;
 import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.DuplicarCatalogoRequest;
 import com.penseprecifique.api.shared.dto.response.catalogo.CatalogoResponse;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class CatalogoController {
 
     private final CatalogoService catalogoService;
+    private final PdfService pdfService;
 
     @GetMapping
     public ResponseEntity<Page<CatalogoResponse>> listar(
@@ -59,5 +61,15 @@ public class CatalogoController {
             @PathVariable UUID id,
             @RequestBody(required = false) DuplicarCatalogoRequest request) {
         return ResponseEntity.status(201).body(catalogoService.duplicar(id, request));
+    }
+
+    /** RN-NOVA-8 — bloqueia (400) se o catálogo estiver inativo (validado em CatalogoPdfPayloadService). */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
+        byte[] pdf = pdfService.gerarPdfCatalogo(id);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=catalogo.pdf")
+                .body(pdf);
     }
 }

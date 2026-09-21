@@ -53,9 +53,4 @@ public class OrcamentoItem {
     void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();
     }
-
-    /** RN-054 — produto vendido, seja via Catálogo (item_catalogo) ou avulso (produto direto). */
-    public Produto getProdutoVendido() {
-        return itemCatalogo != null ? itemCatalogo.getProduto() : produto;
-    }
 }

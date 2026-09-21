@@ -3,7 +3,7 @@
 > Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`. Projeto pré-produção
 > (primeiro deploy estável com usuários reais = v1). Caminho:
 > `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Última atualização: 19/09/2026 (Retomada V0.12.0) · Branch padrão atual: `feature/V0.12.0`
+> Última atualização: 20/09/2026 (Retomada V0.13.0) · Branch padrão atual: `feature/V0.13.0`
 > Se este arquivo e o prompt da sessão divergirem, este arquivo vence.
 >
 > Histórico de versões (V0.5 a V0.8.2) migrado para os `regras-*.md`/`decisoes-*.md` de cada
@@ -14,9 +14,10 @@ Flyway (`resources/db/migration/`, número mais alto sempre via `ls`, não copia
 (`./mvnw`) · Springdoc/Swagger só em `dev`.
 
 **PDF: 100% via microsserviço externo `pense-precifique-pdf`** (Node/Express/React SSR/Puppeteer,
-desde #262/V0.8.1) para os 5 tipos de documento (Orçamento, recibo-sinal, recibo-pagamento,
-pdf-multa, recibo-estorno) — não existe mais geração local (Thymeleaf/OpenHTMLToPDF foi removido
-por completo). Ver "PdfMapper Pattern" abaixo e `docs-pense-precifique/modulos/PDF/`.
+desde #262/V0.8.1) para os 6 tipos de documento (Orçamento, recibo-sinal, recibo-pagamento,
+pdf-multa, recibo-estorno, catalogo — V0.13.0/#519, 1º que não deriva de Orçamento) — não existe
+mais geração local (Thymeleaf/OpenHTMLToPDF foi removido por completo). Ver "PdfMapper Pattern"
+abaixo e `docs-pense-precifique/modulos/PDF/`.
 
 ---
 
@@ -31,6 +32,13 @@ docker compose up --build
 |---------|---------|------|
 | `dev` | ✅ `/swagger-ui.html` | DEBUG |
 | `prod` | ❌ desabilitado | INFO |
+
+**Schema OpenAPI (`api-docs`) fica em `/api-docs`, não no default do springdoc (`/v3/api-docs`)**
+— `application.yml` customiza `springdoc.api-docs.path`. Armadilha confirmada 2x (rodadas
+`seguranca-resiliencia` de V0.12.0 e V0.13.0): consultar `/v3/api-docs` retorna 500 (rota
+inexistente cai em `NoResourceFoundException` sem handler dedicado, mapeada pro catch-all — ver
+achado #525-adjacente) e já foi lido incorretamente como "Springdoc não registrado no classpath".
+Sempre confirmar `/api-docs` antes de rodar Schemathesis ou qualquer fuzzing de schema.
 
 **Conta de teste:** `penseprecifique@admin.com` / `senha12345`. **A API não tem prefixo `/api`**
 — base é `http://localhost:8080/auth/login`. Armadilha: `SecurityConfig` não libera `/error`,
@@ -80,7 +88,9 @@ com/penseprecifique/api/
 │   ├── dto/pdf/       # DTOs achatados de payload de PDF (OrcamentoPdfData, ReciboPdfData, etc.)
 │   ├── mapper/        # @Component manual — apesar do nome do pacote, NÃO é MapStruct
 │   └── exception/     # GlobalExceptionHandler, ResourceNotFoundException, BusinessException
-├── infra/{config,security}/   # SecurityConfig, JwtTokenProvider/Filter, UserDetailsServiceImpl
+├── infra/{config,security,storage}/   # SecurityConfig, JwtTokenProvider/Filter,
+│                                       # UserDetailsServiceImpl, R2StorageClient (V0.13.0,
+│                                       # upload de imagem — ver seção 5)
 └── util/              # IdentificadorFormatter (ORC-N/INS-N/PRO-N/etc., RN-053), NumeroSequencialUtil
 ```
 
@@ -161,7 +171,14 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   DTO achatado por tipo (`toXxxData`), depois converte pro payload JSON do microsserviço
   (`toXxxMicroservicoPayload`). Documentos do mesmo "formato" (Multa/Estorno) reusam
   assinatura/estratégia de busca — replicar mudança nos dois, a menos que haja razão de negócio
-  pra divergir. Identificadores sequenciais (`INS-N`/`PRO-N`/etc.) nunca aparecem em PDF (RN-053).
+  pra divergir. Identificadores sequenciais (`INS-N`/`PRO-N`/etc.) nunca aparecem em PDF (RN-053)
+  — **exceção deliberada:** `catalogo` (`CTG-N`) aparece sim, no cabeçalho (`#numeroFormatado`),
+  mesmo padrão visual que os outros 5 já usam pro próprio identificador (ex.: `#123` de Orçamento)
+  — RN-053 nunca teve essa intenção pra Catálogo, é o padrão de cabeçalho compartilhado entre
+  todos os 6 tipos que se aplica igual. Bean colaborador de um tipo que não deriva de Orçamento
+  (como `catalogo`) não precisa herdar de `OrcamentoPdfPayloadService` nem usar
+  `OrcamentoRepository` — lê direto do próprio módulo (`CatalogoPdfPayloadService` lê
+  `CatalogoRepository`/`ItemCatalogoRepository`).
 - **Endpoint de simulação `simular-*`** (canônico: `ProducaoService`/`OrcamentoService`) — quando
   o Frontend precisa de preview sem persistir, endpoint dedicado com prefixo `simular-` no mesmo
   path do real, reaproveitando os métodos/validações do endpoint real por chamada direta, nunca
@@ -197,6 +214,18 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   switch exaustivo em `InsumoService`, módulo não relacionado, só visível em build limpo, nunca no
   incremental do host). Rodar `mvn clean package` sempre que um enum usado por switch exaustivo em
   mais de um módulo ganhar um valor novo.
+- **Upload de arquivo (imagem) — validar no Service antes de subir pro storage externo**
+  (canônico: `infra/storage/R2StorageClient` + `ItemCatalogoService#validarArquivoFoto`, V0.13.0,
+  #518, 1º fluxo de upload do sistema) — formato/tamanho são validados no Service **antes** de
+  qualquer chamada ao storage (Cloudflare R2, S3-compatible), nunca confiando só na validação do
+  Frontend (DT-NOVA-4). Cliente S3 usa `software.amazon.awssdk:s3` com `url-connection-client`
+  explícito — **nunca o `apache-client` default do módulo**, que traz uma versão de `httpclient5`
+  incompatível com a já resolvida no classpath do projeto (`NoClassDefFoundError:
+  TlsSocketStrategy`, quebra o `ApplicationContext` de toda a suíte de testes, não só do módulo
+  tocado — só descoberto rodando `./mvnw test` completo, nunca no `mvn compile`). Trocar um
+  arquivo remove o anterior do storage (melhor esforço, nunca falha a troca); remover a entidade
+  dona do arquivo também remove o arquivo do storage (nunca deixa órfão cobrando armazenamento
+  sem uso). Precedente pra qualquer upload futuro no sistema (ex.: logo de empresa).
 
 ---
 

@@ -21,6 +21,13 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  servlet:
+    multipart:
+      # RN-NOVA-6 permite até 5MB — teto do framework bem acima disso (nunca os mesmos 5MB) para
+      # que a rejeição de arquivo grande sempre aconteça na validação do Service (mensagem
+      # específica de RN-NOVA-6/CEN-NOVO-6), nunca como MaxUploadSizeExceededException genérica.
+      max-file-size: 15MB
+      max-request-size: 15MB
 
 server:
   port: 8080
@@ -35,6 +42,15 @@ pdf:
     # deploy em produção (VPS) tiver a URL real do microsserviço.
     base-url: ${PDF_MICROSERVICE_BASE_URL:http://pense-precifique-pdf:3001}
     timeout-seconds: ${PDF_MICROSERVICE_TIMEOUT_SECONDS:30}
+
+# Cloudflare R2 (compatível S3) — upload de foto do Item de Catálogo, DT-NOVA-4. Credenciais no
+# .env da raiz do projeto, nunca hardcoded.
+r2:
+  access-key-id: ${R2_ACCESS_KEY_ID}
+  secret-access-key: ${R2_SECRET_ACCESS_KEY}
+  endpoint: ${R2_ENDPOINT}
+  bucket-name: ${R2_BUCKET_NAME}
+  public-url: ${R2_PUBLIC_URL}
 
 ---
 # ============================================================

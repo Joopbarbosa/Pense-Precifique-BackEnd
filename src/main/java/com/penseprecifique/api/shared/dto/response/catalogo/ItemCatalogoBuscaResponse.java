@@ -12,25 +12,21 @@ import java.util.UUID;
 public class ItemCatalogoBuscaResponse {
 
     private UUID id;
-    /** #218 — id do Produto vendido pelo item, necessário para montar a navegação de criação de produção. */
-    private UUID produtoId;
     /** RN-NOVA-23 (#313) — id do Catálogo dono do item, necessário para o Frontend chamar
-     *  GET /catalogos/{catalogoId}/itens e montar a calculadora de preço (Caminho A, ver DECISOES_V0.8.3.md). */
+     *  GET /catalogos/{catalogoId}/itens e montar a calculadora de preço. */
     private UUID catalogoId;
-    private String nomeProduto;
+    /** V0.13.0 (RN-NOVA-1) — nome próprio do item; antes era o nome do único produto do item, que
+     *  deixou de existir. */
+    private String nome;
     private BigDecimal precoVenda;
     private String catalogoNome;
     private Integer catalogoNumero;
-    /** #238 — tag global fracionável/estoque negativo/estoque atual, mesmo padrão de ProdutoResponse. */
-    private boolean algumInsumoNaoFracionavel;
-    private boolean permitirEstoqueNegativo;
-    private BigDecimal estoqueAtual;
-    /** #473 — fracionavel do Produto vendido (valor final calculado+override, RN-NOVA-2/#299),
-     *  mesmo campo já exposto em OrcamentoItemResponse (RN-NOVA-7/#461) — badge fracionável na
-     *  busca de item de catálogo dentro do Orçamento. */
-    private Boolean fracionavel;
-    /** #487 (V0.12.0) — customizações fixas anexadas ao item, com preço, para o Caixa montar o
-     *  preview do carrinho sem round-trip extra (reabertura de RN-NOVA-1, ver decisoes-caixa.md).
-     *  Orçamento (único consumidor até aqui) ignora este campo — não muda seu comportamento. */
-    private List<CustomizacaoAnexadaResponse> customizacoesFixas;
+    /** V0.13.0 (RN-NOVA-1) — substitui {@code produtoId} + {@code customizacoesFixas}: o item agora
+     *  pode ter N componentes (Produto, Customização ou Insumo), não mais 1 produto + customizações
+     *  fixas. Consumidores existentes (Orçamento/Caixa) precisam ler esta lista em vez de um único
+     *  produto — achado de contrato registrado em decisoes-catalogo.md. */
+    private List<ItemCatalogoComponenteResponse> componentes;
+    /** #238/DECISOES_GLOBAIS — tag global fracionável, generalizada de "algum insumo da ficha técnica
+     *  do produto do item" para "algum componente Insumo deste item é não-fracionável" (V0.13.0). */
+    private boolean algumComponenteNaoFracionavel;
 }

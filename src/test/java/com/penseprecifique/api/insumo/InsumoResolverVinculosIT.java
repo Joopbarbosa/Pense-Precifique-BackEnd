@@ -10,6 +10,7 @@ import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.AcaoResolucaoVinculo;
 import com.penseprecifique.api.shared.domain.enums.OperacaoPosResolucaoVinculo;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.dto.request.insumo.ResolucaoVinculoFichaTecnicaInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.SubstituicaoInsumoRequestDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -34,6 +35,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * mesma trava de vínculo já existente em inativar() (INS-011), e POST /insumos/{id}/resolver-vinculos
  * resolve os vínculos em massa (inativando os produtos vinculados ou substituindo o insumo na ficha
  * técnica de cada um) antes de prosseguir com a operação original na mesma chamada.
+ *
+ * <p>V0.13.0 (#516, DT-NOVA-1) — {@code ResolverVinculosInsumoRequestDTO} deixou de ser um record
+ * plano {@code (acao, operacao, substituicoes)} e passou a ter 2 blocos independentes
+ * {@code (operacao, fichaTecnica, catalogo)}, já que Insumo ganhou um 2º tipo de vínculo (Item de
+ * Catálogo, RN-NOVA-1). Estes testes cobrem só o bloco {@code fichaTecnica} — {@code catalogo} fica
+ * {@code null} (insumo sem vínculo de catálogo).</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class InsumoResolverVinculosIT {
@@ -73,6 +80,12 @@ class InsumoResolverVinculosIT {
                 .produto(produto).insumo(insumo).quantidade(quantidade).build());
     }
 
+    private ResolverVinculosInsumoRequestDTO requestFichaTecnica(OperacaoPosResolucaoVinculo operacao,
+            AcaoResolucaoVinculo acao, List<SubstituicaoInsumoRequestDTO> substituicoes) {
+        return new ResolverVinculosInsumoRequestDTO(operacao,
+                new ResolucaoVinculoFichaTecnicaInsumoRequestDTO(acao, substituicoes), null);
+    }
+
     @Test
     void excluirSemVinculoFuncionaDireto() {
         seedUsuario();
@@ -109,8 +122,8 @@ class InsumoResolverVinculosIT {
         vincular(pro4, insumo, new BigDecimal("2"));
         vincular(pro5, insumo, new BigDecimal("3"));
 
-        ResolverVinculosInsumoRequestDTO request = new ResolverVinculosInsumoRequestDTO(
-                AcaoResolucaoVinculo.REMOVER_VINCULOS, OperacaoPosResolucaoVinculo.INATIVAR, null);
+        ResolverVinculosInsumoRequestDTO request = requestFichaTecnica(
+                OperacaoPosResolucaoVinculo.INATIVAR, AcaoResolucaoVinculo.REMOVER_VINCULOS, null);
         insumoService.resolverVinculos(insumo.getId(), request);
 
         assertFalse(produtoRepository.findById(pro3.getId()).orElseThrow().getAtivo());
@@ -130,8 +143,8 @@ class InsumoResolverVinculosIT {
         vincular(pro3, insumoAntigo, new BigDecimal("2"));
         vincular(pro4, insumoAntigo, new BigDecimal("3"));
 
-        ResolverVinculosInsumoRequestDTO request = new ResolverVinculosInsumoRequestDTO(
-                AcaoResolucaoVinculo.SUBSTITUIR, OperacaoPosResolucaoVinculo.EXCLUIR,
+        ResolverVinculosInsumoRequestDTO request = requestFichaTecnica(
+                OperacaoPosResolucaoVinculo.EXCLUIR, AcaoResolucaoVinculo.SUBSTITUIR,
                 List.of(new SubstituicaoInsumoRequestDTO(pro3.getId(), substitutoA.getId()),
                         new SubstituicaoInsumoRequestDTO(pro4.getId(), substitutoB.getId())));
         insumoService.resolverVinculos(insumoAntigo.getId(), request);
@@ -159,8 +172,8 @@ class InsumoResolverVinculosIT {
         vincular(pro3, insumoAntigo, new BigDecimal("2"));
         vincular(pro4, insumoAntigo, new BigDecimal("3"));
 
-        ResolverVinculosInsumoRequestDTO request = new ResolverVinculosInsumoRequestDTO(
-                AcaoResolucaoVinculo.SUBSTITUIR, OperacaoPosResolucaoVinculo.EXCLUIR,
+        ResolverVinculosInsumoRequestDTO request = requestFichaTecnica(
+                OperacaoPosResolucaoVinculo.EXCLUIR, AcaoResolucaoVinculo.SUBSTITUIR,
                 List.of(new SubstituicaoInsumoRequestDTO(pro3.getId(), substituto.getId())));
 
         assertThrows(BusinessException.class, () -> insumoService.resolverVinculos(insumoAntigo.getId(), request));

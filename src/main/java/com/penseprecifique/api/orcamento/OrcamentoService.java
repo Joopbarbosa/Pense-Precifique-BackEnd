@@ -2,11 +2,14 @@ package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
-import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
+import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItemComponente;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -16,8 +19,10 @@ import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
+import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
@@ -48,8 +53,10 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.OrcamentoMapper;
 import com.penseprecifique.api.cliente.ClienteRepository;
-import com.penseprecifique.api.catalogo.ItemCatalogoCustomizacaoRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -102,12 +109,15 @@ public class OrcamentoService {
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
+    private final OrcamentoItemComponenteRepository orcamentoItemComponenteRepository;
     private final ItemCatalogoRepository itemCatalogoRepository;
-    private final ItemCatalogoCustomizacaoRepository itemCatalogoCustomizacaoRepository;
+    private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     private final ClienteRepository clienteRepository;
     private final ProdutoRepository produtoRepository;
+    private final InsumoRepository insumoRepository;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
+    private final MovimentacaoInsumoRepository movimentacaoInsumoRepository;
     private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final ReciboEstornoRepository reciboEstornoRepository;
     private final OrcamentoProducaoRepository orcamentoProducaoRepository;
@@ -156,8 +166,8 @@ public class OrcamentoService {
      * não tem estoque suficiente pra cobrir a quantidade solicitada. Somente leitura: alimenta a
      * condição de exibir o checkbox de seleção no card "Estoque insuficiente" do Detalhe
      * (RN-NOVA-25) — a criação da produção em si passa por {@link #criarProducaoVinculada}, não por
-     * aqui. Reaproveita OrcamentoItem.getProdutoVendido() (já resolve a origem Catálogo/avulso —
-     * RN-054) em vez de duplicar essa lógica.
+     * aqui. V0.13.0 (#516, RN-NOVA-1/9) — item de Catálogo resolve por componente (N deles), não
+     * mais por um único "produto vendido".
      *
      * <p>RN-NOVA-26 — cada item também expõe {@code producaoVinculadaId}/
      * {@code identificadorProducaoVinculada} quando já existe uma produção em estado não-terminal
@@ -180,12 +190,22 @@ public class OrcamentoService {
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         List<ItemSemEstoqueResponse> semEstoque = new ArrayList<>();
         for (OrcamentoItem item : itens) {
-            Produto produto = item.getProdutoVendido();
-            if (produto == null) {
-                continue;
+            if (item.getItemCatalogo() != null) {
+                // RN-NOVA-9 (V0.13.0, #516) — item de Catálogo com N componentes (RN-NOVA-1): só os
+                // componentes Produto-base entram no card "Criar Produção" — Insumo nunca foi
+                // produzível via Produção, mesmo critério de antes desta versão (Insumo não tinha
+                // vínculo de catálogo nenhum até agora).
+                for (OrcamentoItemComponente c : orcamentoItemComponenteRepository.findByOrcamentoItemId(item.getId())) {
+                    if (c.getProdutoBase() == null) {
+                        continue;
+                    }
+                    montarItemSemEstoque(c.getProdutoBase(), c.getQuantidade(), vinculoAtivoPorProduto)
+                            .ifPresent(semEstoque::add);
+                }
+            } else if (item.getProduto() != null) {
+                montarItemSemEstoque(item.getProduto(), BigDecimal.valueOf(item.getQuantidade()), vinculoAtivoPorProduto)
+                        .ifPresent(semEstoque::add);
             }
-            montarItemSemEstoque(produto, BigDecimal.valueOf(item.getQuantidade()), vinculoAtivoPorProduto)
-                    .ifPresent(semEstoque::add);
         }
         // Achado do teste manual (V0.10.0) — Customização também é produzível, mas ficava de fora
         // do card "Estoque insuficiente" (nunca oferecia "Criar produção"/"Vincular à produção
@@ -325,6 +345,7 @@ public class OrcamentoService {
         // Sobrou em "disponiveis" = não bateu com nenhum item do request → removido.
         for (OrcamentoItem removido : disponiveis) {
             orcamentoItemCustomizacaoRepository.deleteByOrcamentoItemId(removido.getId());
+            orcamentoItemComponenteRepository.deleteByOrcamentoItemId(removido.getId());
             orcamentoItemRepository.delete(removido);
         }
 
@@ -461,21 +482,12 @@ public class OrcamentoService {
     }
 
     /**
-     * Compara as customizações ad-hoc (RN-030) do item persistido contra as do request. O request só
-     * carrega customizações ad-hoc (as fixas do catálogo — RN-048 — nunca aparecem nele, são geradas
-     * automaticamente); para isolar a parcela ad-hoc do item persistido, subtrai do total persistido
-     * o conjunto fixo recalculado ao vivo a partir do ItemCatalogo (mesma fórmula de arredondamento
-     * de {@link #criarItem}). Item avulso não tem customização fixa — a subtração não roda, o total
-     * persistido já é 100% ad-hoc.
+     * Compara as customizações ad-hoc (RN-030) do item persistido contra as do request. Desde
+     * V0.13.0 (#516, RN-NOVA-1) a parcela "fixa" de um item de Catálogo não mora mais nesta tabela
+     * (ver {@link #customizacoesAdHocPersistidas}) — comparação direta, sem subtração nenhuma.
      */
     private boolean mesmasCustomizacoesAdHoc(OrcamentoItem persistido, List<OrcamentoItemCustomizacaoRequest> customizacoesRequest) {
         Map<UUID, Integer> adHocPersistido = customizacoesAdHocPersistidas(persistido);
-        adHocPersistido.values().removeIf(q -> q == 0);
-        // Conjunto fixo mudou desde a criação do item (catálogo editado depois) — não dá pra confirmar
-        // igualdade com segurança; trata como item diferente (vira remover+adicionar).
-        if (adHocPersistido.values().stream().anyMatch(q -> q < 0)) {
-            return false;
-        }
 
         Map<UUID, Integer> adHocRequest = new LinkedHashMap<>();
         for (OrcamentoItemCustomizacaoRequest c : customizacoesRequest) {
@@ -486,39 +498,35 @@ public class OrcamentoService {
     }
 
     /**
-     * Multiset (produtoId -> quantidade) das customizações ad-hoc de um item persistido — total de
-     * customizações gravadas menos o conjunto fixo do catálogo recalculado ao vivo (quando a origem é
-     * Catálogo). Compartilhado por {@link #mesmasCustomizacoesAdHoc} (diff de edição, RN-NOVA-4) e
-     * {@link #customizacoesAdHocRequest} (reconstrução para duplicação, RN-NOVA-5) — mesma extração,
-     * dois usos diferentes do resultado.
+     * Multiset (produtoId -> quantidade) das customizações ad-hoc (RN-030) de um item persistido.
+     * Compartilhado por {@link #mesmasCustomizacoesAdHoc} (diff de edição, RN-NOVA-4) e
+     * {@link #customizacoesAdHocRequest} (reconstrução para duplicação, RN-NOVA-5).
+     *
+     * <p>V0.13.0 (#516, RN-NOVA-1) — antes desta versão, a parcela "fixa" de um item de Catálogo
+     * (customização anexada ao pacote) era gravada nesta MESMA tabela junto com a ad-hoc, e este
+     * método precisava recalcular o conjunto fixo ao vivo a partir do catálogo para subtraí-lo (com
+     * um fallback impreciso quando o catálogo mudava depois da criação do item). Isso não existe
+     * mais: a composição do Item de Catálogo (N componentes, Insumo XOR Produto) não tem preço
+     * próprio (RN-NOVA-2/3) e por isso vive só em {@link OrcamentoItemComponente} — esta tabela
+     * agora é sempre 100% ad-hoc, para as duas origens (Catálogo ou avulso).
      */
     private Map<UUID, Integer> customizacoesAdHocPersistidas(OrcamentoItem persistido) {
         Map<UUID, Integer> adHoc = new LinkedHashMap<>();
         for (OrcamentoItemCustomizacao c : orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(persistido.getId())) {
             adHoc.merge(c.getProduto().getId(), c.getQuantidade(), Integer::sum);
         }
-        if (persistido.getItemCatalogo() != null) {
-            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(persistido.getItemCatalogo().getId())) {
-                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
-                adHoc.merge(fixa.getProduto().getId(), -quantidade, Integer::sum);
-            }
-        }
         return adHoc;
     }
 
     /**
      * RN-NOVA-5 — reconstrói a lista de customizações ad-hoc de um item persistido no formato de
-     * request, para alimentar {@link #criarItem} na duplicação (que readiciona as fixas do catálogo
-     * automaticamente — só a parcela ad-hoc precisa vir explícita). Entradas com quantidade <= 0
-     * (customização fixa cobre tudo, ou catálogo mudou desde a criação do item) são descartadas.
+     * request, para alimentar {@link #criarItem} na duplicação (que readiciona os componentes do
+     * catálogo automaticamente — só a parcela ad-hoc precisa vir explícita).
      */
     private List<OrcamentoItemCustomizacaoRequest> customizacoesAdHocRequest(OrcamentoItem persistido) {
         Map<UUID, Integer> adHoc = customizacoesAdHocPersistidas(persistido);
         List<OrcamentoItemCustomizacaoRequest> resultado = new ArrayList<>();
         for (Map.Entry<UUID, Integer> entry : adHoc.entrySet()) {
-            if (entry.getValue() <= 0) {
-                continue;
-            }
             OrcamentoItemCustomizacaoRequest custReq = new OrcamentoItemCustomizacaoRequest();
             custReq.setProdutoId(entry.getKey());
             custReq.setQuantidade(entry.getValue());
@@ -539,7 +547,8 @@ public class OrcamentoService {
         BigDecimal subtotalItem;
 
         if (itemReq.getItemCatalogoId() != null) {
-            // RN-045 + RN-046 — item só entra no orçamento se produto e catálogo estiverem ativos.
+            // RN-045 + RN-046 + RN-NOVA-4 — item só entra no orçamento se o catálogo estiver ativo e
+            // nenhum componente estiver inativado/excluído.
             ItemCatalogo itemCatalogo = buscarItemCatalogoParaVenda(itemReq.getItemCatalogoId(), usuarioId);
 
             // RN-048 — snapshot do preço de venda no momento exato da adição. Por ser uma cópia
@@ -557,11 +566,22 @@ public class OrcamentoService {
                     .build();
             item = orcamentoItemRepository.save(item);
 
-            // RN-048 — customizações fixas do pacote entram automaticamente (sem ação da artesã),
-            // cada uma com snapshot do preço de venda do produto CUSTOMIZACAO correspondente.
-            for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(itemCatalogo.getId())) {
-                int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
-                subtotalItem = subtotalItem.add(salvarCustomizacao(item, fixa.getProduto(), quantidade));
+            // RN-NOVA-1/9 (V0.13.0, #516) — snapshot dos N componentes do catálogo (Insumo XOR
+            // Produto-base) no momento da adição, pra a baixa/reversão de estoque (RN-NOVA-9)
+            // sobreviver a uma edição posterior da composição do catálogo. Quantidade já vem
+            // multiplicada pela quantidade do item no orçamento (5 kits × 2 sabonetes/kit = 10) —
+            // mesmo critério de {@code calcularQuantidadeMovimentacao} pro produto avulso, pra todo
+            // consumidor downstream (baixa/reversão/aviso) ler o total pronto, sem remultiplicar. Sem
+            // preço próprio (RN-NOVA-2/3: componente de catálogo não é vendido separado) — por isso
+            // não vira linha de OrcamentoItemCustomizacao, mesmo que produtoBase seja CUSTOMIZACAO.
+            BigDecimal quantidadeItem = BigDecimal.valueOf(itemReq.getQuantidade());
+            for (ItemCatalogoComponente componente : itemCatalogoComponenteRepository.findByItemCatalogoId(itemCatalogo.getId())) {
+                orcamentoItemComponenteRepository.save(OrcamentoItemComponente.builder()
+                        .orcamentoItem(item)
+                        .insumo(componente.getInsumo())
+                        .produtoBase(componente.getProdutoBase())
+                        .quantidade(componente.getQuantidade().multiply(quantidadeItem))
+                        .build());
             }
         } else {
             // RN-054 — produto avulso (sem Catálogo): preco_unitario é o snapshot definitivo informado
@@ -621,10 +641,11 @@ public class OrcamentoService {
         Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
 
         for (SimularAlertasOrcamentoItemRequest item : itens) {
-            ProdutoNecessario resolvido = resolverProdutoNecessario(
-                    item.getItemCatalogoId(), item.getProdutoId(), item.getQuantidade(), usuarioId);
-            necessidadePorProduto.merge(resolvido.produto().getId(), resolvido.necessaria(), BigDecimal::add);
-            produtosPorId.putIfAbsent(resolvido.produto().getId(), resolvido.produto());
+            for (ProdutoNecessario resolvido : resolverProdutosNecessarios(
+                    item.getItemCatalogoId(), item.getProdutoId(), item.getQuantidade(), usuarioId)) {
+                necessidadePorProduto.merge(resolvido.produto().getId(), resolvido.necessaria(), BigDecimal::add);
+                produtosPorId.putIfAbsent(resolvido.produto().getId(), resolvido.produto());
+            }
         }
 
         List<SimulacaoEstoqueProdutoResponse> alertas = new ArrayList<>();
@@ -660,17 +681,20 @@ public class OrcamentoService {
         return permitirEstoqueNegativo ? SituacaoAlertaInsumo.AVISO : SituacaoAlertaInsumo.BLOQUEIO_FUTURO;
     }
 
-    /** Resolução de item em construção (Catálogo ou avulso) para o Produto vendido + quantidade necessária. */
+    /** Resolução de item em construção (Catálogo ou avulso) para um Produto vendido + quantidade necessária. */
     private record ProdutoNecessario(Produto produto, BigDecimal necessaria) {
     }
 
     /**
-     * Resolve a origem XOR de um item em construção (itemCatalogoId ou produtoId) para o Produto
-     * vendido e a quantidade necessária dele — mesma resolução usada por {@link #simularAlertas} e
-     * pelo bloqueio pré-save de RN-NOVA-10, para não divergir em qual produto/quantidade cada
-     * caminho está avaliando.
+     * Resolve a origem XOR de um item em construção (itemCatalogoId ou produtoId) para os Produtos
+     * vendidos + quantidade necessária de cada um — mesma resolução usada por {@link #simularAlertas}.
+     *
+     * <p>V0.13.0 (#516, RN-NOVA-1) — item de Catálogo pode ter N componentes agora, em vez de 1
+     * produto principal. Só os componentes Produto-base entram aqui (mesmo critério de
+     * {@link #itensSemEstoque}, RN-NOVA-9 — Insumo nunca teve simulação de estoque em Orçamento
+     * antes desta versão, e RN-NOVA-9 não estendeu esta simulação específica pra ele).
      */
-    private ProdutoNecessario resolverProdutoNecessario(UUID itemCatalogoId, UUID produtoId, int quantidade,
+    private List<ProdutoNecessario> resolverProdutosNecessarios(UUID itemCatalogoId, UUID produtoId, int quantidade,
                                                           UUID usuarioId) {
         boolean temCatalogo = itemCatalogoId != null;
         boolean temProduto = produtoId != null;
@@ -683,12 +707,20 @@ public class OrcamentoService {
             ItemCatalogo itemCatalogo = itemCatalogoRepository.findByIdAndDeletedAtIsNull(itemCatalogoId)
                     .filter(i -> i.getCatalogo().getUsuario().getId().equals(usuarioId))
                     .orElseThrow(() -> new BusinessException("Item de catálogo não encontrado"));
-            BigDecimal necessaria = BigDecimal.valueOf((long) quantidade * itemCatalogo.getQuantidadePacote());
-            return new ProdutoNecessario(itemCatalogo.getProduto(), necessaria);
+            BigDecimal quantidadeItem = BigDecimal.valueOf(quantidade);
+            List<ProdutoNecessario> resultado = new ArrayList<>();
+            for (ItemCatalogoComponente componente : itemCatalogoComponenteRepository.findByItemCatalogoId(itemCatalogo.getId())) {
+                if (componente.getProdutoBase() == null) {
+                    continue;
+                }
+                resultado.add(new ProdutoNecessario(
+                        componente.getProdutoBase(), componente.getQuantidade().multiply(quantidadeItem)));
+            }
+            return resultado;
         }
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
-        return new ProdutoNecessario(produto, BigDecimal.valueOf(quantidade));
+        return List.of(new ProdutoNecessario(produto, BigDecimal.valueOf(quantidade)));
     }
 
     /**
@@ -701,8 +733,21 @@ public class OrcamentoService {
         Map<UUID, BigDecimal> quantidadeAcumulada = new LinkedHashMap<>();
         Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
         for (OrcamentoItem item : itens) {
-            Produto produto = item.getProdutoVendido();
-            quantidadeAcumulada.merge(produto.getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
+            if (item.getProduto() != null) {
+                quantidadeAcumulada.merge(item.getProduto().getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
+                produtosPorId.putIfAbsent(item.getProduto().getId(), item.getProduto());
+            }
+        }
+        // RN-NOVA-1/9 (V0.13.0, #516) — componentes Produto-base de itens de Catálogo entram no
+        // aviso; Insumo fica de fora deste aviso específico (mesmo critério de
+        // itensSemEstoque/resolverProdutosNecessarios — Insumo nunca teve este tipo de aviso em
+        // Orçamento antes desta versão).
+        for (OrcamentoItemComponente c : buscarComponentesDosItens(itens)) {
+            if (c.getProdutoBase() == null) {
+                continue;
+            }
+            Produto produto = c.getProdutoBase();
+            quantidadeAcumulada.merge(produto.getId(), c.getQuantidade(), BigDecimal::add);
             produtosPorId.putIfAbsent(produto.getId(), produto);
         }
         // Achado do teste manual (V0.10.0) — Customização também consome estoque próprio (tem
@@ -764,12 +809,25 @@ public class OrcamentoService {
                     + "' está desativado. Reative o catálogo antes de adicionar seus itens ao orçamento.");
         }
 
-        // RN-045 — produto do item inativado/excluído bloqueia a venda do item.
-        Produto produto = item.getProduto();
-        if (!Boolean.TRUE.equals(produto.getAtivo()) || produto.getDeletedAt() != null) {
-            throw new BusinessException("O produto '" + produto.getNome()
-                    + "' deste item de catálogo foi inativado. Reative o produto ou troque o produto do item"
-                    + " antes de adicioná-lo ao orçamento.");
+        // RN-045/RN-NOVA-4 (V0.13.0, #516) — qualquer componente inativado/excluído bloqueia a
+        // venda do item inteiro (generaliza para os N componentes de RN-NOVA-1; mesmo critério de
+        // ItemCatalogoService#bloqueadoParaVenda).
+        for (ItemCatalogoComponente componente : itemCatalogoComponenteRepository.findByItemCatalogoId(item.getId())) {
+            if (componente.getInsumo() != null) {
+                Insumo insumo = componente.getInsumo();
+                if (!Boolean.TRUE.equals(insumo.getAtivo()) || insumo.getDeletedAt() != null) {
+                    throw new BusinessException("O insumo '" + insumo.getNome()
+                            + "' deste item de catálogo foi inativado. Reative o insumo ou troque o"
+                            + " componente do item antes de adicioná-lo ao orçamento.");
+                }
+            } else {
+                Produto produtoBase = componente.getProdutoBase();
+                if (!Boolean.TRUE.equals(produtoBase.getAtivo()) || produtoBase.getDeletedAt() != null) {
+                    throw new BusinessException("O produto '" + produtoBase.getNome()
+                            + "' deste item de catálogo foi inativado. Reative o produto ou troque o"
+                            + " componente do item antes de adicioná-lo ao orçamento.");
+                }
+            }
         }
         return item;
     }
@@ -1212,14 +1270,28 @@ public class OrcamentoService {
 
     private List<ProducaoProdutoRequest> produtosDoOrcamentoComoRequest(UUID orcamentoId) {
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamentoId);
-        List<ProducaoProdutoRequest> produtos = new ArrayList<>(itens.stream()
-                .map(item -> {
-                    ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
-                    produtoRequest.setProdutoId(item.getProdutoVendido().getId());
-                    produtoRequest.setQuantidade(BigDecimal.valueOf(item.getQuantidade()));
-                    return produtoRequest;
-                })
-                .toList());
+        List<ProducaoProdutoRequest> produtos = new ArrayList<>();
+        for (OrcamentoItem item : itens) {
+            if (item.getProduto() == null) {
+                continue;
+            }
+            ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
+            produtoRequest.setProdutoId(item.getProduto().getId());
+            produtoRequest.setQuantidade(BigDecimal.valueOf(item.getQuantidade()));
+            produtos.add(produtoRequest);
+        }
+        // RN-NOVA-1/9 (V0.13.0, #516) — componentes Produto-base de itens de Catálogo também entram
+        // na produção sugerida; Insumo fica de fora (mesmo critério de itensSemEstoque — nunca
+        // produzível via Produção).
+        for (OrcamentoItemComponente c : buscarComponentesDosItens(itens)) {
+            if (c.getProdutoBase() == null) {
+                continue;
+            }
+            ProducaoProdutoRequest produtoRequest = new ProducaoProdutoRequest();
+            produtoRequest.setProdutoId(c.getProdutoBase().getId());
+            produtoRequest.setQuantidade(c.getQuantidade());
+            produtos.add(produtoRequest);
+        }
         // Achado do teste manual (V0.10.0) — Customização também é produzível (tem ficha técnica/
         // rendimento igual a Produto), mas ficava de fora da criação/sincronização de Produção a
         // partir do Orçamento; downstream (produtosPendentesDeSincronizacao) já mescla por
@@ -1241,6 +1313,17 @@ public class OrcamentoService {
             return List.of();
         }
         return orcamentoItemCustomizacaoRepository.findByOrcamentoItemIdIn(
+                itens.stream().map(OrcamentoItem::getId).toList());
+    }
+
+    /** V0.13.0 (#516, RN-NOVA-1) — busca em lote (1 query) o snapshot dos componentes de catálogo
+     *  (Insumo XOR Produto-base) de uma lista de itens de orçamento, mesmo padrão de
+     *  {@link #buscarCustomizacoesDosItens}. Item avulso (RN-054) nunca tem linha aqui. */
+    private List<OrcamentoItemComponente> buscarComponentesDosItens(List<OrcamentoItem> itens) {
+        if (itens.isEmpty()) {
+            return List.of();
+        }
+        return orcamentoItemComponenteRepository.findByOrcamentoItemIdIn(
                 itens.stream().map(OrcamentoItem::getId).toList());
     }
 
@@ -1309,7 +1392,10 @@ public class OrcamentoService {
      */
     private void baixarEstoque(Orcamento orcamento, List<OrcamentoItem> itens) {
         for (OrcamentoItem item : itens) {
-            Produto produto = item.getProdutoVendido();
+            if (item.getProduto() == null) {
+                continue;
+            }
+            Produto produto = item.getProduto();
             BigDecimal quantidadeBaixa = calcularQuantidadeMovimentacao(item);
             produto.setEstoqueAtual(produto.getEstoqueAtual()
                     .subtract(quantidadeBaixa));
@@ -1328,6 +1414,40 @@ public class OrcamentoService {
                     .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
                     .estornada(false)
                     .build());
+        }
+        // RN-NOVA-1/9 (V0.13.0, #516) — item de Catálogo com N componentes (Insumo XOR Produto-base)
+        // baixa TODOS os componentes, não só o antigo "produto principal" + customizações anexadas.
+        // Sem preço próprio por componente (RN-NOVA-2/3) — precoVendido fica nulo nessas linhas.
+        for (OrcamentoItemComponente c : buscarComponentesDosItens(itens)) {
+            if (c.getInsumo() != null) {
+                Insumo insumo = c.getInsumo();
+                insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(c.getQuantidade()));
+                insumoRepository.save(insumo);
+                movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                        .insumo(insumo)
+                        .tipo(TipoMovimentacaoInsumo.SAIDA)
+                        .motivo(MotivoMovimentacaoInsumo.ORCAMENTO)
+                        .quantidade(c.getQuantidade())
+                        .custoUnitario(insumo.getCustoUnitario())
+                        .referenciaId(orcamento.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO)
+                        .estornada(false)
+                        .build());
+            } else {
+                Produto produtoBase = c.getProdutoBase();
+                produtoBase.setEstoqueAtual(produtoBase.getEstoqueAtual().subtract(c.getQuantidade()));
+                produtoRepository.save(produtoBase);
+                movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                        .produto(produtoBase)
+                        .tipo(TipoMovimentacaoProduto.SAIDA)
+                        .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
+                        .quantidade(c.getQuantidade())
+                        .catalogoReferencia(catalogoReferenciaMovimentacao(c.getOrcamentoItem()))
+                        .referenciaId(orcamento.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
+                        .estornada(false)
+                        .build());
+            }
         }
         // Achado do teste manual (V0.10.0) — Customização também precisa baixar o próprio estoque
         // ao finalizar; antes, só o produto principal de cada item baixava.
@@ -1425,8 +1545,11 @@ public class OrcamentoService {
     private void reverterEstoque(Orcamento orcamento, String motivo) {
         List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
         for (OrcamentoItem item : itens) {
-            Produto produto = item.getProdutoVendido();
-            // RN-049: reversão espelha a baixa (quantidade × quantidade_pacote, quando aplicável)
+            if (item.getProduto() == null) {
+                continue;
+            }
+            Produto produto = item.getProduto();
+            // RN-049: reversão espelha a baixa
             BigDecimal quantidadeReversao = calcularQuantidadeMovimentacao(item);
             produto.setEstoqueAtual(produto.getEstoqueAtual()
                     .add(quantidadeReversao));
@@ -1442,6 +1565,40 @@ public class OrcamentoService {
                     .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
                     .estornada(false)
                     .build());
+        }
+        // RN-NOVA-1/9 (V0.13.0, #516) — espelha baixarEstoque: reversão de item de Catálogo devolve
+        // TODOS os componentes (Insumo XOR Produto-base), não só o antigo "produto principal".
+        for (OrcamentoItemComponente c : buscarComponentesDosItens(itens)) {
+            if (c.getInsumo() != null) {
+                Insumo insumo = c.getInsumo();
+                insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(c.getQuantidade()));
+                insumoRepository.save(insumo);
+                movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                        .insumo(insumo)
+                        .tipo(TipoMovimentacaoInsumo.ENTRADA)
+                        .motivo(MotivoMovimentacaoInsumo.ORCAMENTO)
+                        .quantidade(c.getQuantidade())
+                        .custoUnitario(insumo.getCustoUnitario())
+                        .observacao(motivo)
+                        .referenciaId(orcamento.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO)
+                        .estornada(false)
+                        .build());
+            } else {
+                Produto produtoBase = c.getProdutoBase();
+                produtoBase.setEstoqueAtual(produtoBase.getEstoqueAtual().add(c.getQuantidade()));
+                produtoRepository.save(produtoBase);
+                movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                        .produto(produtoBase)
+                        .tipo(TipoMovimentacaoProduto.ENTRADA)
+                        .motivo(MotivoMovimentacaoProduto.ORCAMENTO)
+                        .quantidade(c.getQuantidade())
+                        .observacao(motivo)
+                        .referenciaId(orcamento.getId())
+                        .referenciaTipo(ReferenciaMovimentacaoTipo.ORCAMENTO.name())
+                        .estornada(false)
+                        .build());
+            }
         }
         // Achado do teste manual (V0.10.0) — espelha baixarEstoque: reversão de Customização
         // também precisa devolver o próprio estoque, mesmo critério da baixa.
@@ -1478,45 +1635,75 @@ public class OrcamentoService {
      * (Caso 6) — usar exceção para os dois misturaria essas duas semânticas na mesma chamada.
      */
     private ResultadoValidacaoEstoque validarEstoqueParaFinalizar(List<OrcamentoItem> itens, List<UUID> idsConfirmados) {
-        Map<UUID, BigDecimal> quantidadeAcumulada = new LinkedHashMap<>();
+        Map<UUID, BigDecimal> quantidadeAcumuladaProduto = new LinkedHashMap<>();
         Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
+        Map<UUID, BigDecimal> quantidadeAcumuladaInsumo = new LinkedHashMap<>();
+        Map<UUID, Insumo> insumosPorId = new LinkedHashMap<>();
+
         for (OrcamentoItem item : itens) {
-            Produto produto = item.getProdutoVendido();
-            quantidadeAcumulada.merge(produto.getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
-            produtosPorId.putIfAbsent(produto.getId(), produto);
+            if (item.getProduto() == null) {
+                continue;
+            }
+            quantidadeAcumuladaProduto.merge(item.getProduto().getId(), calcularQuantidadeMovimentacao(item), BigDecimal::add);
+            produtosPorId.putIfAbsent(item.getProduto().getId(), item.getProduto());
+        }
+        // RN-NOVA-1/9 (V0.13.0, #516) — item de Catálogo com N componentes: os dois tipos
+        // (Insumo/Produto-base) entram no mesmo bloqueio/aviso que já existia só pra Produto.
+        for (OrcamentoItemComponente c : buscarComponentesDosItens(itens)) {
+            if (c.getInsumo() != null) {
+                quantidadeAcumuladaInsumo.merge(c.getInsumo().getId(), c.getQuantidade(), BigDecimal::add);
+                insumosPorId.putIfAbsent(c.getInsumo().getId(), c.getInsumo());
+            } else {
+                quantidadeAcumuladaProduto.merge(c.getProdutoBase().getId(), c.getQuantidade(), BigDecimal::add);
+                produtosPorId.putIfAbsent(c.getProdutoBase().getId(), c.getProdutoBase());
+            }
         }
         // Achado do teste manual (V0.10.0) — mesmo critério de calcularAvisosEstoque: Customização
         // participa do bloqueio/aviso de estoque negativo, não só o produto principal.
         for (OrcamentoItemCustomizacao c : buscarCustomizacoesDosItens(itens)) {
             Produto produto = c.getProduto();
-            quantidadeAcumulada.merge(produto.getId(), BigDecimal.valueOf(c.getQuantidade()), BigDecimal::add);
+            quantidadeAcumuladaProduto.merge(produto.getId(), BigDecimal.valueOf(c.getQuantidade()), BigDecimal::add);
             produtosPorId.putIfAbsent(produto.getId(), produto);
         }
 
         List<String> bloqueados = new ArrayList<>();
         List<AvisoEstoqueNegativoResponse> avisosPendentes = new ArrayList<>();
-        for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumulada.entrySet()) {
+        for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumuladaProduto.entrySet()) {
             Produto produto = produtosPorId.get(entry.getKey());
-            BigDecimal necessaria = entry.getValue();
-            BigDecimal resultante = produto.getEstoqueAtual().subtract(necessaria);
-            if (resultante.compareTo(BigDecimal.ZERO) >= 0) {
-                continue;
-            }
-            if (!produto.getPermitirEstoqueNegativo()) {
-                bloqueados.add(produto.getNome());
-            } else if (!idsConfirmados.contains(produto.getId())) {
-                AvisoEstoqueNegativoResponse aviso = new AvisoEstoqueNegativoResponse();
-                aviso.setComponenteId(produto.getId());
-                aviso.setNome(produto.getNome());
-                aviso.setEstoqueAtual(produto.getEstoqueAtual());
-                aviso.setQuantidadeNecessaria(necessaria);
-                aviso.setMensagem("A baixa de " + necessaria.stripTrailingZeros().toPlainString()
-                        + " de " + produto.getNome() + " deixará o estoque negativo (atual: "
-                        + produto.getEstoqueAtual().stripTrailingZeros().toPlainString() + "). Confirme para prosseguir.");
-                avisosPendentes.add(aviso);
-            }
+            avaliarEstoqueParaFinalizar(produto.getId(), produto.getNome(), produto.getEstoqueAtual(), entry.getValue(),
+                    Boolean.TRUE.equals(produto.getPermitirEstoqueNegativo()), idsConfirmados, bloqueados, avisosPendentes);
+        }
+        for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumuladaInsumo.entrySet()) {
+            Insumo insumo = insumosPorId.get(entry.getKey());
+            avaliarEstoqueParaFinalizar(insumo.getId(), insumo.getNome(), insumo.getEstoqueAtual(), entry.getValue(),
+                    Boolean.TRUE.equals(insumo.getPermitirEstoqueNegativo()), idsConfirmados, bloqueados, avisosPendentes);
         }
         return new ResultadoValidacaoEstoque(bloqueados, avisosPendentes);
+    }
+
+    /** V0.13.0 (#516, RN-NOVA-9) — avaliação de bloqueio/aviso de estoque negativo genérica
+     * (Produto ou Insumo), extraída de {@link #validarEstoqueParaFinalizar} pra não duplicar a
+     * lógica entre os dois tipos de componente de Item de Catálogo (RN-NOVA-1). */
+    private void avaliarEstoqueParaFinalizar(UUID id, String nome, BigDecimal estoqueAtual, BigDecimal necessaria,
+                                              boolean permitirEstoqueNegativo, List<UUID> idsConfirmados,
+                                              List<String> bloqueados, List<AvisoEstoqueNegativoResponse> avisosPendentes) {
+        BigDecimal resultante = estoqueAtual.subtract(necessaria);
+        if (resultante.compareTo(BigDecimal.ZERO) >= 0) {
+            return;
+        }
+        if (!permitirEstoqueNegativo) {
+            bloqueados.add(nome);
+        } else if (!idsConfirmados.contains(id)) {
+            AvisoEstoqueNegativoResponse aviso = new AvisoEstoqueNegativoResponse();
+            aviso.setComponenteId(id);
+            aviso.setNome(nome);
+            aviso.setEstoqueAtual(estoqueAtual);
+            aviso.setQuantidadeNecessaria(necessaria);
+            aviso.setMensagem("A baixa de " + necessaria.stripTrailingZeros().toPlainString()
+                    + " de " + nome + " deixará o estoque negativo (atual: "
+                    + estoqueAtual.stripTrailingZeros().toPlainString() + "). Confirme para prosseguir.");
+            avisosPendentes.add(aviso);
+        }
     }
 
     /**
@@ -1528,14 +1715,11 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-049 — baixa/reversão de estoque: quantidade do orçamento × quantidade_pacote quando o item vem
-     * de um ItemCatalogo. RN-054 — item avulso (sem Catálogo) não tem quantidade_pacote: baixa é direto
-     * pela quantidade do orçamento.
+     * RN-054 — baixa/reversão de estoque de um item avulso (sem Catálogo): direto pela quantidade
+     * do orçamento. Item de Catálogo (RN-NOVA-1/9, V0.13.0/#516) é resolvido por componente — nunca
+     * passa por aqui, ver {@link #buscarComponentesDosItens}.
      */
     private BigDecimal calcularQuantidadeMovimentacao(OrcamentoItem item) {
-        if (item.getItemCatalogo() != null) {
-            return BigDecimal.valueOf((long) item.getQuantidade() * item.getItemCatalogo().getQuantidadePacote());
-        }
         return BigDecimal.valueOf(item.getQuantidade());
     }
 
@@ -1678,9 +1862,18 @@ public class OrcamentoService {
         for (OrcamentoItem item : itens) {
             List<OrcamentoItemCustomizacao> customizacoes =
                     orcamentoItemCustomizacaoRepository.findByOrcamentoItemId(item.getId());
-            List<FichaTecnicaItem> fichaTecnicaProduto =
-                    fichaTecnicaItemRepository.findByProdutoId(item.getProdutoVendido().getId());
-            itensResponse.add(orcamentoMapper.toItemResponse(item, customizacoes, fichaTecnicaProduto));
+            // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo não tem mais "o produto vendido" único;
+            // fichaTecnicaProduto (origem avulsa) e componentesCatalogo (origem Catálogo) são
+            // mutuamente exclusivos, mesma XOR de item.getProduto()/item.getItemCatalogo().
+            if (item.getItemCatalogo() != null) {
+                List<OrcamentoItemComponente> componentes =
+                        orcamentoItemComponenteRepository.findByOrcamentoItemId(item.getId());
+                itensResponse.add(orcamentoMapper.toItemResponse(item, customizacoes, null, componentes));
+            } else {
+                List<FichaTecnicaItem> fichaTecnicaProduto =
+                        fichaTecnicaItemRepository.findByProdutoId(item.getProduto().getId());
+                itensResponse.add(orcamentoMapper.toItemResponse(item, customizacoes, fichaTecnicaProduto, null));
+            }
         }
         OrcamentoDetalheResponse response = orcamentoMapper.toDetalheResponse(orcamento, itens);
         response.setItens(itensResponse);

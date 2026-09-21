@@ -5,7 +5,7 @@ import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
-import com.penseprecifique.api.shared.dto.request.catalogo.CustomizacaoAnexadaRequest;
+import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoComponenteRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.DuplicarCatalogoRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoRequest;
 import com.penseprecifique.api.shared.dto.response.catalogo.CatalogoResponse;
@@ -32,9 +32,12 @@ import java.util.UUID;
  * Validação end-to-end (camada Service) do checklist do catálogo — sem HTTP,
  * pois ainda não existe Controller. Cada check imprime o valor REAL retornado.
  *
- * <p>#239 (V0.7): Catálogo deixou de ter margem própria — precoSugerido do item de catálogo
- * passou a herdar produto.precoVenda × quantidadePacote (+ precoVenda das customizações anexadas
- * × quantidade). Checks 2 e 5 foram reescritos nesta versão para refletir a nova fórmula.</p>
+ * <p>V0.13.0 (#516, RN-NOVA-1/2/3): Item de Catálogo deixou de herdar produto.precoVenda ×
+ * quantidadePacote (CAT-003) e passou a ter composição livre de N componentes (Insumo XOR
+ * Produto-base) com custo (precoCusto dos componentes) + mão de obra (tempoProducao × valorHora) +
+ * margem própria. Checks 3/4/5/8 foram reescritos nesta versão para refletir a nova fórmula — os
+ * exemplos usam tempoProducao=0 e margem padrão 0 (sem ConfiguracaoPrecificacao seedada) pra isolar
+ * o efeito do custo dos componentes.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class CatalogoServiceValidationIT {
@@ -102,41 +105,47 @@ class CatalogoServiceValidationIT {
             check(2, "cadastrar/editar catálogo sem margem", false, "BLOQUEADO: " + raiz(e));
         }
 
-        // ============ CHECK 3 — precoSugerido herda produto.precoVenda(10.00) x qtd10 → 100,00 ============
+        // ============ CHECK 3 — precoSugerido = custoComponentes: precoCusto(7,00) x qtd10 → 70,00 ============
         try {
             CatalogoResponse cat34 = catalogoService.cadastrar(req("Cenário 93/94"));
-            ItemCatalogoResponse item3 = itemCatalogoService.adicionar(cat34.getId(), itemReq(prodMain.getId(), 10, null, List.of()));
-            boolean p3 = eq(item3.getPrecoSugerido(), "100.00") && eq(item3.getPrecoVenda(), "100.00") && !item3.isOverride();
-            check(3, "precoVenda(10,00) x qtd10 → precoSugerido e precoVenda = 100,00", p3,
+            ItemCatalogoResponse item3 = itemCatalogoService.adicionar(cat34.getId(),
+                    itemReq("Kit Bolo", componente(prodMain.getId(), 10), null, List.of()));
+            boolean p3 = eq(item3.getPrecoSugerido(), "70.00") && eq(item3.getPrecoVenda(), "70.00") && !item3.isOverride();
+            check(3, "precoCusto(7,00) x qtd10 → precoSugerido e precoVenda = 70,00", p3,
                     "precoSugerido=" + plain(item3.getPrecoSugerido()) + " precoVenda=" + plain(item3.getPrecoVenda()) + " override=" + item3.isOverride());
 
-            // ============ CHECK 4 — + customização precoVenda(5,00) x qtd1 → 105,00 ============
+            // ============ CHECK 4 — + componente de customização (precoCusto 2,00 x qtd1): precoSugerido
+            // sobe pra 72,00 mas precoVenda persistido NÃO acompanha sozinho (mesmo modelo calculado+
+            // override de Produto — mudança de custo/composição só atualiza o "sugerido" de referência;
+            // sem margem mudar nem precoVenda novo informado, o valor persistido fica congelado). ============
             try {
                 ItemCatalogoResponse item4 = itemCatalogoService.editar(item3.getId(),
-                        itemReq(prodMain.getId(), 10, null, List.of(custom(prodCustom.getId(), new BigDecimal("1")))));
-                boolean p4 = eq(item4.getPrecoSugerido(), "105.00") && eq(item4.getPrecoVenda(), "105.00") && !item4.isOverride();
-                check(4, "item + customização(precoVenda5,00 x qtd1) → 105,00", p4,
+                        itemReq("Kit Bolo", componente(prodMain.getId(), 10), null,
+                                List.of(componente(prodCustom.getId(), 1))));
+                boolean p4 = eq(item4.getPrecoSugerido(), "72.00") && eq(item4.getPrecoVenda(), "70.00") && !item4.isOverride();
+                check(4, "item + componente de customização (precoCusto2,00 x qtd1) → precoSugerido 72,00, precoVenda congelado em 70,00", p4,
                         "precoSugerido=" + plain(item4.getPrecoSugerido()) + " precoVenda=" + plain(item4.getPrecoVenda()) + " override=" + item4.isOverride());
             } catch (Exception e) {
-                check(4, "item + customização → 105,00", false, "BLOQUEADO: " + raiz(e));
+                check(4, "item + componente de customização → 72,00", false, "BLOQUEADO: " + raiz(e));
             }
         } catch (Exception e) {
-            check(3, "precoVenda(10,00) x qtd10 → 100,00", false, "BLOQUEADO: " + raiz(e));
-            check(4, "item + customização → 105,00", false, "BLOQUEADO (depende do check 3)");
+            check(3, "precoCusto(7,00) x qtd10 → 70,00", false, "BLOQUEADO: " + raiz(e));
+            check(4, "item + componente de customização → 72,00", false, "BLOQUEADO (depende do check 3)");
         }
 
-        // ============ CHECK 5 — override do item persiste mesmo após precoVenda do produto mudar depois ============
+        // ============ CHECK 5 — override do item persiste mesmo após precoCusto do produto mudar depois ============
         try {
             CatalogoResponse cat5 = catalogoService.cadastrar(req("Persistência de Override"));
-            ItemCatalogoResponse itemOverride = itemCatalogoService.adicionar(cat5.getId(), itemReq(prodMain.getId(), 10, new BigDecimal("999.00"), List.of())); // override
+            ItemCatalogoResponse itemOverride = itemCatalogoService.adicionar(cat5.getId(),
+                    itemReq("Kit Override", componente(prodMain.getId(), 10), new BigDecimal("999.00"), List.of())); // override
 
             Produto prodMainAtualizado = produtoRepository.findById(prodMain.getId()).orElseThrow();
-            prodMainAtualizado.setPrecoVenda(new BigDecimal("50.00"));
+            prodMainAtualizado.setPrecoCusto(new BigDecimal("50.0000"));
             produtoRepository.save(prodMainAtualizado);
 
             ItemCatalogo itemDepois = itemCatalogoRepository.findByIdAndDeletedAtIsNull(itemOverride.getId()).orElseThrow();
             boolean p5 = eq(itemDepois.getPrecoVenda(), "999.00") && itemDepois.getOverride();
-            check(5, "override do item (999,00) persiste mesmo após precoVenda do produto mudar depois, sem reeditar o item", p5,
+            check(5, "override do item (999,00) persiste mesmo após precoCusto do produto mudar depois, sem reeditar o item", p5,
                     "precoVenda=" + plain(itemDepois.getPrecoVenda()) + " (override=" + itemDepois.getOverride() + ")");
 
             // ============ CHECK 7 — desativar/reativar só alterna ativo, itens intactos ============
@@ -155,7 +164,7 @@ class CatalogoServiceValidationIT {
 
             // ============ CHECK 6 — produto sem precoCusto bloqueia (RN-044) ============
             try {
-                itemCatalogoService.adicionar(cat5.getId(), itemReq(prodZero.getId(), 1, null, List.of()));
+                itemCatalogoService.adicionar(cat5.getId(), itemReq("Kit SemCusto", componente(prodZero.getId(), 1), null, List.of()));
                 check(6, "produto sem precoCusto bloqueia (RN-044)", false, "NÃO bloqueou produto custo 0");
             } catch (BusinessException e) {
                 check(6, "produto sem precoCusto bloqueia (RN-044)", true, "BusinessException: \"" + e.getMessage() + "\"");
@@ -163,7 +172,7 @@ class CatalogoServiceValidationIT {
                 check(6, "produto sem precoCusto bloqueia (RN-044)", false, "exceção NÃO amigável: " + raiz(e));
             }
         } catch (Exception e) {
-            check(5, "override persiste após mudança de precoVenda do produto", false, "BLOQUEADO: " + raiz(e));
+            check(5, "override persiste após mudança de precoCusto do produto", false, "BLOQUEADO: " + raiz(e));
             check(6, "RN-044", false, "BLOQUEADO (depende do check 5)");
             check(7, "desativar/reativar", false, "BLOQUEADO (depende do check 5)");
         }
@@ -171,7 +180,8 @@ class CatalogoServiceValidationIT {
         // ============ CHECK 8 — duplicar com item override: numero novo, override e preço exatos ============
         try {
             CatalogoResponse origem = catalogoService.cadastrar(req("Para Duplicar"));
-            ItemCatalogoResponse itemOv = itemCatalogoService.adicionar(origem.getId(), itemReq(prodMain2.getId(), 3, new BigDecimal("77.77"), List.of())); // override 77,77
+            ItemCatalogoResponse itemOv = itemCatalogoService.adicionar(origem.getId(),
+                    itemReq("Kit Torta", componente(prodMain2.getId(), 3), new BigDecimal("77.77"), List.of())); // override 77,77
             DuplicarCatalogoRequest dup = new DuplicarCatalogoRequest();
             dup.setNovoNome("Duplicado XYZ");
             CatalogoResponse copia = catalogoService.duplicar(origem.getId(), dup);
@@ -211,17 +221,24 @@ class CatalogoServiceValidationIT {
         return r;
     }
 
-    private ItemCatalogoRequest itemReq(UUID produtoId, int qtd, BigDecimal precoVenda, List<CustomizacaoAnexadaRequest> customs) {
-        ItemCatalogoRequest r = new ItemCatalogoRequest();
-        r.setProdutoId(produtoId); r.setQuantidadePacote(qtd); r.setPrecoVenda(precoVenda);
-        r.setCustomizacoesAnexadas(new ArrayList<>(customs));
-        return r;
+    private ItemCatalogoComponenteRequest componente(UUID produtoBaseId, int qtd) {
+        ItemCatalogoComponenteRequest c = new ItemCatalogoComponenteRequest();
+        c.setProdutoBaseId(produtoBaseId);
+        c.setQuantidade(BigDecimal.valueOf(qtd));
+        return c;
     }
 
-    private CustomizacaoAnexadaRequest custom(UUID produtoId, BigDecimal qtd) {
-        CustomizacaoAnexadaRequest c = new CustomizacaoAnexadaRequest();
-        c.setProdutoId(produtoId); c.setQuantidade(qtd);
-        return c;
+    private ItemCatalogoRequest itemReq(String nome, ItemCatalogoComponenteRequest principal, BigDecimal precoVenda,
+                                         List<ItemCatalogoComponenteRequest> demaisComponentes) {
+        ItemCatalogoRequest r = new ItemCatalogoRequest();
+        r.setNome(nome);
+        r.setTempoProducao(0);
+        r.setPrecoVenda(precoVenda);
+        List<ItemCatalogoComponenteRequest> componentes = new ArrayList<>();
+        componentes.add(principal);
+        componentes.addAll(demaisComponentes);
+        r.setComponentes(componentes);
+        return r;
     }
 
     private static boolean eq(BigDecimal v, String esperado) {

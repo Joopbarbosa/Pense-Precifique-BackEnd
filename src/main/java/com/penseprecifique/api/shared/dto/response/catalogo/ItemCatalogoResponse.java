@@ -13,18 +13,21 @@ import java.util.UUID;
 public class ItemCatalogoResponse {
 
     private UUID id;
-    private UUID produtoId;
-    private String produtoNome;
-    private Integer quantidadePacote;
+    private String nome;
+    private List<ItemCatalogoComponenteResponse> componentes = new ArrayList<>();
+    private Integer tempoProducao;
+    private BigDecimal margemLucro;
+    /** Calculado no Service (RN-NOVA-2) — soma dos componentes + mão de obra, nunca persistido. */
+    private BigDecimal custoTotal;
     private BigDecimal precoVenda;
-    /** Calculado no Service (RN-042) — nunca persistido. Pendente de P-012. */
+    /** Calculado no Service (RN-NOVA-3) — nunca persistido. */
     private BigDecimal precoSugerido;
     private boolean override;
-    /** RN-045 — true quando o Produto do item foi inativado/excluído; item permanece mas fica bloqueado para venda. */
+    /** RN-NOVA-4 — true quando qualquer componente está inativo/excluído; item permanece mas fica
+     * bloqueado para venda. */
     private boolean bloqueadoParaVenda;
-    private List<CustomizacaoAnexadaResponse> customizacoesAnexadas = new ArrayList<>();
-    /** #238 — tag global fracionável/estoque negativo/estoque atual, mesmo padrão de ProdutoResponse. */
-    private boolean algumInsumoNaoFracionavel;
-    private boolean permitirEstoqueNegativo;
-    private BigDecimal estoqueAtual;
+    /** RN-NOVA-6 — URL pública do objeto no R2; null quando o item não tem foto. */
+    private String fotoUrl;
+    /** RN-NOVA-7 — também exibida no PDF do catálogo (#519). */
+    private String descricao;
 }

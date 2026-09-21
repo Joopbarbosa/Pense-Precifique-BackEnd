@@ -12,6 +12,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -141,6 +143,39 @@ public class GlobalExceptionHandler {
         log.warn("Parâmetro de requisição inválido (IllegalArgumentException)", ex);
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(
                 "Parâmetro de requisição inválido.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
+    /**
+     * OpenProject #518 — teto do framework (spring.servlet.multipart.max-file-size) fica bem
+     * acima do limite de negócio (RN-NOVA-6, 5MB) de propósito, pra deixar a mensagem específica
+     * pro Service tratar o caso comum; isso aqui é só a rede de segurança pro caso extremo
+     * (arquivo maior que o próprio teto do framework), que nunca deveria virar 500 genérico.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Arquivo muito grande. O tamanho máximo permitido é 5MB.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
+    /**
+     * OpenProject #525 (achado Schemathesis, gate seguranca-resiliencia V0.13.0) — corpo
+     * multipart malformado ou sem a parte esperada (ex.: campo 'arquivo' ausente) caía no
+     * catch-all genérico e virava 500, apesar de ser exatamente o tipo de entrada inválida que
+     * o contrato já trata como 400 pros demais casos de upload (ver
+     * MaxUploadSizeExceededException acima).
+     */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMissingServletRequestPart(MissingServletRequestPartException ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Arquivo não enviado corretamente. Tente novamente.",
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
                 null

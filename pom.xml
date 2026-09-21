@@ -124,6 +124,45 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!--
+            Cloudflare R2 (compatível S3) — upload de foto do Item de Catálogo, DT-NOVA-4.
+            R2StorageClient constrói o S3Client explicitamente com UrlConnectionHttpClient
+            (java.net.HttpURLConnection, zero dependência de terceiros) — os clientes HTTP que o
+            módulo "s3" traz por padrão nunca são usados em runtime, mas continuam entrando no
+            classpath (e no scanner de CVE) se não forem excluídos aqui.
+            OpenProject #524 (achado OSV-Scanner, gate seguranca-resiliencia V0.13.0): a exclusão
+            original mirava o artifactId "apache-client" — nome do cliente HTTP síncrono padrão em
+            versões antigas da AWS SDK v2 — mas na 2.55.1 o módulo "s3" já não depende mais dele;
+            passou a depender de "apache5-client" (baseado em httpclient5, daí o
+            NoClassDefFoundError em TlsSocketStrategy que motivou excluir algo aqui, na decisão
+            original) e "netty-nio-client" (cliente assíncrono). A exclusão antiga era um no-op —
+            nenhum dos dois nunca foi de fato excluído, o que carregava Netty e httpclient5/httpcore5
+            (com os CVEs reportados) no classpath sem necessidade. Confirmado via
+            `mvn dependency:tree -Dincludes=io.netty,org.apache.httpcomponents.core5`: antes desta
+            correção, ambos entravam só através de "s3"; depois, o `dependency:tree` não retorna
+            nenhuma ocorrência.
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.55.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache5-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>2.55.1</version>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

@@ -2,7 +2,7 @@ package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
-import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.DuplicarCatalogoRequest;
@@ -35,7 +35,7 @@ public class CatalogoService {
 
     private final CatalogoRepository catalogoRepository;
     private final ItemCatalogoRepository itemCatalogoRepository;
-    private final ItemCatalogoCustomizacaoRepository customizacaoRepository;
+    private final ItemCatalogoComponenteRepository componenteRepository;
     private final CatalogoMapper catalogoMapper;
     private final UsuarioRepository usuarioRepository;
 
@@ -157,18 +157,20 @@ public class CatalogoService {
         for (ItemCatalogo itemOriginal : itensOriginais) {
             ItemCatalogo novoItem = ItemCatalogo.builder()
                     .catalogo(copia)
-                    .produto(itemOriginal.getProduto())
-                    .quantidadePacote(itemOriginal.getQuantidadePacote())
+                    .nome(itemOriginal.getNome())
+                    .tempoProducao(itemOriginal.getTempoProducao())
+                    .margemLucro(itemOriginal.getMargemLucro())
                     .precoVenda(itemOriginal.getPrecoVenda())   // preço exato, não recalcula
                     .override(itemOriginal.getOverride())        // preserva override (RN-047)
                     .build();
             novoItem = itemCatalogoRepository.save(novoItem);
 
-            for (ItemCatalogoCustomizacao custom : customizacaoRepository.findByItemCatalogoId(itemOriginal.getId())) {
-                customizacaoRepository.save(ItemCatalogoCustomizacao.builder()
+            for (ItemCatalogoComponente componente : componenteRepository.findByItemCatalogoId(itemOriginal.getId())) {
+                componenteRepository.save(ItemCatalogoComponente.builder()
                         .itemCatalogo(novoItem)
-                        .produto(custom.getProduto())
-                        .quantidade(custom.getQuantidade())
+                        .insumo(componente.getInsumo())
+                        .produtoBase(componente.getProdutoBase())
+                        .quantidade(componente.getQuantidade())
                         .build());
             }
         }

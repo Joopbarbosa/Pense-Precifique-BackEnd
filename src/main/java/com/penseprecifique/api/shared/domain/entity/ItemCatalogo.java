@@ -24,12 +24,17 @@ public class ItemCatalogo {
     @JoinColumn(name = "catalogo_id", nullable = false)
     private Catalogo catalogo;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "produto_id", nullable = false)
-    private Produto produto;
+    @Column(nullable = false)
+    private String nome;
 
-    @Column(name = "quantidade_pacote", nullable = false)
-    private Integer quantidadePacote;
+    /** Tempo de producao do item inteiro, mesmo conceito de Produto.tempoProducao — RN-NOVA-2 */
+    @Column(name = "tempo_producao", nullable = false)
+    @Builder.Default
+    private Integer tempoProducao = 0;
+
+    /** RN-NOVA-3 — margem propria do item, mesmo modelo calculado+override de Produto (PDT-005). */
+    @Column(name = "margem_lucro", precision = 5, scale = 2)
+    private BigDecimal margemLucro;
 
     @Column(name = "preco_venda", nullable = false, precision = 10, scale = 2)
     private BigDecimal precoVenda;
@@ -37,6 +42,14 @@ public class ItemCatalogo {
     @Column(name = "override", nullable = false)
     @Builder.Default
     private Boolean override = false;
+
+    /** RN-NOVA-6 — URL pública do objeto no R2, nunca o binário. Opcional. */
+    @Column(name = "foto_url", length = 500)
+    private String fotoUrl;
+
+    /** RN-NOVA-7 — mesmo texto exibido depois no PDF do catálogo (#519). Máx. 150 caracteres. */
+    @Column(name = "descricao", length = 150)
+    private String descricao;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -52,5 +53,21 @@ public class ItemCatalogoController {
             @PathVariable UUID catalogoId,
             @Valid @RequestBody ItemCatalogoPreviewRequest request) {
         return ResponseEntity.ok(itemCatalogoService.previewPreco(catalogoId, request));
+    }
+
+    /** RN-NOVA-6/DT-NOVA-4 — multipart, não presigned URL (validação de formato/tamanho fica no Backend). */
+    @PostMapping("/{itemId}/foto")
+    public ResponseEntity<ItemCatalogoResponse> uploadFoto(
+            @PathVariable UUID catalogoId,
+            @PathVariable UUID itemId,
+            @RequestParam("arquivo") MultipartFile arquivo) {
+        return ResponseEntity.ok(itemCatalogoService.uploadFoto(itemId, arquivo));
+    }
+
+    @DeleteMapping("/{itemId}/foto")
+    public ResponseEntity<ItemCatalogoResponse> removerFoto(
+            @PathVariable UUID catalogoId,
+            @PathVariable UUID itemId) {
+        return ResponseEntity.ok(itemCatalogoService.removerFoto(itemId));
     }
 }

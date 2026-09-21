@@ -1,87 +1,105 @@
 package com.penseprecifique.api.shared.mapper;
 
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
-import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
-import com.penseprecifique.api.shared.domain.entity.ItemCatalogoCustomizacao;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.Produto;
-import com.penseprecifique.api.shared.dto.request.catalogo.CustomizacaoAnexadaRequest;
+import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoComponenteRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoRequest;
-import com.penseprecifique.api.shared.dto.response.catalogo.CustomizacaoAnexadaResponse;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
+import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoComponenteResponse;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoResponse;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Component
 public class ItemCatalogoMapper {
 
-    public ItemCatalogoResponse toResponse(ItemCatalogo item, List<ItemCatalogoCustomizacao> customizacoes,
-                                            List<FichaTecnicaItem> fichaTecnicaProduto) {
-        ItemCatalogoResponse response = new ItemCatalogoResponse();
-        response.setId(item.getId());
-        response.setProdutoId(item.getProduto().getId());
-        response.setProdutoNome(item.getProduto().getNome());
-        response.setQuantidadePacote(item.getQuantidadePacote());
-        response.setPrecoVenda(item.getPrecoVenda());
-        response.setOverride(item.getOverride());
-        response.setCustomizacoesAnexadas(customizacoes.stream().map(this::toCustomizacaoAnexadaResponse).toList());
-        // precoSugerido (RN-042) não é preenchido aqui — calculado e setado pelo Service, mesmo padrão do custoTotalLote do Produto
-        response.setPermitirEstoqueNegativo(item.getProduto().getPermitirEstoqueNegativo());
-        response.setEstoqueAtual(item.getProduto().getEstoqueAtual());
-        response.setAlgumInsumoNaoFracionavel(algumInsumoNaoFracionavel(fichaTecnicaProduto));
-        return response;
-    }
-
-    public ItemCatalogo toEntity(ItemCatalogoRequest request, Catalogo catalogo, Produto produto) {
+    public ItemCatalogo toEntity(ItemCatalogoRequest request, Catalogo catalogo) {
         return ItemCatalogo.builder()
                 .catalogo(catalogo)
-                .produto(produto)
-                .quantidadePacote(request.getQuantidadePacote())
+                .nome(request.getNome())
+                .tempoProducao(request.getTempoProducao())
+                .margemLucro(request.getMargemLucro())
+                .descricao(request.getDescricao())
                 .build();
-        // precoVenda/override dependem do cálculo de precoSugerido (RN-042) — o Service resolve depois
+        // precoVenda/override dependem do cálculo de precoSugerido (RN-NOVA-3) — o Service resolve depois
     }
 
-    public CustomizacaoAnexadaResponse toCustomizacaoAnexadaResponse(ItemCatalogoCustomizacao entidade) {
-        CustomizacaoAnexadaResponse response = new CustomizacaoAnexadaResponse();
-        response.setId(entidade.getId());
-        response.setProdutoId(entidade.getProduto().getId());
-        response.setProdutoNome(entidade.getProduto().getNome());
-        response.setQuantidade(entidade.getQuantidade());
-        response.setPrecoVenda(entidade.getProduto().getPrecoVenda());
+    public ItemCatalogoComponente toComponenteEntity(ItemCatalogoComponenteRequest request, ItemCatalogo item,
+                                                      Insumo insumo, Produto produtoBase) {
+        return ItemCatalogoComponente.builder()
+                .itemCatalogo(item)
+                .insumo(insumo)
+                .produtoBase(produtoBase)
+                .quantidade(request.getQuantidade())
+                .build();
+    }
+
+    public ItemCatalogoComponenteResponse toComponenteResponse(ItemCatalogoComponente componente) {
+        ItemCatalogoComponenteResponse response = new ItemCatalogoComponenteResponse();
+        response.setId(componente.getId());
+        response.setQuantidade(componente.getQuantidade());
+
+        BigDecimal custoUnitario;
+        boolean ativo;
+        if (componente.getInsumo() != null) {
+            Insumo insumo = componente.getInsumo();
+            custoUnitario = insumo.getCustoUnitario();
+            response.setInsumoId(insumo.getId());
+            response.setNomeInsumo(insumo.getNome());
+            ativo = Boolean.TRUE.equals(insumo.getAtivo()) && insumo.getDeletedAt() == null;
+        } else {
+            Produto produtoBase = componente.getProdutoBase();
+            custoUnitario = produtoBase.getPrecoCusto();
+            response.setProdutoBaseId(produtoBase.getId());
+            response.setNomeProdutoBase(produtoBase.getNome());
+            response.setTipoProdutoBase(produtoBase.getTipo());
+            ativo = Boolean.TRUE.equals(produtoBase.getAtivo()) && produtoBase.getDeletedAt() == null;
+        }
+
+        response.setCustoUnitario(custoUnitario);
+        response.setCustoTotal(componente.getQuantidade().multiply(custoUnitario));
+        response.setAtivo(ativo);
         return response;
     }
 
-    public ItemCatalogoBuscaResponse toBuscaResponse(ItemCatalogo item, List<FichaTecnicaItem> fichaTecnicaProduto,
-                                                       List<ItemCatalogoCustomizacao> customizacoesFixas) {
-        ItemCatalogoBuscaResponse response = new ItemCatalogoBuscaResponse();
-        response.setCustomizacoesFixas(customizacoesFixas.stream().map(this::toCustomizacaoAnexadaResponse).toList());
+    public ItemCatalogoResponse toResponse(ItemCatalogo item, List<ItemCatalogoComponente> componentes) {
+        ItemCatalogoResponse response = new ItemCatalogoResponse();
         response.setId(item.getId());
-        response.setProdutoId(item.getProduto().getId());
+        response.setNome(item.getNome());
+        response.setTempoProducao(item.getTempoProducao());
+        response.setMargemLucro(item.getMargemLucro());
+        response.setPrecoVenda(item.getPrecoVenda());
+        response.setOverride(Boolean.TRUE.equals(item.getOverride()));
+        response.setComponentes(componentes.stream().map(this::toComponenteResponse).toList());
+        response.setFotoUrl(item.getFotoUrl());
+        response.setDescricao(item.getDescricao());
+        // custoTotal/precoSugerido (RN-NOVA-2/3) não são preenchidos aqui — calculados e setados pelo
+        // Service, mesmo padrão já usado para custoTotalLote/precoSugerido de Produto
+        return response;
+    }
+
+    public ItemCatalogoBuscaResponse toBuscaResponse(ItemCatalogo item, List<ItemCatalogoComponente> componentes) {
+        ItemCatalogoBuscaResponse response = new ItemCatalogoBuscaResponse();
+        response.setId(item.getId());
         response.setCatalogoId(item.getCatalogo().getId());
-        response.setNomeProduto(item.getProduto().getNome());
+        response.setNome(item.getNome());
         response.setPrecoVenda(item.getPrecoVenda());
         response.setCatalogoNome(item.getCatalogo().getNome());
         response.setCatalogoNumero(item.getCatalogo().getNumero());
-        response.setPermitirEstoqueNegativo(item.getProduto().getPermitirEstoqueNegativo());
-        response.setEstoqueAtual(item.getProduto().getEstoqueAtual());
-        response.setAlgumInsumoNaoFracionavel(algumInsumoNaoFracionavel(fichaTecnicaProduto));
-        response.setFracionavel(item.getProduto().getFracionavel()); // #473
+        response.setComponentes(componentes.stream().map(this::toComponenteResponse).toList());
+        response.setAlgumComponenteNaoFracionavel(algumComponenteNaoFracionavel(componentes));
         return response;
     }
 
-    /** #238 — mesmo cálculo de ProdutoMapper (agregado por produto, sem regra de negócio nova). */
-    private boolean algumInsumoNaoFracionavel(List<FichaTecnicaItem> fichaTecnicaProduto) {
-        return fichaTecnicaProduto.stream()
-                .anyMatch(item -> item.getInsumo() != null && Boolean.FALSE.equals(item.getInsumo().getFracionavel()));
-    }
-
-    public ItemCatalogoCustomizacao toCustomizacaoEntity(CustomizacaoAnexadaRequest request, ItemCatalogo item, Produto produtoCustomizacao) {
-        return ItemCatalogoCustomizacao.builder()
-                .itemCatalogo(item)
-                .produto(produtoCustomizacao)
-                .quantidade(request.getQuantidade())
-                .build();
+    /** #238/DECISOES_GLOBAIS — mesmo cálculo agregado usado no resto do sistema, generalizado de
+     * "insumos da ficha técnica do produto do item" para "componentes Insumo deste item" (V0.13.0). */
+    public boolean algumComponenteNaoFracionavel(List<ItemCatalogoComponente> componentes) {
+        return componentes.stream()
+                .anyMatch(c -> c.getInsumo() != null && Boolean.FALSE.equals(c.getInsumo().getFracionavel()));
     }
 }

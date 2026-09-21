@@ -1,11 +1,13 @@
 package com.penseprecifique.api.caixa;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
-import com.penseprecifique.api.catalogo.ItemCatalogoCustomizacaoRepository;
+import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoTaxaParcelaRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoTaxaParcela;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -52,12 +54,15 @@ public class VendaCaixaService {
     private final VendaCaixaRepository vendaCaixaRepository;
     private final VendaCaixaItemRepository vendaCaixaItemRepository;
     private final VendaCaixaItemCustomizacaoRepository vendaCaixaItemCustomizacaoRepository;
+    private final VendaCaixaItemComponenteRepository vendaCaixaItemComponenteRepository;
     private final VendaCaixaPagamentoRepository vendaCaixaPagamentoRepository;
     private final CaixaTurnoRepository caixaTurnoRepository;
     private final ProdutoRepository produtoRepository;
+    private final InsumoRepository insumoRepository;
     private final ItemCatalogoRepository itemCatalogoRepository;
-    private final ItemCatalogoCustomizacaoRepository itemCatalogoCustomizacaoRepository;
+    private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
+    private final MovimentacaoInsumoRepository movimentacaoInsumoRepository;
     private final ClienteRepository clienteRepository;
     private final MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     private final MetodoPagamentoTaxaParcelaRepository metodoPagamentoTaxaParcelaRepository;
@@ -83,12 +88,15 @@ public class VendaCaixaService {
                     .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
         }
 
-        // RN-NOVA-1 (reaberta) — origem XOR ItemCatalogo/Produto direto, cada item pode ter
-        // customizações fixas (do Catálogo, expandidas automaticamente) e ad-hoc (escolhidas na
-        // hora, para as duas origens). Acumula quantidade por produto (item principal +
-        // customizações) para o estoque ser checado/baixado uma vez por produto, não por linha.
+        // RN-NOVA-1 (reaberta)/RN-NOVA-9 (V0.13.0, #516) — origem XOR ItemCatalogo/Produto direto;
+        // item de Catálogo agora tem N componentes (Insumo XOR Produto-base, sem preço próprio —
+        // RN-NOVA-2/3, já embutido no precoUnitario do item) mais customizações ad-hoc (escolhidas
+        // na hora, para as duas origens). Acumula quantidade por produto/insumo para o estoque ser
+        // checado/baixado uma vez por componente, não por linha.
         Map<UUID, Produto> produtosPorId = new LinkedHashMap<>();
         Map<UUID, BigDecimal> quantidadeAcumuladaPorProduto = new LinkedHashMap<>();
+        Map<UUID, Insumo> insumosPorId = new LinkedHashMap<>();
+        Map<UUID, BigDecimal> quantidadeAcumuladaPorInsumo = new LinkedHashMap<>();
         List<ItemPreparado> itensPreparados = new ArrayList<>();
         for (VendaCaixaItemRequestDTO itemRequest : request.itens()) {
             if ((itemRequest.itemCatalogoId() == null) == (itemRequest.produtoId() == null)) {
@@ -107,25 +115,35 @@ public class VendaCaixaService {
                         .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado: " + itemRequest.produtoId()));
                 precoUnitario = produtoDireto.getPrecoVenda() != null ? produtoDireto.getPrecoVenda() : BigDecimal.ZERO;
             }
-            Produto produtoVendido = itemCatalogo != null ? itemCatalogo.getProduto() : produtoDireto;
-            produtosPorId.putIfAbsent(produtoVendido.getId(), produtoVendido);
-            quantidadeAcumuladaPorProduto.merge(produtoVendido.getId(), itemRequest.quantidade(), BigDecimal::add);
+            if (produtoDireto != null) {
+                produtosPorId.putIfAbsent(produtoDireto.getId(), produtoDireto);
+                quantidadeAcumuladaPorProduto.merge(produtoDireto.getId(), itemRequest.quantidade(), BigDecimal::add);
+            }
 
             BigDecimal subtotalItem = precoUnitario.multiply(itemRequest.quantidade()).setScale(2, RoundingMode.HALF_UP);
 
-            List<CustomizacaoPreparada> customizacoes = new ArrayList<>();
+            // RN-NOVA-1/9 (V0.13.0, #516) — snapshot dos N componentes do catálogo (Insumo XOR
+            // Produto-base); nunca soma no subtotalItem (sem preço próprio, RN-NOVA-2/3), só
+            // acumula quantidade a debitar.
+            List<ComponentePreparado> componentesPreparados = new ArrayList<>();
             if (itemCatalogo != null) {
-                // RN-048 (mesmo princípio do Orçamento) — customizações fixas do pacote entram
-                // automaticamente, sem ação da usuária.
-                for (ItemCatalogoCustomizacao fixa : itemCatalogoCustomizacaoRepository.findByItemCatalogoId(itemCatalogo.getId())) {
-                    int quantidade = Math.max(1, fixa.getQuantidade().setScale(0, RoundingMode.HALF_UP).intValue());
-                    CustomizacaoPreparada preparada = prepararCustomizacao(fixa.getProduto(), quantidade);
-                    customizacoes.add(preparada);
-                    subtotalItem = subtotalItem.add(preparada.subtotal());
-                    produtosPorId.putIfAbsent(preparada.produto().getId(), preparada.produto());
-                    quantidadeAcumuladaPorProduto.merge(preparada.produto().getId(), BigDecimal.valueOf(quantidade), BigDecimal::add);
+                for (ItemCatalogoComponente componente : itemCatalogoComponenteRepository.findByItemCatalogoId(itemCatalogo.getId())) {
+                    BigDecimal quantidadeComponente = componente.getQuantidade().multiply(itemRequest.quantidade());
+                    componentesPreparados.add(new ComponentePreparado(
+                            componente.getInsumo(), componente.getProdutoBase(), quantidadeComponente));
+                    if (componente.getInsumo() != null) {
+                        Insumo insumo = componente.getInsumo();
+                        insumosPorId.putIfAbsent(insumo.getId(), insumo);
+                        quantidadeAcumuladaPorInsumo.merge(insumo.getId(), quantidadeComponente, BigDecimal::add);
+                    } else {
+                        Produto produtoBase = componente.getProdutoBase();
+                        produtosPorId.putIfAbsent(produtoBase.getId(), produtoBase);
+                        quantidadeAcumuladaPorProduto.merge(produtoBase.getId(), quantidadeComponente, BigDecimal::add);
+                    }
                 }
             }
+
+            List<CustomizacaoPreparada> customizacoes = new ArrayList<>();
             // Achado do teste manual (V0.12.0) — customização ad-hoc vale para as duas origens
             // (Produto direto ou ItemCatalogo), reabrindo RN-NOVA-1.
             for (VendaCaixaItemCustomizacaoRequestDTO custRequest : itemRequest.customizacoesOuVazio()) {
@@ -142,8 +160,8 @@ public class VendaCaixaService {
                         BigDecimal.valueOf(custRequest.quantidade()), BigDecimal::add);
             }
 
-            itensPreparados.add(new ItemPreparado(itemCatalogo, produtoDireto, produtoVendido,
-                    itemRequest.quantidade(), precoUnitario, subtotalItem, customizacoes));
+            itensPreparados.add(new ItemPreparado(itemCatalogo, produtoDireto,
+                    itemRequest.quantidade(), precoUnitario, subtotalItem, customizacoes, componentesPreparados));
         }
 
         // RN-NOVA-2 (PDT-007/PDT-011) — mesma regra do resto do sistema, sem rigor próprio para
@@ -154,23 +172,15 @@ public class VendaCaixaService {
         List<AvisoEstoqueNegativoResponse> avisosPendentes = new ArrayList<>();
         for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumuladaPorProduto.entrySet()) {
             Produto produto = produtosPorId.get(entry.getKey());
-            BigDecimal resultante = produto.getEstoqueAtual().subtract(entry.getValue());
-            if (resultante.compareTo(BigDecimal.ZERO) >= 0) {
-                continue;
-            }
-            if (!produto.getPermitirEstoqueNegativo()) {
-                bloqueados.add(produto.getNome());
-            } else if (!confirmados.contains(produto.getId())) {
-                AvisoEstoqueNegativoResponse aviso = new AvisoEstoqueNegativoResponse();
-                aviso.setComponenteId(produto.getId());
-                aviso.setNome(produto.getNome());
-                aviso.setEstoqueAtual(produto.getEstoqueAtual());
-                aviso.setQuantidadeNecessaria(entry.getValue());
-                aviso.setMensagem("A baixa de " + entry.getValue().stripTrailingZeros().toPlainString()
-                        + " de " + produto.getNome() + " deixará o estoque negativo (atual: "
-                        + produto.getEstoqueAtual().stripTrailingZeros().toPlainString() + "). Confirme para prosseguir.");
-                avisosPendentes.add(aviso);
-            }
+            avaliarEstoqueNegativo(produto.getId(), produto.getNome(), produto.getEstoqueAtual(), entry.getValue(),
+                    Boolean.TRUE.equals(produto.getPermitirEstoqueNegativo()), confirmados, bloqueados, avisosPendentes);
+        }
+        // RN-NOVA-1/9 (V0.13.0, #516) — componentes Insumo de itens de Catálogo entram no mesmo
+        // bloqueio/aviso que já existia só para Produto.
+        for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumuladaPorInsumo.entrySet()) {
+            Insumo insumo = insumosPorId.get(entry.getKey());
+            avaliarEstoqueNegativo(insumo.getId(), insumo.getNome(), insumo.getEstoqueAtual(), entry.getValue(),
+                    Boolean.TRUE.equals(insumo.getPermitirEstoqueNegativo()), confirmados, bloqueados, avisosPendentes);
         }
         if (!bloqueados.isEmpty()) {
             throw new BusinessException("Estoque insuficiente para " + String.join(", ", bloqueados)
@@ -247,6 +257,19 @@ public class VendaCaixaService {
                     .subtotal(item.subtotal())
                     .build());
 
+            // RN-NOVA-1/9 (V0.13.0, #516) — snapshot dos N componentes do catálogo (Insumo XOR
+            // Produto-base), pra a baixa/reversão de estoque sobreviver a uma edição posterior da
+            // composição do catálogo. Sem preço próprio (RN-NOVA-2/3) — não vira linha de
+            // VendaCaixaItemCustomizacao.
+            for (ComponentePreparado cp : item.componentes()) {
+                vendaCaixaItemComponenteRepository.save(VendaCaixaItemComponente.builder()
+                        .vendaCaixaItem(itemSalvo)
+                        .insumo(cp.insumo())
+                        .produtoBase(cp.produtoBase())
+                        .quantidade(cp.quantidade())
+                        .build());
+            }
+
             List<VendaCaixaItemCustomizacaoResponseDTO> customizacoesResponse = new ArrayList<>();
             for (CustomizacaoPreparada cp : item.customizacoes()) {
                 VendaCaixaItemCustomizacao custSalva = vendaCaixaItemCustomizacaoRepository.save(VendaCaixaItemCustomizacao.builder()
@@ -261,14 +284,19 @@ public class VendaCaixaService {
                         cp.quantidade(), cp.precoUnitario(), cp.subtotal()));
             }
 
+            // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio, sem "o produto
+            // vendido" único; produtoId fica nulo pra origem Catálogo.
+            UUID produtoIdResposta = item.itemCatalogo() == null ? item.produtoDireto().getId() : null;
+            String nomeResposta = item.itemCatalogo() != null
+                    ? item.itemCatalogo().getNome() : item.produtoDireto().getNome();
             itensResponse.add(new VendaCaixaItemResponseDTO(
-                    itemSalvo.getId(), item.produtoVendido().getId(), item.produtoVendido().getNome(),
+                    itemSalvo.getId(), produtoIdResposta, nomeResposta,
                     item.itemCatalogo() != null ? item.itemCatalogo().getId() : null,
                     item.quantidade(), item.precoUnitario(), item.subtotal(), customizacoesResponse));
         }
 
         // RN-NOVA-14 — baixa de estoque (SAIDA, motivo/referencia_tipo CAIXA), acumulada por
-        // produto (item principal + customizações já mescladas no mesmo mapa).
+        // produto (item direto + componentes de catálogo + customizações, já mescladas no mesmo mapa).
         for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumuladaPorProduto.entrySet()) {
             Produto produto = produtosPorId.get(entry.getKey());
             produto.setEstoqueAtual(produto.getEstoqueAtual().subtract(entry.getValue()));
@@ -280,6 +308,22 @@ public class VendaCaixaService {
                     .quantidade(entry.getValue())
                     .referenciaId(venda.getId())
                     .referenciaTipo(ReferenciaMovimentacaoTipo.CAIXA.name())
+                    .build());
+        }
+        // RN-NOVA-1/9 (V0.13.0, #516) — baixa dos componentes Insumo dos itens de Catálogo (Insumo
+        // nunca tinha vínculo de catálogo, nem movimentação por Caixa, antes desta versão).
+        for (Map.Entry<UUID, BigDecimal> entry : quantidadeAcumuladaPorInsumo.entrySet()) {
+            Insumo insumo = insumosPorId.get(entry.getKey());
+            insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(entry.getValue()));
+            insumoRepository.save(insumo);
+            movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                    .insumo(insumo)
+                    .tipo(TipoMovimentacaoInsumo.SAIDA)
+                    .motivo(MotivoMovimentacaoInsumo.CAIXA)
+                    .quantidade(entry.getValue())
+                    .custoUnitario(insumo.getCustoUnitario())
+                    .referenciaId(venda.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.CAIXA)
                     .build());
         }
 
@@ -348,7 +392,10 @@ public class VendaCaixaService {
         if (retornarEstoque) {
             List<VendaCaixaItem> itensDaVenda = vendaCaixaItemRepository.findByVendaCaixaId(venda.getId());
             for (VendaCaixaItem item : itensDaVenda) {
-                Produto produto = item.getProdutoVendido();
+                if (item.getProduto() == null) {
+                    continue;
+                }
+                Produto produto = item.getProduto();
                 produto.setEstoqueAtual(produto.getEstoqueAtual().add(item.getQuantidade()));
                 produtoRepository.save(produto);
                 movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
@@ -361,6 +408,36 @@ public class VendaCaixaService {
                         .build());
             }
             List<UUID> itemIds = itensDaVenda.stream().map(VendaCaixaItem::getId).toList();
+            // RN-NOVA-1/9 (V0.13.0, #516) — devolve TODOS os componentes (Insumo XOR Produto-base)
+            // dos itens de Catálogo, não só o antigo "produto principal".
+            for (VendaCaixaItemComponente c : vendaCaixaItemComponenteRepository.findByVendaCaixaItemIdIn(itemIds)) {
+                if (c.getInsumo() != null) {
+                    Insumo insumo = c.getInsumo();
+                    insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(c.getQuantidade()));
+                    insumoRepository.save(insumo);
+                    movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                            .insumo(insumo)
+                            .tipo(TipoMovimentacaoInsumo.ENTRADA)
+                            .motivo(MotivoMovimentacaoInsumo.CAIXA)
+                            .quantidade(c.getQuantidade())
+                            .custoUnitario(insumo.getCustoUnitario())
+                            .referenciaId(venda.getId())
+                            .referenciaTipo(ReferenciaMovimentacaoTipo.CAIXA)
+                            .build());
+                } else {
+                    Produto produtoBase = c.getProdutoBase();
+                    produtoBase.setEstoqueAtual(produtoBase.getEstoqueAtual().add(c.getQuantidade()));
+                    produtoRepository.save(produtoBase);
+                    movimentacaoProdutoRepository.save(MovimentacaoProduto.builder()
+                            .produto(produtoBase)
+                            .tipo(TipoMovimentacaoProduto.ENTRADA)
+                            .motivo(MotivoMovimentacaoProduto.CAIXA)
+                            .quantidade(c.getQuantidade())
+                            .referenciaId(venda.getId())
+                            .referenciaTipo(ReferenciaMovimentacaoTipo.CAIXA.name())
+                            .build());
+                }
+            }
             for (VendaCaixaItemCustomizacao c : vendaCaixaItemCustomizacaoRepository.findByVendaCaixaItemIdIn(itemIds)) {
                 Produto produto = c.getProduto();
                 BigDecimal quantidade = BigDecimal.valueOf(c.getQuantidade());
@@ -397,13 +474,50 @@ public class VendaCaixaService {
                     + "' está desativado. Reative o catálogo antes de vender este item no Caixa.");
         }
 
-        Produto produto = item.getProduto();
-        if (!Boolean.TRUE.equals(produto.getAtivo()) || produto.getDeletedAt() != null) {
-            throw new BusinessException("O produto '" + produto.getNome()
-                    + "' deste item de catálogo foi inativado. Reative o produto ou troque o produto do item"
-                    + " antes de vendê-lo no Caixa.");
+        // RN-045/RN-NOVA-4 (V0.13.0, #516) — qualquer componente inativado/excluído bloqueia a
+        // venda do item inteiro (generaliza para os N componentes de RN-NOVA-1).
+        for (ItemCatalogoComponente componente : itemCatalogoComponenteRepository.findByItemCatalogoId(item.getId())) {
+            if (componente.getInsumo() != null) {
+                Insumo insumo = componente.getInsumo();
+                if (!Boolean.TRUE.equals(insumo.getAtivo()) || insumo.getDeletedAt() != null) {
+                    throw new BusinessException("O insumo '" + insumo.getNome()
+                            + "' deste item de catálogo foi inativado. Reative o insumo ou troque o"
+                            + " componente do item antes de vendê-lo no Caixa.");
+                }
+            } else {
+                Produto produtoBase = componente.getProdutoBase();
+                if (!Boolean.TRUE.equals(produtoBase.getAtivo()) || produtoBase.getDeletedAt() != null) {
+                    throw new BusinessException("O produto '" + produtoBase.getNome()
+                            + "' deste item de catálogo foi inativado. Reative o produto ou troque o"
+                            + " componente do item antes de vendê-lo no Caixa.");
+                }
+            }
         }
         return item;
+    }
+
+    /** V0.13.0 (#516, RN-NOVA-9) — avaliação de bloqueio/aviso de estoque negativo genérica
+     * (Produto ou Insumo), mesmo critério de {@code OrcamentoService#avaliarEstoqueParaFinalizar}. */
+    private void avaliarEstoqueNegativo(UUID id, String nome, BigDecimal estoqueAtual, BigDecimal necessaria,
+                                         boolean permitirEstoqueNegativo, List<UUID> confirmados,
+                                         List<String> bloqueados, List<AvisoEstoqueNegativoResponse> avisosPendentes) {
+        BigDecimal resultante = estoqueAtual.subtract(necessaria);
+        if (resultante.compareTo(BigDecimal.ZERO) >= 0) {
+            return;
+        }
+        if (!permitirEstoqueNegativo) {
+            bloqueados.add(nome);
+        } else if (!confirmados.contains(id)) {
+            AvisoEstoqueNegativoResponse aviso = new AvisoEstoqueNegativoResponse();
+            aviso.setComponenteId(id);
+            aviso.setNome(nome);
+            aviso.setEstoqueAtual(estoqueAtual);
+            aviso.setQuantidadeNecessaria(necessaria);
+            aviso.setMensagem("A baixa de " + necessaria.stripTrailingZeros().toPlainString()
+                    + " de " + nome + " deixará o estoque negativo (atual: "
+                    + estoqueAtual.stripTrailingZeros().toPlainString() + "). Confirme para prosseguir.");
+            avisosPendentes.add(aviso);
+        }
     }
 
     private CustomizacaoPreparada prepararCustomizacao(Produto produto, int quantidade) {
@@ -422,9 +536,13 @@ public class VendaCaixaService {
                             c.getId(), c.getProduto().getId(), c.getProduto().getNome(),
                             c.getQuantidade(), c.getPrecoUnitario(), c.getSubtotal()));
         }
+        // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio, sem "o produto vendido"
+        // único; produtoId fica nulo pra origem Catálogo.
         return itens.stream()
                 .map(item -> new VendaCaixaItemResponseDTO(
-                        item.getId(), item.getProdutoVendido().getId(), item.getProdutoVendido().getNome(),
+                        item.getId(),
+                        item.getItemCatalogo() == null ? item.getProduto().getId() : null,
+                        item.getItemCatalogo() != null ? item.getItemCatalogo().getNome() : item.getProduto().getNome(),
                         item.getItemCatalogo() != null ? item.getItemCatalogo().getId() : null,
                         item.getQuantidade(), item.getPrecoUnitario(), item.getSubtotal(),
                         customizacoesPorItem.getOrDefault(item.getId(), List.of())))
@@ -494,11 +612,16 @@ public class VendaCaixaService {
         );
     }
 
-    private record ItemPreparado(ItemCatalogo itemCatalogo, Produto produtoDireto, Produto produtoVendido,
+    private record ItemPreparado(ItemCatalogo itemCatalogo, Produto produtoDireto,
                                   BigDecimal quantidade, BigDecimal precoUnitario, BigDecimal subtotal,
-                                  List<CustomizacaoPreparada> customizacoes) {}
+                                  List<CustomizacaoPreparada> customizacoes,
+                                  List<ComponentePreparado> componentes) {}
 
     private record CustomizacaoPreparada(Produto produto, int quantidade, BigDecimal precoUnitario, BigDecimal subtotal) {}
+
+    /** V0.13.0 (#516, RN-NOVA-1) — componente de Item de Catálogo (Insumo XOR Produto-base) já
+     * resolvido pra a quantidade total do item na venda, sem preço próprio (RN-NOVA-2/3). */
+    private record ComponentePreparado(Insumo insumo, Produto produtoBase, BigDecimal quantidade) {}
 
     private record PagamentoPreparado(MetodoPagamentoConfiguravel metodo, BigDecimal valor,
                                       Integer parcelas, BigDecimal taxaAplicada) {}
