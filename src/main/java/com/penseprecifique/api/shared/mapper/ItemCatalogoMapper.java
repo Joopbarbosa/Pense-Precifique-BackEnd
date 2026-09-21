@@ -51,6 +51,7 @@ public class ItemCatalogoMapper {
             custoUnitario = insumo.getCustoUnitario();
             response.setInsumoId(insumo.getId());
             response.setNomeInsumo(insumo.getNome());
+            response.setFracionavelInsumo(insumo.getFracionavel());
             ativo = Boolean.TRUE.equals(insumo.getAtivo()) && insumo.getDeletedAt() == null;
         } else {
             Produto produtoBase = componente.getProdutoBase();
@@ -93,6 +94,7 @@ public class ItemCatalogoMapper {
         response.setCatalogoNumero(item.getCatalogo().getNumero());
         response.setComponentes(componentes.stream().map(this::toComponenteResponse).toList());
         response.setAlgumComponenteNaoFracionavel(algumComponenteNaoFracionavel(componentes));
+        response.setAlgumComponenteSemEstoque(algumComponenteSemEstoque(componentes));
         return response;
     }
 
@@ -101,5 +103,23 @@ public class ItemCatalogoMapper {
     public boolean algumComponenteNaoFracionavel(List<ItemCatalogoComponente> componentes) {
         return componentes.stream()
                 .anyMatch(c -> c.getInsumo() != null && Boolean.FALSE.equals(c.getInsumo().getFracionavel()));
+    }
+
+    /** OpenProject #527 — bloqueio duro por componente: estoque zerado/negativo sem permitir
+     * estoque negativo. Mesmo critério usado em {@code decidirSituacaoEstoque} (OrcamentoService),
+     * sem a parte de "quantidade necessária" (não conhecida no momento da busca). */
+    public boolean algumComponenteSemEstoque(List<ItemCatalogoComponente> componentes) {
+        return componentes.stream().anyMatch(c -> {
+            BigDecimal estoqueAtual;
+            boolean permitirEstoqueNegativo;
+            if (c.getInsumo() != null) {
+                estoqueAtual = c.getInsumo().getEstoqueAtual();
+                permitirEstoqueNegativo = Boolean.TRUE.equals(c.getInsumo().getPermitirEstoqueNegativo());
+            } else {
+                estoqueAtual = c.getProdutoBase().getEstoqueAtual();
+                permitirEstoqueNegativo = Boolean.TRUE.equals(c.getProdutoBase().getPermitirEstoqueNegativo());
+            }
+            return estoqueAtual.compareTo(BigDecimal.ZERO) <= 0 && !permitirEstoqueNegativo;
+        });
     }
 }

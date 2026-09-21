@@ -29,4 +29,10 @@ public class ItemCatalogoBuscaResponse {
     /** #238/DECISOES_GLOBAIS — tag global fracionável, generalizada de "algum insumo da ficha técnica
      *  do produto do item" para "algum componente Insumo deste item é não-fracionável" (V0.13.0). */
     private boolean algumComponenteNaoFracionavel;
+    /** OpenProject #527 — true quando algum componente (Insumo ou Produto-base) está com
+     *  {@code estoqueAtual <= 0} e {@code permitirEstoqueNegativo == false} (bloqueado pra venda
+     *  agora, mesmo critério de "bloqueio duro" usado no resto do sistema). Não considera a
+     *  quantidade que a usuária ainda vai digitar no carrinho — isso só se sabe depois de
+     *  adicionar (painel `avisosEstoque`), este campo é só o sinal grosseiro pra busca. */
+    private boolean algumComponenteSemEstoque;
 }
