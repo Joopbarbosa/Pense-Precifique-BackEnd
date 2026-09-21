@@ -5,12 +5,14 @@ import com.penseprecifique.api.catalogo.CatalogoRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelService;
+import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.*;
 import com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa;
 import com.penseprecifique.api.shared.domain.enums.TipoMetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.caixa.*;
+import com.penseprecifique.api.shared.dto.response.ConfirmacaoEstoqueNegativoResponse;
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import org.junit.jupiter.api.Test;
@@ -48,6 +50,7 @@ class VendaCaixaItemCatalogoIT {
     @Autowired CatalogoRepository catalogoRepository;
     @Autowired ItemCatalogoRepository itemCatalogoRepository;
     @Autowired ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
+    @Autowired InsumoRepository insumoRepository;
     @Autowired CaixaTurnoService caixaTurnoService;
     @Autowired VendaCaixaService vendaCaixaService;
     @Autowired MetodoPagamentoConfiguravelService metodoPagamentoService;
@@ -214,5 +217,92 @@ class VendaCaixaItemCatalogoIT {
                 null);
 
         assertThrows(BusinessException.class, () -> vendaCaixaService.registrarVenda(request));
+    }
+
+    /**
+     * CEN-NOVO-3 (DECISOES_V0.13.0.md) — RN-NOVA-4 generaliza "componente inativo bloqueia venda"
+     * para N componentes. Sem cobertura automatizada antes deste teste (nenhum grep por
+     * "bloqueadoParaVenda"/"foi inativado" em src/test/java retornava resultado).
+     */
+    @Test
+    void componenteProdutoInativadoBloqueiaVendaDoItemInteiro() {
+        seedUsuario();
+        Produto componente = criarProduto("Caixa de Bombom", TipoProduto.PRODUTO, new BigDecimal("20.00"), new BigDecimal("10"));
+        Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
+                .usuario(usuario).numero(1).nome("Catálogo Teste").ativo(true).build());
+        ItemCatalogo item = criarItemCatalogo(catalogo, new BigDecimal("20.00"), componente);
+
+        componente.setAtivo(false);
+        produtoRepository.save(componente);
+
+        VendaCaixaRequestDTO request = new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(item.getId(), null, BigDecimal.ONE, null)),
+                null, null,
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("20.00"), null)),
+                null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> vendaCaixaService.registrarVenda(request));
+        assertTrue(ex.getMessage().contains("foi inativado"), "mensagem deveria orientar sobre o componente inativado: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("Caixa de Bombom"), "mensagem deveria citar o nome do componente: " + ex.getMessage());
+    }
+
+    /**
+     * CEN-NOVO-10 (DECISOES_V0.13.0.md) — texto do cenário descreve "um único aviso agregado
+     * citando Produto A e Insumo B", mas o comportamento REAL (RN-NOVA-9, mesmo mecanismo
+     * pré-existente de {@code AvisoEstoqueNegativoResponse}, só generalizado para N componentes) é
+     * uma LISTA com um aviso por componente afetado — divergência de premissa registrada em
+     * DECISOES_V0.13.0.md, não é bug (a lista já permite confirmar item a item, estritamente mais
+     * preciso que uma mensagem concatenada). Este teste valida o comportamento real: os dois avisos
+     * chegam juntos na mesma resposta (não sequenciais), e confirmar ambos de uma vez conclui a venda
+     * com os dois componentes negativos.
+     */
+    @Test
+    void componentesProdutoEInsumoNegativosAoMesmoTempoRetornamAvisosDosDoisEConfirmarAmbosConcluiAVenda() {
+        seedUsuario();
+        Produto produtoA = criarProduto("Produto A", TipoProduto.PRODUTO, new BigDecimal("10.00"), new BigDecimal("1"));
+        Insumo insumoB = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(1).nome("Insumo B").unidadeMedida("un")
+                .custoUnitario(new BigDecimal("1.0000")).estoqueAtual(new BigDecimal("1"))
+                .fracionavel(true).permitirEstoqueNegativo(true).ativo(true).build());
+        Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
+                .usuario(usuario).numero(1).nome("Catálogo Teste").ativo(true).build());
+        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
+                .catalogo(catalogo).nome("Kit A+B").tempoProducao(0)
+                .precoVenda(new BigDecimal("10.00")).override(true).build());
+        itemCatalogoComponenteRepository.save(ItemCatalogoComponente.builder()
+                .itemCatalogo(item).produtoBase(produtoA).quantidade(BigDecimal.ONE).build());
+        itemCatalogoComponenteRepository.save(ItemCatalogoComponente.builder()
+                .itemCatalogo(item).insumo(insumoB).quantidade(BigDecimal.ONE).build());
+
+        // vender 2 unidades do item: necessário 2 de cada, estoque 1 de cada -> ambos ficam negativos
+        VendaCaixaRequestDTO requestSemConfirmar = new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(item.getId(), null, new BigDecimal("2"), null)),
+                null, null,
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("20.00"), null)),
+                null);
+
+        Object primeiraResposta = vendaCaixaService.registrarVenda(requestSemConfirmar);
+        assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, primeiraResposta);
+        ConfirmacaoEstoqueNegativoResponse confirmacao = (ConfirmacaoEstoqueNegativoResponse) primeiraResposta;
+        assertEquals(2, confirmacao.getAvisos().size());
+        assertTrue(confirmacao.getAvisos().stream().anyMatch(a -> a.getNome().equals("Produto A")));
+        assertTrue(confirmacao.getAvisos().stream().anyMatch(a -> a.getNome().equals("Insumo B")));
+        // nenhuma baixa aconteceu ainda nesta chamada
+        assertEquals(0, new BigDecimal("1").compareTo(produtoRepository.findById(produtoA.getId()).orElseThrow().getEstoqueAtual()));
+
+        VendaCaixaRequestDTO requestConfirmando = new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(item.getId(), null, new BigDecimal("2"), null)),
+                null, null,
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("20.00"), null)),
+                List.of(produtoA.getId(), insumoB.getId()));
+
+        Object segundaResposta = vendaCaixaService.registrarVenda(requestConfirmando);
+        assertInstanceOf(VendaCaixaResponseDTO.class, segundaResposta);
+
+        assertEquals(0, new BigDecimal("-1").compareTo(produtoRepository.findById(produtoA.getId()).orElseThrow().getEstoqueAtual()));
+        assertEquals(0, new BigDecimal("-1").compareTo(insumoRepository.findById(insumoB.getId()).orElseThrow().getEstoqueAtual()));
     }
 }

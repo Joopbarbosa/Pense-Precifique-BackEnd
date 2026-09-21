@@ -1,8 +1,10 @@
 package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.shared.domain.entity.ConfiguracaoPrecificacao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -41,6 +43,7 @@ class ItemCatalogoPreviewPrecoIT {
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired ConfiguracaoPrecificacaoRepository configuracaoPrecificacaoRepository;
 
     private int proximoNumeroProduto = 1;
     private int proximoNumeroInsumo = 1;
@@ -128,6 +131,37 @@ class ItemCatalogoPreviewPrecoIT {
         assertEquals(0, new BigDecimal("8.00").compareTo(response.getCustoComponentes()));
         // precoSugerido = 8.00 x (1 + 20/100) = 9.60
         assertEquals(0, new BigDecimal("9.60").compareTo(response.getPrecoSugerido()));
+    }
+
+    /**
+     * CEN-NOVO-2 (DECISOES_V0.13.0.md) — 2un Produto (custo 10) + 3un Insumo (custo 2),
+     * tempoProducao 30min, valorHora 20,00 configurado, margem 100%: custoComponentes=26,00,
+     * custoMaoDeObra=(30/60)x20=10,00, custoTotal=36,00, precoSugerido=36,00x2=72,00. Nenhum outro
+     * teste de Item de Catálogo configura valorHora>0 nem tempoProducao>0 — RN-NOVA-2 (mão de obra
+     * própria do item) não tinha cobertura de fluxo com valor real antes deste teste.
+     */
+    @Test
+    void previewComMaoDeObraCustoComponentesEMargemCasoCompletoCenNovo2() {
+        Usuario usuario = seedUsuario();
+        configuracaoPrecificacaoRepository.save(ConfiguracaoPrecificacao.builder()
+                .usuarioId(usuario.getId()).valorHora(new BigDecimal("20.00")).build());
+        Produto produto = novoProdutoBase(usuario, "Produto Base", new BigDecimal("10.0000"));
+        Insumo insumo = novoInsumo(usuario, "Insumo Base", new BigDecimal("2.0000"));
+        UUID catalogoId = novoCatalogo("Catálogo CEN-NOVO-2");
+
+        ItemCatalogoPreviewRequest request = new ItemCatalogoPreviewRequest();
+        request.setComponentes(List.of(
+                componenteProdutoBase(produto.getId(), new BigDecimal("2")),
+                componenteInsumo(insumo.getId(), new BigDecimal("3"))));
+        request.setTempoProducao(30);
+        request.setMargemLucro(new BigDecimal("100"));
+
+        ItemCatalogoPrecoSugeridoResponse response = itemCatalogoService.previewPreco(catalogoId, request);
+
+        assertEquals(0, new BigDecimal("26.00").compareTo(response.getCustoComponentes()));
+        assertEquals(0, new BigDecimal("10.00").compareTo(response.getCustoMaoDeObra()));
+        assertEquals(0, new BigDecimal("36.00").compareTo(response.getCustoTotal()));
+        assertEquals(0, new BigDecimal("72.00").compareTo(response.getPrecoSugerido()));
     }
 
     @Test
