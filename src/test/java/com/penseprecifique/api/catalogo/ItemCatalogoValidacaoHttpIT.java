@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -105,5 +106,41 @@ class ItemCatalogoValidacaoHttpIT {
                         .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.descricao").value("A descrição não pode ter mais de 150 caracteres"));
+    }
+
+    /**
+     * OpenProject #525 (achado Schemathesis, gate seguranca-resiliencia) — corpo multipart sem a
+     * parte 'arquivo' (ex.: cliente enviando corpo malformado) caía no catch-all genérico e virava
+     * 500 em vez de 400. Prova do bug + verificação da correção (GlobalExceptionHandler ganhou
+     * handler para MissingServletRequestPartException).
+     */
+    @Test
+    void uploadDeFotoSemAPartesArquivoRetorna400EmVezDe500() throws Exception {
+        Usuario usuario = novoUsuario();
+        String token = jwtTokenProvider.generateToken(usuario);
+        UUID catalogoId = novoCatalogoViaHttp(token);
+
+        Insumo insumo = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(proximoNumeroInsumo++).nome("Insumo Upload Foto").unidadeMedida("un")
+                .custoUnitario(new BigDecimal("1.0000")).estoqueAtual(BigDecimal.TEN).fracionavel(true)
+                .permitirEstoqueNegativo(true).build());
+
+        MvcResult itemResult = mockMvc.perform(post("/catalogos/" + catalogoId + "/itens")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nome", "Item Upload Sem Arquivo",
+                                "tempoProducao", 0,
+                                "componentes", java.util.List.of(Map.of("insumoId", insumo.getId().toString(), "quantidade", 1))
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Map<?, ?> item = objectMapper.readValue(itemResult.getResponse().getContentAsString(), Map.class);
+
+        // multipart sem nenhum part "arquivo" — dispara MissingServletRequestPartException
+        mockMvc.perform(multipart("/catalogos/" + catalogoId + "/itens/" + item.get("id") + "/foto")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Arquivo não enviado corretamente. Tente novamente."));
     }
 }
