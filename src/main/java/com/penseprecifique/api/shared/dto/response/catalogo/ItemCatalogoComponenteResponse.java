@@ -15,6 +15,9 @@ public class ItemCatalogoComponenteResponse {
     private UUID id;
     private UUID insumoId;
     private String nomeInsumo;
+    /** OpenProject #528 — mesmo padrão de {@code FichaTecnicaItemResponse#fracionavelInsumo}: só
+     *  preenchido quando o componente é Insumo; {@code null} quando é Produto-base. */
+    private Boolean fracionavelInsumo;
     private UUID produtoBaseId;
     private String nomeProdutoBase;
     private TipoProduto tipoProdutoBase;
