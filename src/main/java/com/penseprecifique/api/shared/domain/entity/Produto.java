@@ -38,6 +38,10 @@ public class Produto {
     @Column(columnDefinition = "TEXT")
     private String descricao;
 
+    /** #531 (DT-NOVA-5) — URL pública no R2, nunca o binário. Mesmo formato de ItemCatalogo.fotoUrl. */
+    @Column(name = "foto_url", length = 500)
+    private String fotoUrl;
+
     /** Tempo de producao do lote inteiro, nao da unidade individual — RN-038 */
     @Column(name = "tempo_producao", nullable = false)
     private Integer tempoProducao;

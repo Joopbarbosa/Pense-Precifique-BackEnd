@@ -1,6 +1,8 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
@@ -31,13 +33,22 @@ class InsumoCadastroSemMovimentacaoAutomaticaIT {
     @Autowired InsumoService insumoService;
     @Autowired MovimentacaoInsumoRepository movimentacaoInsumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
+
+    private Usuario usuario;
 
     private void seedUsuario() {
-        Usuario usuario = usuarioRepository.save(Usuario.builder()
+        usuario = usuarioRepository.save(Usuario.builder()
                 .email("cadastro-sem-mov-" + UUID.randomUUID() + "@test.com")
                 .senhaHash("x").ativo(true).build());
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 
     @Test
@@ -46,7 +57,7 @@ class InsumoCadastroSemMovimentacaoAutomaticaIT {
 
         // R$ 45,00 ÷ 10 unidades = custo unitário R$ 4,50 — valores não-redondos de propósito.
         InsumoCreateRequestDTO request = new InsumoCreateRequestDTO(
-                "Papelão 30x30cm " + UUID.randomUUID(), null, "un", true, null, true,
+                "Papelão 30x30cm " + UUID.randomUUID(), null, unidadeMedida("un").getId(), true, null, true,
                 BigDecimal.ZERO, new BigDecimal("45.00"), new BigDecimal("10"));
 
         InsumoResponseDTO criado = insumoService.cadastrar(request);

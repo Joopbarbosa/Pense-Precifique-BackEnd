@@ -1,8 +1,10 @@
 package com.penseprecifique.api.produto;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.produto.FichaTecnicaItemRequest;
@@ -30,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProdutoFracionavelOverrideIT {
 
     @Autowired ProdutoService produtoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired InsumoRepository insumoRepository;
 
@@ -46,7 +49,7 @@ class ProdutoFracionavelOverrideIT {
 
     private Insumo criarInsumo(boolean fracionavel) {
         return insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(contadorInsumo.getAndIncrement()).nome("Insumo " + UUID.randomUUID()).unidadeMedida("un")
+                .usuario(usuario).numero(contadorInsumo.getAndIncrement()).nome("Insumo " + UUID.randomUUID()).unidadeMedida(unidadeMedida("un"))
                 .custoUnitario(new BigDecimal("4.00")).estoqueAtual(new BigDecimal("100"))
                 .permitirEstoqueNegativo(true).fracionavel(fracionavel).build());
     }
@@ -146,5 +149,11 @@ class ProdutoFracionavelOverrideIT {
         // não é fracionável), garantindo que Produção ainda trave a quantidade em múltiplos do rendimento.
         assertTrue(editado.isAlgumInsumoNaoFracionavel(),
                 "algumInsumoNaoFracionavel (gate de Produção) não pode ser afetado pelo override de exibição");
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

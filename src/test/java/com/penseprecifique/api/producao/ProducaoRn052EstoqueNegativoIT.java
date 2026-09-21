@@ -1,10 +1,12 @@
 package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -42,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProducaoRn052EstoqueNegativoIT {
 
     @Autowired ProducaoService producaoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -58,7 +61,7 @@ class ProducaoRn052EstoqueNegativoIT {
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Corante Gel").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(1).nome("Corante Gel").marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal(estoqueInicial)).permitirEstoqueNegativo(permitirEstoqueNegativo)
                 .fracionavel(true).build());
 
@@ -188,5 +191,11 @@ class ProducaoRn052EstoqueNegativoIT {
 
         Insumo atualizado = insumoRepository.findById(corante.getId()).orElseThrow();
         assertTrue(atualizado.getEstoqueAtual().compareTo(BigDecimal.ZERO) < 0);
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

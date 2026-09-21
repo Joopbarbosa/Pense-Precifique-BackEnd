@@ -3,6 +3,7 @@ package com.penseprecifique.api.util;
 import com.penseprecifique.api.catalogo.CatalogoService;
 import com.penseprecifique.api.cliente.ClienteService;
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoService;
 import com.penseprecifique.api.orcamento.OrcamentoService;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
@@ -12,6 +13,7 @@ import com.penseprecifique.api.producao.ProducaoService;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -62,6 +64,7 @@ class NumeroSequencialConcorrenciaIT {
     private static final int PARES = 8;
 
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired ClienteService clienteService;
     @Autowired ProdutoService produtoService;
     @Autowired InsumoService insumoService;
@@ -137,11 +140,13 @@ class NumeroSequencialConcorrenciaIT {
     @Test
     void insumoSemColisaoSobConcorrencia() throws Exception {
         Usuario usuario = novoUsuario("ins-conc");
+        // criada antes do bloco concorrente — find-or-create não é seguro sob corrida de threads reais.
+        UUID unidadeMedidaId = unidadeMedida(usuario, "un").getId();
         AtomicInteger contador = new AtomicInteger();
         List<Integer> numeros = executarConcorrente(usuario.getEmail(), () -> {
             InsumoCreateRequestDTO req = new InsumoCreateRequestDTO(
                     "Insumo Concorrente " + contador.incrementAndGet() + "-" + UUID.randomUUID(),
-                    "Marca", "un", true, null, true, null,
+                    "Marca", unidadeMedidaId, true, null, true, null,
                     new BigDecimal("10.00"), new BigDecimal("1"));
             return insumoService.cadastrar(req).numero();
         });
@@ -169,7 +174,7 @@ class NumeroSequencialConcorrenciaIT {
                 .usuario(usuario).numero(1).nome("Bolo Concorrência").tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).rendimento(BigDecimal.TEN).precoVenda(new BigDecimal("10.00")).build());
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Farinha Concorrência").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(1).nome("Farinha Concorrência").marca("X").unidadeMedida(unidadeMedida(usuario, "g"))
                 .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
                 .build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
@@ -213,5 +218,11 @@ class NumeroSequencialConcorrenciaIT {
             return orcamentoService.criar(req).getNumero();
         });
         assertSemColisao(numeros);
+    }
+
+    private UnidadeMedida unidadeMedida(Usuario usuario, String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

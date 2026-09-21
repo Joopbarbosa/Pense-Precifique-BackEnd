@@ -19,6 +19,8 @@ public class ProdutoDetalheResponse {
     private String nome;
     private TipoProduto tipo;
     private String descricao;
+    /** #531 (DT-NOVA-5) — exibida na aba Dados Básicos, editável via POST/DELETE /produtos/{id}/foto. */
+    private String fotoUrl;
     private Integer tempoProducao;
     private BigDecimal precoVenda;
     private BigDecimal precoCusto;
@@ -31,6 +33,12 @@ public class ProdutoDetalheResponse {
     private BigDecimal custoTotalLote;
     /** Custo Unitário (Custo Total ÷ Rendimento) — hoje espelha precoCusto ate P-005 implementar a divisao real (RN-039). */
     private BigDecimal custoUnitario;
+    /** DT-NOVA-1 (V0.14.0, #294) — soma do custo dos componentes da ficha técnica, calculado ao vivo (nunca persistido), mesma fonte que já compõe custoTotalLote. */
+    private BigDecimal precoInsumo;
+    /** DT-NOVA-1 (V0.14.0, #294) — calcularCustoMaoDeObra(tempoProducao, valorHora), calculado ao vivo, mesma fonte que já compõe custoTotalLote. */
+    private BigDecimal precoMaoDeObra;
+    /** DT-NOVA-1 (V0.14.0, #294) — precoVenda − custoUnitario (lucro por unidade, valor absoluto), calculado ao vivo. */
+    private BigDecimal precoLucro;
     private BigDecimal estoqueAtual;
     private BigDecimal estoqueMinimo;
     private boolean permitirEstoqueNegativo;

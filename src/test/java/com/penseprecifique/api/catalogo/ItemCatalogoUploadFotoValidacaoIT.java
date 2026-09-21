@@ -1,8 +1,10 @@
 package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoComponenteRequest;
@@ -35,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ItemCatalogoUploadFotoValidacaoIT {
 
     @Autowired CatalogoService catalogoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired ItemCatalogoService itemCatalogoService;
     @Autowired InsumoRepository insumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
@@ -47,7 +50,7 @@ class ItemCatalogoUploadFotoValidacaoIT {
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Insumo Foto").unidadeMedida("un")
+                .usuario(usuario).numero(1).nome("Insumo Foto").unidadeMedida(unidadeMedida(usuario, "un"))
                 .custoUnitario(new BigDecimal("1.0000")).estoqueAtual(BigDecimal.TEN).fracionavel(true)
                 .permitirEstoqueNegativo(true).build());
 
@@ -78,5 +81,11 @@ class ItemCatalogoUploadFotoValidacaoIT {
                 () -> itemCatalogoService.uploadFoto(itemId, arquivoGrande));
 
         assertEquals("Arquivo muito grande. O tamanho máximo permitido é 5MB.", ex.getMessage());
+    }
+
+    private UnidadeMedida unidadeMedida(Usuario usuario, String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

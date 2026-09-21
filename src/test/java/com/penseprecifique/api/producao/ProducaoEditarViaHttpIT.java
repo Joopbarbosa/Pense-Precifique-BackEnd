@@ -2,11 +2,13 @@ package com.penseprecifique.api.producao;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.infra.security.JwtTokenProvider;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -52,6 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ProducaoEditarViaHttpIT {
 
     @Autowired MockMvc mockMvc;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired ObjectMapper objectMapper;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -71,7 +74,7 @@ class ProducaoEditarViaHttpIT {
         // de estoque atrapalhar o teste, já que o que está sob teste é a ordem de flush do
         // delete+insert de ProducaoProduto via HTTP real, não regra de estoque.
         insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Insumo Base HTTP").marca("X").unidadeMedida("un")
+                .usuario(usuario).numero(1).nome("Insumo Base HTTP").marca("X").unidadeMedida(unidadeMedida("un"))
                 .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true)
                 .fracionavel(true).build());
         return jwtTokenProvider.generateToken(usuario);
@@ -168,5 +171,11 @@ class ProducaoEditarViaHttpIT {
 
         assertEquals(Map.of(produtoId, new BigDecimal("10")), quantidadesPorProduto(editada));
         assertEquals(java.time.LocalDate.of(2027, 1, 15), editada.getDataTerminoPrevista());
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

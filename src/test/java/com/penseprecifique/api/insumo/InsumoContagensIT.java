@@ -1,7 +1,9 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoContagensResponse;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class InsumoContagensIT {
 
     @Autowired InsumoService insumoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired InsumoRepository insumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
 
@@ -42,7 +45,7 @@ class InsumoContagensIT {
     private Insumo criar(boolean ativo, BigDecimal estoqueAtual, BigDecimal estoqueMinimo) {
         return insumoRepository.save(Insumo.builder()
                 .usuario(usuario).numero(contador.getAndIncrement())
-                .nome("Insumo " + UUID.randomUUID()).unidadeMedida("un")
+                .nome("Insumo " + UUID.randomUUID()).unidadeMedida(unidadeMedida("un"))
                 .custoUnitario(BigDecimal.TEN).estoqueAtual(estoqueAtual).estoqueMinimo(estoqueMinimo)
                 .permitirEstoqueNegativo(true).fracionavel(true).ativo(ativo).build());
     }
@@ -69,5 +72,11 @@ class InsumoContagensIT {
         // 25 normais + o inativo (10 > 0) + o de estoque baixo (2 > 0) — isPositive não filtra por
         // ativo, só pelo sinal do estoque (mesma semântica de ListaInsumosPage.tsx:isPositive).
         assertEquals(27, contadores.estoquePositivo());
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

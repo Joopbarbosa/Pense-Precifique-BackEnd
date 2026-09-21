@@ -6,6 +6,7 @@ import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
@@ -34,6 +35,7 @@ import com.penseprecifique.api.produto.ProdutoService;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
@@ -82,6 +84,7 @@ public class InsumoService {
     private final ProdutoService produtoService;
     private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     private final ItemCatalogoService itemCatalogoService;
+    private final UnidadeMedidaRepository unidadeMedidaRepository;
 
     @Transactional(readOnly = true)
     public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, Pageable pageable) {
@@ -131,7 +134,8 @@ public class InsumoService {
         }
 
         Usuario usuario = getUsuarioAutenticado();
-        Insumo insumo = insumoMapper.toEntity(request, usuario);
+        UnidadeMedida unidadeMedida = buscarUnidadeMedidaDoUsuario(request.unidadeMedidaId(), usuarioId);
+        Insumo insumo = insumoMapper.toEntity(request, usuario, unidadeMedida);
         // #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition.
         usuarioRepository.lockPorId(usuarioId);
         insumo.setNumero(NumeroSequencialUtil.proximoNumero(
@@ -164,8 +168,14 @@ public class InsumoService {
             throw new BusinessException("Já existe um insumo com este nome e marca.");
         }
 
-        insumoMapper.updateEntity(request, insumo);
+        UnidadeMedida unidadeMedida = buscarUnidadeMedidaDoUsuario(request.unidadeMedidaId(), usuarioId);
+        insumoMapper.updateEntity(request, insumo, unidadeMedida);
         return insumoMapper.toResponse(insumoRepository.save(insumo));
+    }
+
+    private UnidadeMedida buscarUnidadeMedidaDoUsuario(UUID unidadeMedidaId, UUID usuarioId) {
+        return unidadeMedidaRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(unidadeMedidaId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Unidade de medida não encontrada"));
     }
 
     /** #228/PDT-0XX — DELETE também passa a checar vínculo de ficha técnica, igual a {@link #inativar(UUID)}. */
@@ -379,14 +389,20 @@ public class InsumoService {
         };
     }
 
+    // RN-NOVA-5/DT-NOVA-4 (V0.14.0, #514) — "Edição manual": tipo (ENTRADA/SAIDA) decide a direção
+    // do estoque; motivo/observação (INS-007) validados igual para as duas. Checagem de estoque
+    // negativo só se aplica à SAIDA — ENTRADA nunca reduz estoque, não há como violar a trava.
     public MovimentacaoInsumoResponseDTO baixaManual(UUID insumoId, BaixaManualInsumoRequestDTO request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
 
-        BigDecimal estoqueResultante = insumo.getEstoqueAtual().subtract(request.quantidade());
-        if (estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !insumo.getPermitirEstoqueNegativo()) {
+        BigDecimal estoqueResultante = request.tipo() == TipoMovimentacaoInsumo.ENTRADA
+                ? insumo.getEstoqueAtual().add(request.quantidade())
+                : insumo.getEstoqueAtual().subtract(request.quantidade());
+        if (request.tipo() == TipoMovimentacaoInsumo.SAIDA
+                && estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !insumo.getPermitirEstoqueNegativo()) {
             throw new BusinessException(
                     "Estoque insuficiente para " + insumo.getNome() + ". Este insumo não permite estoque negativo.");
         }
@@ -396,7 +412,7 @@ public class InsumoService {
 
         MovimentacaoInsumo movimentacao = MovimentacaoInsumo.builder()
                 .insumo(insumo)
-                .tipo(TipoMovimentacaoInsumo.SAIDA)
+                .tipo(request.tipo())
                 .motivo(request.motivo())
                 .quantidade(request.quantidade())
                 .custoUnitario(insumo.getCustoUnitario())

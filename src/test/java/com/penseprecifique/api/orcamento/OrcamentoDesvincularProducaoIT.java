@@ -1,6 +1,7 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
@@ -11,6 +12,7 @@ import com.penseprecifique.api.producao.ProducaoService;
 import com.penseprecifique.api.producao.HistoricoStatusProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -52,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrcamentoDesvincularProducaoIT {
 
     @Autowired OrcamentoService orcamentoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired ProducaoService producaoService;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
@@ -88,7 +91,7 @@ class OrcamentoDesvincularProducaoIT {
                 .precoVenda(new BigDecimal("50.00")).build());
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
                 .build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
@@ -360,5 +363,11 @@ class OrcamentoDesvincularProducaoIT {
 
         assertThrows(ResourceNotFoundException.class,
                 () -> orcamentoService.removerProdutoDeProducaoAtiva(orcamentoId, producao.getId(), produtoB.getId()));
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

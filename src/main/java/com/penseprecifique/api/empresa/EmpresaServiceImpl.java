@@ -9,12 +9,16 @@ import com.penseprecifique.api.shared.dto.response.config.HorarioFuncionamentoRe
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.infra.storage.R2StorageClient;
+import com.penseprecifique.api.shared.validation.ValidadorArquivoImagem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,6 +31,8 @@ public class EmpresaServiceImpl implements EmpresaService {
     private final EmpresaRepository empresaRepository;
     private final EmpresaHorarioRepository empresaHorarioRepository;
     private final UsuarioRepository usuarioRepository;
+    private final R2StorageClient r2StorageClient;
+    private final ValidadorArquivoImagem validadorArquivoImagem;
 
     @Override
     public EmpresaResponseDTO getEmpresa() {
@@ -101,6 +107,53 @@ public class EmpresaServiceImpl implements EmpresaService {
                         .horaFechamento(Boolean.TRUE.equals(h.fechado()) ? null : h.horaFechamento())
                         .build())
                 .toList());
+    }
+
+    /**
+     * #532 (DT-NOVA-5) — mesmo padrão de Produto#uploadFoto/ItemCatalogoService#uploadFoto: valida
+     * formato/tamanho antes de subir pro R2, substitui o logo anterior (melhor esforço).
+     */
+    @Override
+    @Transactional
+    public EmpresaResponseDTO uploadLogo(MultipartFile arquivo) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Perfil da empresa não configurado"));
+        validadorArquivoImagem.validar(arquivo);
+
+        String extensao = validadorArquivoImagem.extensaoPara(arquivo);
+        String key = "empresa/" + empresa.getId() + "/" + UUID.randomUUID() + "." + extensao;
+
+        byte[] conteudo;
+        try {
+            conteudo = arquivo.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException("Não foi possível ler o arquivo enviado. Tente novamente.");
+        }
+
+        String logoUrlAntiga = empresa.getLogoUrl();
+        String novaUrl = r2StorageClient.upload(key, conteudo, arquivo.getContentType());
+        empresa.setLogoUrl(novaUrl);
+        Empresa salva = empresaRepository.save(empresa);
+        if (logoUrlAntiga != null) {
+            r2StorageClient.deletarPorUrl(logoUrlAntiga);
+        }
+
+        return toResponse(salva);
+    }
+
+    @Override
+    @Transactional
+    public EmpresaResponseDTO removerLogo() {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Perfil da empresa não configurado"));
+        if (empresa.getLogoUrl() != null) {
+            r2StorageClient.deletarPorUrl(empresa.getLogoUrl());
+            empresa.setLogoUrl(null);
+            empresa = empresaRepository.save(empresa);
+        }
+        return toResponse(empresa);
     }
 
     private UUID getUsuarioIdAutenticado() {

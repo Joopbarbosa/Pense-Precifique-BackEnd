@@ -17,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -108,5 +109,18 @@ public class ProdutoController {
             @PathVariable UUID id,
             @Valid @RequestBody BaixaManualProdutoRequest request) {
         return ResponseEntity.status(201).body(produtoService.baixaManual(id, request));
+    }
+
+    /** #531 (DT-NOVA-5) — multipart, não presigned URL (validação de formato/tamanho fica no Backend). */
+    @PostMapping("/{id}/foto")
+    public ResponseEntity<ProdutoDetalheResponse> uploadFoto(
+            @PathVariable UUID id,
+            @RequestParam("arquivo") MultipartFile arquivo) {
+        return ResponseEntity.ok(produtoService.uploadFoto(id, arquivo));
+    }
+
+    @DeleteMapping("/{id}/foto")
+    public ResponseEntity<ProdutoDetalheResponse> removerFoto(@PathVariable UUID id) {
+        return ResponseEntity.ok(produtoService.removerFoto(id));
     }
 }

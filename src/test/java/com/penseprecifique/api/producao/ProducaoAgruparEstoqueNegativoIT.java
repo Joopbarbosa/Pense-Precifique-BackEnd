@@ -1,10 +1,12 @@
 package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -40,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class ProducaoAgruparEstoqueNegativoIT {
 
     @Autowired ProducaoService producaoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -58,7 +61,7 @@ class ProducaoAgruparEstoqueNegativoIT {
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
 
         insumoAviso = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Corante Gel").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(1).nome("Corante Gel").marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1")).permitirEstoqueNegativo(true).fracionavel(true).build());
 
         Produto produto = produtoRepository.save(Produto.builder()
@@ -125,5 +128,11 @@ class ProducaoAgruparEstoqueNegativoIT {
         Insumo atualizado = insumoRepository.findById(insumoAviso.getId()).orElseThrow();
         // 25+25=50 consolidado, rendimento=10 -> ratio=5, necessaria=1*5=5, estoque 1-5=-4
         assertEquals(0, new BigDecimal("-4").compareTo(atualizado.getEstoqueAtual()));
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

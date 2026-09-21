@@ -1,10 +1,12 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.FichaTecnicaService;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -38,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InsumoInativacaoReversivelIT {
 
     @Autowired InsumoService insumoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired FichaTecnicaService fichaTecnicaService;
     @Autowired LoteCompraService loteCompraService;
     @Autowired UsuarioRepository usuarioRepository;
@@ -57,7 +60,7 @@ class InsumoInativacaoReversivelIT {
 
     private Insumo novoInsumo(String nome, int numero) {
         return insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(numero).nome(nome).marca("X").unidadeMedida("un")
+                .usuario(usuario).numero(numero).nome(nome).marca("X").unidadeMedida(unidadeMedida("un"))
                 .estoqueAtual(new BigDecimal("100")).build());
     }
 
@@ -174,5 +177,11 @@ class InsumoInativacaoReversivelIT {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> loteCompraService.registrarLote(request));
         assertTrue(ex.getMessage().contains("inativo"));
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }
