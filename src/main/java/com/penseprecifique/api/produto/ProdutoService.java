@@ -598,14 +598,20 @@ public class ProdutoService {
                 .map(produtoMapper::toMovimentacaoResponse);
     }
 
+    // RN-NOVA-5/DT-NOVA-4 (V0.14.0, #534 — réplica de #514) — "Edição manual": tipo (ENTRADA/
+    // SAIDA) decide a direção do estoque; motivo/observação validados igual para as duas.
+    // Checagem de estoque negativo só se aplica à SAIDA — ENTRADA nunca reduz estoque.
     public MovimentacaoProdutoResponse baixaManual(UUID produtoId, BaixaManualProdutoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
 
-        BigDecimal estoqueResultante = produto.getEstoqueAtual().subtract(request.getQuantidade());
-        if (estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !produto.getPermitirEstoqueNegativo()) {
+        BigDecimal estoqueResultante = request.getTipo() == TipoMovimentacaoProduto.ENTRADA
+                ? produto.getEstoqueAtual().add(request.getQuantidade())
+                : produto.getEstoqueAtual().subtract(request.getQuantidade());
+        if (request.getTipo() == TipoMovimentacaoProduto.SAIDA
+                && estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !produto.getPermitirEstoqueNegativo()) {
             throw new BusinessException(
                     "Estoque insuficiente para " + produto.getNome() + ". Este produto não permite estoque negativo.");
         }
@@ -615,7 +621,7 @@ public class ProdutoService {
 
         MovimentacaoProduto movimentacao = MovimentacaoProduto.builder()
                 .produto(produto)
-                .tipo(TipoMovimentacaoProduto.SAIDA)
+                .tipo(request.getTipo())
                 .motivo(request.getMotivo())
                 .quantidade(request.getQuantidade())
                 .observacao(request.getObservacao())
