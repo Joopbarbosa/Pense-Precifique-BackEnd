@@ -3,6 +3,7 @@ package com.penseprecifique.api.shared.mapper;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
@@ -26,7 +27,8 @@ public class InsumoMapper {
                 IdentificadorFormatter.formatar("INS", insumo.getNumero()),
                 insumo.getNome(),
                 insumo.getMarca(),
-                insumo.getUnidadeMedida(),
+                insumo.getUnidadeMedida().getSigla(),
+                insumo.getUnidadeMedida().getId(),
                 insumo.getFracionavel(),
                 insumo.getTipoExibicaoQuantidade(),
                 insumo.getPermitirEstoqueNegativo(),
@@ -39,13 +41,13 @@ public class InsumoMapper {
         );
     }
 
-    public Insumo toEntity(InsumoCreateRequestDTO request, Usuario usuario) {
+    public Insumo toEntity(InsumoCreateRequestDTO request, Usuario usuario, UnidadeMedida unidadeMedida) {
         boolean fracionavel = request.fracionavel() != null ? request.fracionavel() : true;
         return Insumo.builder()
                 .usuario(usuario)
                 .nome(request.nome())
                 .marca(request.marca())
-                .unidadeMedida(request.unidadeMedida())
+                .unidadeMedida(unidadeMedida)
                 .fracionavel(fracionavel)
                 .tipoExibicaoQuantidade(tipoExibicaoQuantidadeParaSalvar(fracionavel, request.tipoExibicaoQuantidade()))
                 .permitirEstoqueNegativo(request.permitirEstoqueNegativo() != null ? request.permitirEstoqueNegativo() : true)
@@ -56,10 +58,10 @@ public class InsumoMapper {
                 .build();
     }
 
-    public void updateEntity(InsumoRequestDTO request, Insumo insumo) {
+    public void updateEntity(InsumoRequestDTO request, Insumo insumo, UnidadeMedida unidadeMedida) {
         insumo.setNome(request.nome());
         insumo.setMarca(request.marca());
-        insumo.setUnidadeMedida(request.unidadeMedida());
+        insumo.setUnidadeMedida(unidadeMedida);
         if (request.fracionavel() != null) {
             insumo.setFracionavel(request.fracionavel());
         }

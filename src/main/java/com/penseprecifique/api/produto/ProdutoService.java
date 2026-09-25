@@ -33,6 +33,8 @@ import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
+import com.penseprecifique.api.infra.storage.R2StorageClient;
+import com.penseprecifique.api.shared.validation.ValidadorArquivoImagem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -40,7 +42,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -82,6 +86,8 @@ public class ProdutoService {
     private final UsuarioRepository usuarioRepository;
     private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     private final ItemCatalogoService itemCatalogoService;
+    private final R2StorageClient r2StorageClient;
+    private final ValidadorArquivoImagem validadorArquivoImagem;
 
     /**
      * #135/RN-039 — custoUnitario recalculado ao vivo por item da página, mesmo cálculo de buscarPorId
@@ -149,8 +155,11 @@ public class ProdutoService {
 
         BigDecimal somaComponentes = fichaTecnicaService.recalcularPrecoCusto(produto.getId());
         BigDecimal valorHora = buscarValorHora(usuarioId);
-        BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
+        BigDecimal custoMaoDeObra = calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora);
+        BigDecimal custoTotalLote = somaComponentes.add(custoMaoDeObra);
         response.setCustoTotalLote(custoTotalLote);
+        response.setPrecoInsumo(somaComponentes);
+        response.setPrecoMaoDeObra(custoMaoDeObra);
 
         // custoUnitario recalculado ao vivo (não usa produto.getPrecoCusto(), que só é atualizado no save
         // e fica stale se um insumo/produto base/valorHora mudar depois — bug RN-039 investigado).
@@ -158,6 +167,7 @@ public class ProdutoService {
         response.setCustoUnitario(custoUnitario);
 
         response.setPrecoSugerido(calcularPrecoSugerido(custoUnitario, produto.getMargemLucro()));
+        response.setPrecoLucro(calcularPrecoLucro(produto.getPrecoVenda(), custoUnitario));
         return response;
     }
 
@@ -180,7 +190,8 @@ public class ProdutoService {
 
         BigDecimal somaComponentes = fichaTecnicaService.salvarFichaTecnica(produto, request.getFichaTecnica(), usuarioId);
         BigDecimal valorHora = buscarValorHora(usuarioId);
-        BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
+        BigDecimal custoMaoDeObra = calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora);
+        BigDecimal custoTotalLote = somaComponentes.add(custoMaoDeObra);
         BigDecimal custoUnitario = calcularCustoUnitario(custoTotalLote, produto.getRendimento());
         produto.setPrecoCusto(custoUnitario);
 
@@ -203,6 +214,9 @@ public class ProdutoService {
         ProdutoDetalheResponse response = produtoMapper.toDetalheResponse(produto, itens);
         response.setCustoTotalLote(custoTotalLote);
         response.setPrecoSugerido(precoSugerido);
+        response.setPrecoInsumo(somaComponentes);
+        response.setPrecoMaoDeObra(custoMaoDeObra);
+        response.setPrecoLucro(calcularPrecoLucro(produto.getPrecoVenda(), custoUnitario));
         return response;
     }
 
@@ -227,7 +241,8 @@ public class ProdutoService {
 
         BigDecimal somaComponentes = fichaTecnicaService.salvarFichaTecnica(produto, request.getFichaTecnica(), usuarioId);
         BigDecimal valorHora = buscarValorHora(usuarioId);
-        BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
+        BigDecimal custoMaoDeObra = calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora);
+        BigDecimal custoTotalLote = somaComponentes.add(custoMaoDeObra);
         BigDecimal custoUnitario = calcularCustoUnitario(custoTotalLote, produto.getRendimento());
         produto.setPrecoCusto(custoUnitario);
 
@@ -249,6 +264,9 @@ public class ProdutoService {
         ProdutoDetalheResponse response = produtoMapper.toDetalheResponse(produto, itens);
         response.setCustoTotalLote(custoTotalLote);
         response.setPrecoSugerido(precoSugerido);
+        response.setPrecoInsumo(somaComponentes);
+        response.setPrecoMaoDeObra(custoMaoDeObra);
+        response.setPrecoLucro(calcularPrecoLucro(produto.getPrecoVenda(), custoUnitario));
         return response;
     }
 
@@ -267,6 +285,57 @@ public class ProdutoService {
         validarSemVinculos(produto);
         produto.setDeletedAt(LocalDateTime.now());
         produtoRepository.save(produto);
+        // #531 (DT-NOVA-5) — mesmo padrão de ItemCatalogoService#remover: excluir o produto não
+        // pode deixar o arquivo órfão no R2 (melhor esforço, nunca falha a exclusão).
+        if (produto.getFotoUrl() != null) {
+            r2StorageClient.deletarPorUrl(produto.getFotoUrl());
+        }
+    }
+
+    /**
+     * #531 (DT-NOVA-5) — valida formato/tamanho ANTES de subir pro R2 (nunca confia só no
+     * Frontend). Substitui a foto anterior, se houver — remoção do objeto antigo é melhor esforço
+     * (mesmo padrão de ItemCatalogoService#uploadFoto).
+     */
+    public ProdutoDetalheResponse uploadFoto(UUID id, MultipartFile arquivo) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        validadorArquivoImagem.validar(arquivo);
+
+        String extensao = validadorArquivoImagem.extensaoPara(arquivo);
+        String key = "produto/" + produto.getId() + "/" + UUID.randomUUID() + "." + extensao;
+
+        byte[] conteudo;
+        try {
+            conteudo = arquivo.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException("Não foi possível ler o arquivo enviado. Tente novamente.");
+        }
+
+        String fotoUrlAntiga = produto.getFotoUrl();
+        String novaUrl = r2StorageClient.upload(key, conteudo, arquivo.getContentType());
+        produto.setFotoUrl(novaUrl);
+        produto = produtoRepository.save(produto);
+        if (fotoUrlAntiga != null) {
+            r2StorageClient.deletarPorUrl(fotoUrlAntiga);
+        }
+
+        List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+        return produtoMapper.toDetalheResponse(produto, itens);
+    }
+
+    public ProdutoDetalheResponse removerFoto(UUID id) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
+        if (produto.getFotoUrl() != null) {
+            r2StorageClient.deletarPorUrl(produto.getFotoUrl());
+            produto.setFotoUrl(null);
+            produto = produtoRepository.save(produto);
+        }
+        List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
+        return produtoMapper.toDetalheResponse(produto, itens);
     }
 
     /**
@@ -473,8 +542,11 @@ public class ProdutoService {
                 throw new BusinessException("Falta substituição para o vínculo de componente de ficha técnica (id " + componente.getId() + ").");
             }
             Produto novoProdutoBase = buscarProdutoDoUsuario(sub.getNovoProdutoId(), usuarioId);
-            if (novoProdutoBase.getTipo() != TipoProduto.PRODUTO || !Boolean.TRUE.equals(novoProdutoBase.getAtivo())) {
-                throw new BusinessException("Apenas produtos ativos do tipo Produto podem ser usados como componente de ficha técnica.");
+            // #436 (RN-NOVA-8/#462) — alinhado a FichaTecnicaService.salvarFichaTecnica: aceita
+            // Produto OU Customização como substituto, ambos ativos (antes só PRODUTO era aceito
+            // aqui, ficando desalinhado da regra vigente no fluxo principal).
+            if (!Boolean.TRUE.equals(novoProdutoBase.getAtivo())) {
+                throw new BusinessException("Apenas produtos/customizações ativos podem ser usados como componente de ficha técnica.");
             }
             componente.setProdutoBase(novoProdutoBase);
             fichaTecnicaItemRepository.save(componente);
@@ -526,14 +598,20 @@ public class ProdutoService {
                 .map(produtoMapper::toMovimentacaoResponse);
     }
 
+    // RN-NOVA-5/DT-NOVA-4 (V0.14.0, #534 — réplica de #514) — "Edição manual": tipo (ENTRADA/
+    // SAIDA) decide a direção do estoque; motivo/observação validados igual para as duas.
+    // Checagem de estoque negativo só se aplica à SAIDA — ENTRADA nunca reduz estoque.
     public MovimentacaoProdutoResponse baixaManual(UUID produtoId, BaixaManualProdutoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
         Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
 
-        BigDecimal estoqueResultante = produto.getEstoqueAtual().subtract(request.getQuantidade());
-        if (estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !produto.getPermitirEstoqueNegativo()) {
+        BigDecimal estoqueResultante = request.getTipo() == TipoMovimentacaoProduto.ENTRADA
+                ? produto.getEstoqueAtual().add(request.getQuantidade())
+                : produto.getEstoqueAtual().subtract(request.getQuantidade());
+        if (request.getTipo() == TipoMovimentacaoProduto.SAIDA
+                && estoqueResultante.compareTo(BigDecimal.ZERO) < 0 && !produto.getPermitirEstoqueNegativo()) {
             throw new BusinessException(
                     "Estoque insuficiente para " + produto.getNome() + ". Este produto não permite estoque negativo.");
         }
@@ -543,7 +621,7 @@ public class ProdutoService {
 
         MovimentacaoProduto movimentacao = MovimentacaoProduto.builder()
                 .produto(produto)
-                .tipo(TipoMovimentacaoProduto.SAIDA)
+                .tipo(request.getTipo())
                 .motivo(request.getMotivo())
                 .quantidade(request.getQuantidade())
                 .observacao(request.getObservacao())
@@ -575,6 +653,12 @@ public class ProdutoService {
         // nesse caso não há divisão por lote a fazer — custo unitário = custo total.
         BigDecimal divisor = (rendimento != null && rendimento.compareTo(BigDecimal.ZERO) > 0) ? rendimento : BigDecimal.ONE;
         return custoTotalLote.divide(divisor, 4, RoundingMode.HALF_UP);
+    }
+
+    /** DT-NOVA-1 (V0.14.0, #294) — lucro por unidade, valor absoluto: precoVenda − custoUnitario. */
+    private BigDecimal calcularPrecoLucro(BigDecimal precoVenda, BigDecimal custoUnitario) {
+        BigDecimal venda = precoVenda != null ? precoVenda : BigDecimal.ZERO;
+        return venda.subtract(custoUnitario);
     }
 
     private BigDecimal buscarValorHora(UUID usuarioId) {

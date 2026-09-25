@@ -3,6 +3,7 @@ package com.penseprecifique.api.insumo;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,6 +25,9 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
     Page<Insumo> buscarComFiltros(@Param("usuarioId") UUID usuarioId, @Param("busca") String busca,
             @Param("ativo") Boolean ativo, Pageable pageable);
 
+    // #298 (V0.14.0) — unidadeMedida agora é @ManyToOne LAZY; EntityGraph evita depender de sessão
+    // aberta em quem consumir o retorno fora da transação de origem (ex.: toResponse() logo após).
+    @EntityGraph(attributePaths = "unidadeMedida")
     Optional<Insumo> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
     boolean existsByNomeAndMarcaAndUsuarioIdAndDeletedAtIsNull(
@@ -48,4 +52,7 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
     long countByUsuarioIdAndDeletedAtIsNullAndEstoqueAtualLessThan(UUID usuarioId, java.math.BigDecimal valor);
 
     long countByUsuarioIdAndDeletedAtIsNullAndEstoqueAtualGreaterThan(UUID usuarioId, java.math.BigDecimal valor);
+
+    // #298 (CEN-NOVO-9) — bloqueio de exclusão de UnidadeMedida em uso: basta 1 insumo vinculado.
+    long countByUnidadeMedidaIdAndDeletedAtIsNull(UUID unidadeMedidaId);
 }

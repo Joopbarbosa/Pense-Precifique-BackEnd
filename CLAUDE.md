@@ -3,7 +3,7 @@
 > Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`. Projeto pré-produção
 > (primeiro deploy estável com usuários reais = v1). Caminho:
 > `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Última atualização: 20/09/2026 (Retomada V0.13.0) · Branch padrão atual: `feature/V0.13.0`
+> Última atualização: 24/09/2026 (Retomada V0.14.0) · Branch padrão atual: `feature/V0.14.0`
 > Se este arquivo e o prompt da sessão divergirem, este arquivo vence.
 >
 > Histórico de versões (V0.5 a V0.8.2) migrado para os `regras-*.md`/`decisoes-*.md` de cada
@@ -59,8 +59,17 @@ docker run --rm --network penseprecifique_default \
   -e SPRING_DATASOURCE_URL="jdbc:postgresql://db:5432/pense_precifique_db" \
   -e SPRING_DATASOURCE_USERNAME="$DB_USER" -e SPRING_DATASOURCE_PASSWORD="$DB_PASSWORD" \
   -e JWT_SECRET="$JWT_SECRET" -e JWT_EXPIRATION_MS="$JWT_EXPIRATION_MS" \
+  -e R2_ACCOUNT_ID="$R2_ACCOUNT_ID" -e R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
+  -e R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" -e R2_BUCKET_NAME="$R2_BUCKET_NAME" \
+  -e R2_PUBLIC_URL="$R2_PUBLIC_URL" -e R2_ENDPOINT="$R2_ENDPOINT" \
   pense-backend-build ./mvnw test
 ```
+
+**Todas as 6 `R2_*` são obrigatórias no `docker run`** (desde V0.13.0/#518) — `R2StorageClient` é
+injetado em vários Services, então faltar uma só (achado V0.14.0: `R2_ENDPOINT`) derruba o
+`ApplicationContext` e aparece como centenas de `UnsatisfiedDependencyException` em testes sem
+relação com upload. A causa real só aparece no `Caused by: ... Could not resolve placeholder` —
+nunca ler só o fim da saída (`tail`) para diagnosticar.
 
 Suíte usa `**/*IT.java` (Surefire configurado assim desde #132) — nunca `-Dtest=Nome` isolado como
 validação final, sempre `./mvnw test` completo. "Compila limpo" nunca é validação suficiente —
@@ -76,7 +85,10 @@ antigo extinto desde o refactor V0.5):
 ```
 com/penseprecifique/api/
 ├── auth/ caixa/ catalogo/ cliente/ dashboard/ empresa/ insumo/ orcamento/ producao/ produto/
+│   unidademedida/
 │   → *Controller, *Service(+Impl quando houver), *Repository de cada módulo
+│   (`unidademedida/`, V0.14.0/#298: entidade `UnidadeMedida` referenciada por FK em `Insumo` —
+│   regras documentadas no módulo INSUMO, não num módulo próprio)
 │   (`caixa/`, V0.12.0: VendaCaixa/VendaCaixaItem/VendaCaixaPagamento, CaixaTurno/CaixaMovimento —
 │   `empresa/` também ganhou `MetodoPagamentoConfiguravel`, ver seção 3 sobre a colisão de nome)
 ├── pdf/               # PdfService, PdfMapper (ver seção própria)
@@ -87,6 +99,8 @@ com/penseprecifique/api/
 │   │                                       # estoque negativo compartilhados Orçamento/Produção)
 │   ├── dto/pdf/       # DTOs achatados de payload de PDF (OrcamentoPdfData, ReciboPdfData, etc.)
 │   ├── mapper/        # @Component manual — apesar do nome do pacote, NÃO é MapStruct
+│   ├── validation/    # ValidadorArquivoImagem (V0.14.0, DT-NOVA-5) — validação única de upload
+│   │                  # de imagem (JPG/PNG, máx. 5MB) para Catálogo, Produto e Empresa
 │   └── exception/     # GlobalExceptionHandler, ResourceNotFoundException, BusinessException
 ├── infra/{config,security,storage}/   # SecurityConfig, JwtTokenProvider/Filter,
 │                                       # UserDetailsServiceImpl, R2StorageClient (V0.13.0,
@@ -215,8 +229,10 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   incremental do host). Rodar `mvn clean package` sempre que um enum usado por switch exaustivo em
   mais de um módulo ganhar um valor novo.
 - **Upload de arquivo (imagem) — validar no Service antes de subir pro storage externo**
-  (canônico: `infra/storage/R2StorageClient` + `ItemCatalogoService#validarArquivoFoto`, V0.13.0,
-  #518, 1º fluxo de upload do sistema) — formato/tamanho são validados no Service **antes** de
+  (canônico: `infra/storage/R2StorageClient` + `shared/validation/ValidadorArquivoImagem`, V0.13.0/
+  #518, promovido a `shared/` em V0.14.0 quando Produto (#531) e Empresa (#532) ganharam upload — o
+  antigo `ItemCatalogoService#validarArquivoFoto` não existe mais; nunca reimplementar a validação
+  local num Service novo) — formato/tamanho são validados no Service **antes** de
   qualquer chamada ao storage (Cloudflare R2, S3-compatible), nunca confiando só na validação do
   Frontend (DT-NOVA-4). Cliente S3 usa `software.amazon.awssdk:s3` com `url-connection-client`
   explícito — **nunca o `apache-client` default do módulo**, que traz uma versão de `httpclient5`
@@ -225,7 +241,9 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   tocado — só descoberto rodando `./mvnw test` completo, nunca no `mvn compile`). Trocar um
   arquivo remove o anterior do storage (melhor esforço, nunca falha a troca); remover a entidade
   dona do arquivo também remove o arquivo do storage (nunca deixa órfão cobrando armazenamento
-  sem uso). Precedente pra qualquer upload futuro no sistema (ex.: logo de empresa).
+  sem uso). Aplicado hoje em 3 pontos: foto de item de catálogo, foto de produto, logo da empresa.
+  Débito conhecido: `MultipartException` (request não-multipart) cai no handler genérico e vira 500
+  em vez de 400 nos 3 — OpenProject #553.
 
 ---
 
@@ -256,6 +274,12 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
 - **Nota de backlog "decisão registrada"/"implementado" não é confirmação de código** — furou 3x
   na V0.6.1.1. Sempre conferir o payload real (curl) ou o código-fonte antes de escrever
   prompt/implementação em cima de uma anotação assim.
+- **Trocar o tipo de um campo de entidade (ex.: `String` → FK `@ManyToOne` lazy) quebra testes de
+  outros módulos** — V0.14.0/#298: `Insumo.unidadeMedida` virar FK quebrou a compilação de ~43
+  arquivos de teste que montavam `Insumo` com o texto direto, e o finder por id+usuário passou a
+  precisar de `@EntityGraph` para não dar `LazyInitializationException` fora da transação. Ao mudar
+  tipo de campo, rodar a suíte completa e varrer os builders de teste antes de fechar, não só o
+  módulo dono.
 - **Débito conhecido, não corrigido:** `iniciar()`/`retomar()`/`agrupar()` (`ProducaoService`)
   replicam o mesmo par de passos (`verificarComponentes()` + bloquear-ou-baixar) como código
   copiado em vez de método privado compartilhado — não confundir com decisão deliberada. Ver

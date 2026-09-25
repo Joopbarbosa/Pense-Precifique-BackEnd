@@ -117,7 +117,7 @@ public class LoteCompraService {
                 insumo.getId(),
                 insumo.getNome(),
                 insumo.getMarca(),
-                insumo.getUnidadeMedida(),
+                insumo.getUnidadeMedida().getSigla(),
                 custoUnitarioAnterior,
                 novoCusto,
                 quantidade

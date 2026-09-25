@@ -1,6 +1,8 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
@@ -28,18 +30,27 @@ class InsumoTipoExibicaoQuantidadeIT {
 
     @Autowired InsumoService insumoService;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
+
+    private Usuario usuario;
 
     private void seedUsuario() {
-        Usuario usuario = usuarioRepository.save(Usuario.builder()
+        usuario = usuarioRepository.save(Usuario.builder()
                 .email("tipo-exibicao-" + UUID.randomUUID() + "@test.com")
                 .senhaHash("x").ativo(true).build());
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
     }
 
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
+    }
+
     private InsumoCreateRequestDTO request(Boolean fracionavel, TipoExibicaoQuantidade tipo) {
         return new InsumoCreateRequestDTO(
-                "Insumo " + UUID.randomUUID(), null, "un", fracionavel, tipo, true,
+                "Insumo " + UUID.randomUUID(), null, unidadeMedida("un").getId(), fracionavel, tipo, true,
                 BigDecimal.ZERO, new BigDecimal("10.00"), new BigDecimal("5"));
     }
 
@@ -77,7 +88,7 @@ class InsumoTipoExibicaoQuantidadeIT {
         InsumoResponseDTO criado = insumoService.cadastrar(request(true, TipoExibicaoQuantidade.FRACAO));
 
         InsumoRequestDTO edicao = new InsumoRequestDTO(
-                criado.nome(), null, "un", false, null, true, BigDecimal.ZERO, null);
+                criado.nome(), null, unidadeMedida("un").getId(), false, null, true, BigDecimal.ZERO, null);
         InsumoResponseDTO editado = insumoService.editar(criado.id(), edicao);
 
         assertNull(editado.tipoExibicaoQuantidade());

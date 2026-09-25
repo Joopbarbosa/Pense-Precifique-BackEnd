@@ -1,7 +1,9 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -32,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class InsumoOrdenacaoIT {
 
     @Autowired InsumoService insumoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired InsumoRepository insumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
 
@@ -52,7 +55,7 @@ class InsumoOrdenacaoIT {
 
     private UUID novoInsumo(String nome, int numero, BigDecimal custoUnitario, BigDecimal estoqueAtual) {
         return insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(numero).nome(nome).unidadeMedida("un")
+                .usuario(usuario).numero(numero).nome(nome).unidadeMedida(unidadeMedida("un"))
                 .custoUnitario(custoUnitario).estoqueAtual(estoqueAtual)
                 .build()).getId();
     }
@@ -101,5 +104,11 @@ class InsumoOrdenacaoIT {
     private List<UUID> idsNaOrdem(Sort sort) {
         Page<InsumoResponseDTO> pagina = insumoService.listar(null, null, PageRequest.of(0, 20, sort));
         return pagina.getContent().stream().map(InsumoResponseDTO::id).toList();
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

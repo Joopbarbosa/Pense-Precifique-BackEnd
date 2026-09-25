@@ -1,10 +1,12 @@
 package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -40,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProducaoListagemHistoricoIT {
 
     @Autowired ProducaoService producaoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -54,7 +57,7 @@ class ProducaoListagemHistoricoIT {
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
 
         Insumo farinha = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Farinha").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(1).nome("Farinha").marca("X").unidadeMedida(unidadeMedida(usuario, "g"))
                 .estoqueAtual(new BigDecimal("100")).permitirEstoqueNegativo(true).fracionavel(true)
                 .build());
 
@@ -90,5 +93,11 @@ class ProducaoListagemHistoricoIT {
                         .anyMatch(h -> h.getStatusNovo().name().equals("TRAVADA") && h.getOrigem().name().equals("USUARIO")),
                 "historicoStatus deve conter a transição TRAVADA de origem USUARIO — sem isso o front cai no fallback TRAVADA_SISTEMA");
         assertEquals("TRAVADA", resposta.getEstado().name());
+    }
+
+    private UnidadeMedida unidadeMedida(Usuario usuario, String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

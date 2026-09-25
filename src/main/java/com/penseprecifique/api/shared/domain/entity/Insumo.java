@@ -41,8 +41,10 @@ public class Insumo {
     @Column
     private String marca;
 
-    @Column(name = "unidade_medida", nullable = false)
-    private String unidadeMedida;
+    // #298 (DT-NOVA-2, V0.14.0) — substitui a antiga coluna de texto livre (era String unidadeMedida).
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "unidade_medida_id", nullable = false)
+    private UnidadeMedida unidadeMedida;
 
     @Column(name = "custo_unitario", nullable = false, precision = 15, scale = 4)
     @Builder.Default

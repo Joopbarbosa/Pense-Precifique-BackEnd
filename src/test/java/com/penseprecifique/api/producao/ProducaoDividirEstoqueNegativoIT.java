@@ -1,10 +1,12 @@
 package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -41,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProducaoDividirEstoqueNegativoIT {
 
     @Autowired ProducaoService producaoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -59,10 +62,10 @@ class ProducaoDividirEstoqueNegativoIT {
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
 
         insumoBloqueante = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Chocolate Belga").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(1).nome("Chocolate Belga").marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1")).permitirEstoqueNegativo(false).fracionavel(true).build());
         insumoAviso = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(2).nome("Corante Gel").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(2).nome("Corante Gel").marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1")).permitirEstoqueNegativo(true).fracionavel(true).build());
 
         Produto produtoBloqueado = produtoRepository.save(Produto.builder()
@@ -129,5 +132,11 @@ class ProducaoDividirEstoqueNegativoIT {
 
         Insumo bloqueanteInalterado = insumoRepository.findById(insumoBloqueante.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("1").compareTo(bloqueanteInalterado.getEstoqueAtual()), "produção B (bloqueada) não baixa nada");
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

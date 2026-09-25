@@ -1,6 +1,7 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -9,6 +10,7 @@ import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.producao.HistoricoStatusProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -53,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrcamentoCriarProducaoVinculadaIT {
 
     @Autowired OrcamentoService orcamentoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -87,7 +90,7 @@ class OrcamentoCriarProducaoVinculadaIT {
                 .precoVenda(new BigDecimal("50.00")).build());
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
                 .build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
@@ -343,5 +346,11 @@ class OrcamentoCriarProducaoVinculadaIT {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> orcamentoService.criarProducaoVinculada(orcamentoId, request));
         assertTrue(ex.getMessage().toLowerCase().contains("selecione"));
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

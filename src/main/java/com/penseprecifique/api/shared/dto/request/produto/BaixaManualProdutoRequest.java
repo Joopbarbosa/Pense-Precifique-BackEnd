@@ -1,6 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.produto;
 
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
+import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoProduto;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -10,9 +11,15 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 
+// RN-NOVA-5/DT-NOVA-4 (V0.14.0, #534 — réplica de #514) — "Baixa manual" generalizada para
+// "Edição manual": campo tipo (ENTRADA/SAIDA) decide a direção; mesma validação de motivo/
+// observação para as duas direções, evita duplicar endpoint espelho.
 @Getter
 @Setter
 public class BaixaManualProdutoRequest {
+
+    @NotNull(message = "O tipo é obrigatório")
+    private TipoMovimentacaoProduto tipo;
 
     @NotNull(message = "A quantidade é obrigatória")
     @DecimalMin(value = "0.001", message = "A quantidade deve ser maior que zero")

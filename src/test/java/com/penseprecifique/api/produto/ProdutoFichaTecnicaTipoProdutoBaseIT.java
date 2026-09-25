@@ -1,7 +1,9 @@
 package com.penseprecifique.api.produto;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -33,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class ProdutoFichaTecnicaTipoProdutoBaseIT {
 
     @Autowired ProdutoService produtoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -60,7 +63,7 @@ class ProdutoFichaTecnicaTipoProdutoBaseIT {
                 .tempoProducao(10).ativo(true).precoCusto(new BigDecimal("2.00"))
                 .precoVenda(new BigDecimal("5.00")).build());
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Farinha").unidadeMedida("kg").fracionavel(true)
+                .usuario(usuario).numero(1).nome("Farinha").unidadeMedida(unidadeMedida("kg")).fracionavel(true)
                 .estoqueMinimo(BigDecimal.ONE).custoUnitario(new BigDecimal("4.00"))
                 .estoqueAtual(BigDecimal.TEN).ativo(true).build());
 
@@ -88,5 +91,11 @@ class ProdutoFichaTecnicaTipoProdutoBaseIT {
         FichaTecnicaItemResponse itemInsumo = resposta.getFichaTecnica().stream()
                 .filter(i -> insumo.getId().equals(i.getInsumoId())).findFirst().orElseThrow();
         assertNull(itemInsumo.getTipoProdutoBase());
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

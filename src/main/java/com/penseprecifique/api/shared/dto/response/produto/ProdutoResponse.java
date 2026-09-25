@@ -17,6 +17,8 @@ public class ProdutoResponse {
     private String identificador;
     private String nome;
     private TipoProduto tipo;
+    /** #531 (DT-NOVA-5) — exibida no card da listagem, substitui o placeholder "Sem foto". */
+    private String fotoUrl;
     private BigDecimal precoVenda;
     private BigDecimal precoCusto;
     private BigDecimal margemLucro;

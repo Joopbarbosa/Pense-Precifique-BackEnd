@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 public record InsumoCreateRequestDTO(
 
@@ -14,8 +15,10 @@ public record InsumoCreateRequestDTO(
 
         String marca,
 
-        @NotBlank(message = "A unidade de medida é obrigatória")
-        String unidadeMedida,
+        // #298 (DT-NOVA-2, V0.14.0) — antes String unidadeMedida (texto livre); agora referencia
+        // uma UnidadeMedida já cadastrada em Configurações.
+        @NotNull(message = "A unidade de medida é obrigatória")
+        UUID unidadeMedidaId,
 
         Boolean fracionavel,
 

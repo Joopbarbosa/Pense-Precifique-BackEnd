@@ -1,6 +1,7 @@
 package com.penseprecifique.api.producao;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.orcamento.OrcamentoProducaoRepository;
 import com.penseprecifique.api.orcamento.OrcamentoService;
@@ -8,6 +9,7 @@ import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -52,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProducaoDividirPropagaVinculoIT {
 
     @Autowired ProducaoService producaoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired OrcamentoService orcamentoService;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
@@ -79,10 +82,10 @@ class ProducaoDividirPropagaVinculoIT {
                 .usuario(usuario).numero(1).nome("Cliente Dividir Vínculo").ativa(true).build());
 
         insumoBloqueante = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Chocolate Belga").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(1).nome("Chocolate Belga").marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1")).permitirEstoqueNegativo(false).fracionavel(true).build());
         insumoLiberado = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(2).nome("Farinha").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(2).nome("Farinha").marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("10000")).permitirEstoqueNegativo(true).fracionavel(true).build());
     }
 
@@ -273,5 +276,11 @@ class ProducaoDividirPropagaVinculoIT {
         assertTrue(orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamentoA, producaoAId).isEmpty(),
                 "orçamento desvinculado antes da divisão não pode reaparecer vinculado na filha");
         assertTrue(orcamentoProducaoRepository.findByOrcamentoIdAndProducaoId(orcamentoB, producaoAId).isPresent());
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

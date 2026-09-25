@@ -1,9 +1,11 @@
 package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.Catalogo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -53,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ItemCatalogoBuscaOrcamentoIT {
 
     @Autowired ItemCatalogoService itemCatalogoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired CatalogoRepository catalogoRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -145,7 +148,7 @@ class ItemCatalogoBuscaOrcamentoIT {
     void respostaExpoeAlgumComponenteNaoFracionavel() {
         seedUsuarioECatalogo();
         Insumo insumoNaoFracionavel = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Fita Metálica").unidadeMedida("un")
+                .usuario(usuario).numero(1).nome("Fita Metálica").unidadeMedida(unidadeMedida("un"))
                 .custoUnitario(new BigDecimal("1.0000")).estoqueAtual(BigDecimal.TEN)
                 .fracionavel(false).permitirEstoqueNegativo(true).build());
         itemCatalogoService.adicionar(catalogo.getId(),
@@ -321,5 +324,11 @@ class ItemCatalogoBuscaOrcamentoIT {
         assertEquals(1, resultado.getContent().size());
         assertEquals(1, resultado.getTotalElements());
         assertTrue(resultado.isLast());
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

@@ -21,6 +21,7 @@ import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoResponse
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ItemCatalogoMapper;
+import com.penseprecifique.api.shared.validation.ValidadorArquivoImagem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -34,7 +35,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -51,10 +51,6 @@ public class ItemCatalogoService {
     private static final BigDecimal CEM = new BigDecimal("100");
     private static final BigDecimal SESSENTA = new BigDecimal("60");
 
-    /** RN-NOVA-6 — só JPG/PNG (mesmos 2 content-types que os navegadores enviam pra esses formatos). */
-    private static final Set<String> FORMATOS_FOTO_ACEITOS = Set.of("image/jpeg", "image/png");
-    private static final long TAMANHO_MAXIMO_FOTO_BYTES = 5L * 1024 * 1024;
-
     private final ItemCatalogoRepository itemCatalogoRepository;
     private final ItemCatalogoComponenteRepository componenteRepository;
     private final CatalogoRepository catalogoRepository;
@@ -64,6 +60,7 @@ public class ItemCatalogoService {
     private final ItemCatalogoMapper itemCatalogoMapper;
     private final UsuarioRepository usuarioRepository;
     private final R2StorageClient r2StorageClient;
+    private final ValidadorArquivoImagem validadorArquivoImagem;
 
     // ---------------------------------------------------------------
     // Consultas
@@ -189,9 +186,9 @@ public class ItemCatalogoService {
      */
     public ItemCatalogoResponse uploadFoto(UUID itemId, MultipartFile arquivo) {
         ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
-        validarArquivoFoto(arquivo);
+        validadorArquivoImagem.validar(arquivo);
 
-        String extensao = "image/png".equals(arquivo.getContentType()) ? "png" : "jpg";
+        String extensao = validadorArquivoImagem.extensaoPara(arquivo);
         String key = "catalogo/item-catalogo/" + item.getId() + "/" + UUID.randomUUID() + "." + extensao;
 
         byte[] conteudo;
@@ -220,19 +217,6 @@ public class ItemCatalogoService {
             item = itemCatalogoRepository.save(item);
         }
         return montarResponse(item);
-    }
-
-    /** RN-NOVA-6 — CEN-NOVO-5 (formato) e CEN-NOVO-6 (tamanho), nesta ordem (mesma ordem do UC-NOVO-1). */
-    private void validarArquivoFoto(MultipartFile arquivo) {
-        if (arquivo == null || arquivo.isEmpty()) {
-            throw new BusinessException("Selecione um arquivo de imagem.");
-        }
-        if (!FORMATOS_FOTO_ACEITOS.contains(arquivo.getContentType())) {
-            throw new BusinessException("Só são aceitos arquivos JPG ou PNG.");
-        }
-        if (arquivo.getSize() > TAMANHO_MAXIMO_FOTO_BYTES) {
-            throw new BusinessException("Arquivo muito grande. O tamanho máximo permitido é 5MB.");
-        }
     }
 
     // ---------------------------------------------------------------

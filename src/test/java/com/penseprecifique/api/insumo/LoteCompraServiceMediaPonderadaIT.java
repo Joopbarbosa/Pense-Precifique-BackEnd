@@ -1,9 +1,12 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
+import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.dto.request.insumo.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
@@ -33,33 +36,42 @@ class LoteCompraServiceMediaPonderadaIT {
     @Autowired LoteCompraService loteCompraService;
     @Autowired InsumoRepository insumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
+
+    private Usuario usuario;
 
     private void seedUsuario() {
-        Usuario usuario = usuarioRepository.save(Usuario.builder()
+        usuario = usuarioRepository.save(Usuario.builder()
                 .email("media-ponderada-" + UUID.randomUUID() + "@test.com")
                 .senhaHash("x").ativo(true).build());
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
     }
 
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
+    }
+
     /** Cria insumo com 10 unidades a custo unitário 10 (compra inicial de R$100). */
     private UUID criarInsumoComEstoqueDez() {
         InsumoResponseDTO criado = insumoService.cadastrar(new InsumoCreateRequestDTO(
-                "Insumo " + UUID.randomUUID(), null, "kg", true, null, true,
+                "Insumo " + UUID.randomUUID(), null, unidadeMedida("kg").getId(), true, null, true,
                 BigDecimal.ZERO, new BigDecimal("100.00"), new BigDecimal("10")));
         // RN-NOVA-1 (V0.10.0, #442, altera INS-003) — cadastro não gera mais estoque/movimentação
         // automática (só custoUnitario calculado, estoqueAtual nasce 0). Este teste valida a
         // blindagem de LoteCompraService#registrarCompraIndividual, não o cadastro — registrar a
         // compra explicitamente para chegar ao mesmo estado de partida de antes (estoque 10, custo 10).
         loteCompraService.registrarCompraIndividual(
-                insumoRepository.findById(criado.id()).orElseThrow(),
+                insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(criado.id(), usuario.getId()).orElseThrow(),
                 new BigDecimal("10"), new BigDecimal("100.00"), UUID.randomUUID());
         return criado.id();
     }
 
     private void baixarParaNegativo(UUID insumoId, BigDecimal quantidade) {
         insumoService.baixaManual(insumoId, new BaixaManualInsumoRequestDTO(
-                quantidade, MotivoMovimentacaoInsumo.CORRECAO,
+                TipoMovimentacaoInsumo.SAIDA, quantidade, MotivoMovimentacaoInsumo.CORRECAO,
                 "Baixa de teste automatizado para forçar estoque negativo (blindagem RN-084)."));
     }
 
@@ -70,7 +82,7 @@ class LoteCompraServiceMediaPonderadaIT {
 
         // Compra 10 unidades a custo 20 → média: (10*10 + 200) / (10+10) = 300/20 = 15
         loteCompraService.registrarCompraIndividual(
-                insumoRepository.findById(insumoId).orElseThrow(),
+                insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuario.getId()).orElseThrow(),
                 new BigDecimal("10"), new BigDecimal("200"), UUID.randomUUID());
 
         Insumo insumo = insumoRepository.findById(insumoId).orElseThrow();
@@ -84,7 +96,7 @@ class LoteCompraServiceMediaPonderadaIT {
         UUID insumoId = criarInsumoComEstoqueDez(); // estoque 10, custo 10
         baixarParaNegativo(insumoId, new BigDecimal("30")); // estoque vira -20
 
-        Insumo antes = insumoRepository.findById(insumoId).orElseThrow();
+        Insumo antes = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuario.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("-20.0000").compareTo(antes.getEstoqueAtual()));
 
         // Compra 25 unidades por R$125 (custo real 5/unidade) com estoque anterior -20.
@@ -107,7 +119,7 @@ class LoteCompraServiceMediaPonderadaIT {
         UUID insumoId = criarInsumoComEstoqueDez(); // estoque 10, custo 10
         baixarParaNegativo(insumoId, new BigDecimal("30")); // estoque vira -20
 
-        Insumo antes = insumoRepository.findById(insumoId).orElseThrow();
+        Insumo antes = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuario.getId()).orElseThrow();
 
         // Compra exatamente 20 unidades por R$200 (custo real 10/unidade) — sem a blindagem, o
         // denominador (estoqueAnterior + quantidade) seria -20+20 = 0 → ArithmeticException.

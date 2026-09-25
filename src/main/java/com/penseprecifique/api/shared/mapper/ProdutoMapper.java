@@ -28,6 +28,7 @@ public class ProdutoMapper {
         response.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
         response.setNome(produto.getNome());
         response.setTipo(produto.getTipo());
+        response.setFotoUrl(produto.getFotoUrl());
         response.setPrecoVenda(produto.getPrecoVenda());
         response.setPrecoCusto(produto.getPrecoCusto());
         response.setMargemLucro(produto.getMargemLucro());
@@ -60,6 +61,7 @@ public class ProdutoMapper {
         response.setNome(produto.getNome());
         response.setTipo(produto.getTipo());
         response.setDescricao(produto.getDescricao());
+        response.setFotoUrl(produto.getFotoUrl());
         response.setTempoProducao(produto.getTempoProducao());
         response.setPrecoVenda(produto.getPrecoVenda());
         response.setPrecoCusto(produto.getPrecoCusto());
@@ -129,7 +131,7 @@ public class ProdutoMapper {
             response.setInsumoId(item.getInsumo().getId());
             response.setNomeInsumo(item.getInsumo().getNome());
             response.setMarcaInsumo(item.getInsumo().getMarca());
-            response.setUnidadeMedida(item.getInsumo().getUnidadeMedida());
+            response.setUnidadeMedida(item.getInsumo().getUnidadeMedida().getSigla());
             response.setFracionavelInsumo(item.getInsumo().getFracionavel());
             response.setTipoExibicaoQuantidade(item.getInsumo().getTipoExibicaoQuantidade());
         } else {

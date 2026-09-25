@@ -1,11 +1,13 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -44,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrcamentoEstoqueCustomizacaoIT {
 
     @Autowired OrcamentoService orcamentoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -72,7 +75,7 @@ class OrcamentoEstoqueCustomizacaoIT {
                 .rendimento(BigDecimal.TEN).precoVenda(new BigDecimal("10.00")).build());
         Insumo insumo = insumoRepository.save(Insumo.builder()
                 .usuario(usuario).numero(proximoNumero++).nome("Insumo " + proximoNumero).marca("X")
-                .unidadeMedida("g").estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true)
+                .unidadeMedida(unidadeMedida("g")).estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true)
                 .fracionavel(true).build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
                 .produto(produto).insumo(insumo).quantidade(BigDecimal.ONE).build());
@@ -173,5 +176,11 @@ class OrcamentoEstoqueCustomizacaoIT {
         Produto customizacaoAposCancelar = produtoRepository.findById(customizacao.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("50").compareTo(customizacaoAposCancelar.getEstoqueAtual()),
                 "reversão de estoque da customização não estava acontecendo antes desta correção");
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

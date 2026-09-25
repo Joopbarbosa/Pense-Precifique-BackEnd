@@ -252,6 +252,44 @@ class ProdutoResolverVinculosIT {
         assertTrue(produtoRepository.findById(alvo.getId()).orElseThrow().getDeletedAt() != null);
     }
 
+    @Test
+    void resolverVinculosSubstituirComponentePorCustomizacaoAtivaFunciona() {
+        // #436 — aplicarSubstituicoesComponente() restringia o substituto a TipoProduto.PRODUTO,
+        // desalinhado de RN-NOVA-8/#462 (FichaTecnicaService.salvarFichaTecnica já aceita
+        // Produto OU Customização, ambos ativos, desde V0.10.0). Prova do bug: este teste falhava
+        // com BusinessException("Apenas produtos ativos do tipo Produto...") antes da correção.
+        seedUsuario();
+        Produto alvo = novoProduto("Recheio", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
+        Produto produtoPai = novoProduto("Bolo composto", TipoProduto.PRODUTO, BigDecimal.ZERO);
+        FichaTecnicaItem componente = novoComponente(produtoPai, alvo, new BigDecimal("2"));
+        Produto substitutoCustomizacao = novoProduto("Recheio especial", TipoProduto.CUSTOMIZACAO, new BigDecimal("5.0000"));
+
+        produtoService.resolverVinculos(alvo.getId(),
+                request(OperacaoPosResolucaoVinculo.EXCLUIR, null,
+                        substituirComponente(subComponente(componente.getId(), substitutoCustomizacao.getId()))));
+
+        FichaTecnicaItem componenteAtualizado = fichaTecnicaItemRepository.findById(componente.getId()).orElseThrow();
+        assertEquals(substitutoCustomizacao.getId(), componenteAtualizado.getProdutoBase().getId());
+        assertEquals(0, new BigDecimal("10.0000").compareTo(produtoRepository.findById(produtoPai.getId()).orElseThrow().getPrecoCusto()));
+    }
+
+    @Test
+    void resolverVinculosSubstituirComponentePorProdutoInativoContinuaBloqueado() {
+        // trava original (ativo=true) permanece — só o filtro de TipoProduto foi removido.
+        seedUsuario();
+        Produto alvo = novoProduto("Recheio", TipoProduto.PRODUTO, new BigDecimal("2.0000"));
+        Produto produtoPai = novoProduto("Bolo composto", TipoProduto.PRODUTO, BigDecimal.ZERO);
+        FichaTecnicaItem componente = novoComponente(produtoPai, alvo, new BigDecimal("2"));
+        Produto substitutoInativo = novoProduto("Substituto inativo", TipoProduto.PRODUTO, new BigDecimal("5.0000"));
+        substitutoInativo.setAtivo(false);
+        produtoRepository.save(substitutoInativo);
+
+        ResolverVinculosProdutoRequest request = request(OperacaoPosResolucaoVinculo.EXCLUIR, null,
+                substituirComponente(subComponente(componente.getId(), substitutoInativo.getId())));
+
+        assertThrows(BusinessException.class, () -> produtoService.resolverVinculos(alvo.getId(), request));
+    }
+
     // ---------------------------------------------------------------
     // resolver-vinculos — os 2 blocos presentes, com ações independentes
     // ---------------------------------------------------------------

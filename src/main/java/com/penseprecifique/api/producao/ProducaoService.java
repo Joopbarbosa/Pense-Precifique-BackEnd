@@ -1732,7 +1732,7 @@ public class ProducaoService {
             response.setInsumoId(insumo.getId());
             response.setNomeInsumo(insumo.getNome());
             response.setMarca(insumo.getMarca());
-            response.setUnidadeMedida(insumo.getUnidadeMedida());
+            response.setUnidadeMedida(insumo.getUnidadeMedida().getSigla());
             estoqueAtual = insumo.getEstoqueAtual();
         } else {
             Produto base = item.getProdutoBase();

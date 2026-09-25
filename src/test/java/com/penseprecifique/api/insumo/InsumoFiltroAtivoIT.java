@@ -1,7 +1,9 @@
 package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoResponseDTO;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InsumoFiltroAtivoIT {
 
     @Autowired InsumoService insumoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired InsumoRepository insumoRepository;
     @Autowired UsuarioRepository usuarioRepository;
 
@@ -47,7 +50,7 @@ class InsumoFiltroAtivoIT {
     private Insumo criar(String nome, boolean ativo) {
         return insumoRepository.save(Insumo.builder()
                 .usuario(usuario).numero(contador.getAndIncrement())
-                .nome(nome).unidadeMedida("un").custoUnitario(BigDecimal.TEN)
+                .nome(nome).unidadeMedida(unidadeMedida("un")).custoUnitario(BigDecimal.TEN)
                 .estoqueAtual(BigDecimal.TEN).permitirEstoqueNegativo(true).fracionavel(true)
                 .ativo(ativo).build());
     }
@@ -94,5 +97,11 @@ class InsumoFiltroAtivoIT {
         Page<InsumoResponseDTO> pagina = insumoService.listar(null, null, PageRequest.of(0, 20));
 
         assertEquals(2, pagina.getTotalElements());
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

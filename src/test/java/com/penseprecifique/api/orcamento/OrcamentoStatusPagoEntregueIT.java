@@ -1,11 +1,13 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
@@ -44,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrcamentoStatusPagoEntregueIT {
 
     @Autowired OrcamentoService orcamentoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -73,7 +76,7 @@ class OrcamentoStatusPagoEntregueIT {
                 .rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(1).nome("Insumo Status").marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(1).nome("Insumo Status").marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
                 .build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
@@ -149,5 +152,11 @@ class OrcamentoStatusPagoEntregueIT {
                 "achado do teste manual — DTO precisa continuar expondo dataPagamento em ENTREGUE também");
         assertTrue(reciboPagamentoRepository.findByOrcamentoId(orcamentoId).isPresent(),
                 "recibo continua existindo, gerado só uma vez na transição pra PAGO");
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

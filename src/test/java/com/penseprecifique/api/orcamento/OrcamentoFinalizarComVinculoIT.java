@@ -1,12 +1,14 @@
 package com.penseprecifique.api.orcamento;
 
 import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
@@ -48,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrcamentoFinalizarComVinculoIT {
 
     @Autowired OrcamentoService orcamentoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -77,7 +80,7 @@ class OrcamentoFinalizarComVinculoIT {
                 .rendimento(new BigDecimal("10")).precoVenda(new BigDecimal("10.00")).build());
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida("g")
+                .usuario(usuario).numero(numero).nome("Insumo " + numero).marca("X").unidadeMedida(unidadeMedida("g"))
                 .estoqueAtual(new BigDecimal("1000")).permitirEstoqueNegativo(true).fracionavel(true)
                 .build());
         fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
@@ -304,5 +307,11 @@ class OrcamentoFinalizarComVinculoIT {
                 () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
         assertTrue(ex.getMessage().contains(IdentificadorFormatter.formatar("PRD", producaoB.getNumero())));
         assertTrue(ex.getMessage().contains("EM_ANDAMENTO"));
+    }
+
+    private UnidadeMedida unidadeMedida(String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

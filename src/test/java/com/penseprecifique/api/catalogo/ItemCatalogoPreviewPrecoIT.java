@@ -1,10 +1,12 @@
 package com.penseprecifique.api.catalogo;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.ConfiguracaoPrecificacao;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -39,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ItemCatalogoPreviewPrecoIT {
 
     @Autowired CatalogoService catalogoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired ItemCatalogoService itemCatalogoService;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -65,7 +68,7 @@ class ItemCatalogoPreviewPrecoIT {
 
     private Insumo novoInsumo(Usuario usuario, String nome, BigDecimal custoUnitario) {
         return insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(proximoNumeroInsumo++).nome(nome).unidadeMedida("un")
+                .usuario(usuario).numero(proximoNumeroInsumo++).nome(nome).unidadeMedida(unidadeMedida(usuario, "un"))
                 .custoUnitario(custoUnitario).estoqueAtual(BigDecimal.TEN).fracionavel(true)
                 .permitirEstoqueNegativo(true).build());
     }
@@ -189,5 +192,11 @@ class ItemCatalogoPreviewPrecoIT {
         request.setTempoProducao(0);
 
         assertThrows(ResourceNotFoundException.class, () -> itemCatalogoService.previewPreco(UUID.randomUUID(), request));
+    }
+
+    private UnidadeMedida unidadeMedida(Usuario usuario, String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }

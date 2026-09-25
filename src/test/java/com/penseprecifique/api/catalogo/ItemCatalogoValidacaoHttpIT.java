@@ -2,9 +2,11 @@ package com.penseprecifique.api.catalogo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.infra.security.JwtTokenProvider;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ItemCatalogoValidacaoHttpIT {
 
     @Autowired MockMvc mockMvc;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired InsumoRepository insumoRepository;
     @Autowired JwtTokenProvider jwtTokenProvider;
@@ -88,7 +91,7 @@ class ItemCatalogoValidacaoHttpIT {
         UUID catalogoId = novoCatalogoViaHttp(token);
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(proximoNumeroInsumo++).nome("Insumo Validação").unidadeMedida("un")
+                .usuario(usuario).numero(proximoNumeroInsumo++).nome("Insumo Validação").unidadeMedida(unidadeMedida(usuario, "un"))
                 .custoUnitario(new BigDecimal("1.0000")).estoqueAtual(BigDecimal.TEN).fracionavel(true)
                 .permitirEstoqueNegativo(true).build());
 
@@ -121,7 +124,7 @@ class ItemCatalogoValidacaoHttpIT {
         UUID catalogoId = novoCatalogoViaHttp(token);
 
         Insumo insumo = insumoRepository.save(Insumo.builder()
-                .usuario(usuario).numero(proximoNumeroInsumo++).nome("Insumo Upload Foto").unidadeMedida("un")
+                .usuario(usuario).numero(proximoNumeroInsumo++).nome("Insumo Upload Foto").unidadeMedida(unidadeMedida(usuario, "un"))
                 .custoUnitario(new BigDecimal("1.0000")).estoqueAtual(BigDecimal.TEN).fracionavel(true)
                 .permitirEstoqueNegativo(true).build());
 
@@ -142,5 +145,11 @@ class ItemCatalogoValidacaoHttpIT {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Arquivo não enviado corretamente. Tente novamente."));
+    }
+
+    private UnidadeMedida unidadeMedida(Usuario usuario, String sigla) {
+        return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
 }
