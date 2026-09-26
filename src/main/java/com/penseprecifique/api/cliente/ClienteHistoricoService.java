@@ -3,16 +3,23 @@ package com.penseprecifique.api.cliente;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.caixa.VendaCaixaItemRepository;
 import com.penseprecifique.api.caixa.VendaCaixaRepository;
+import com.penseprecifique.api.compra.CompraItemRepository;
+import com.penseprecifique.api.compra.CompraRepository;
+import com.penseprecifique.api.compra.FornecedorInsumoRepository;
 import com.penseprecifique.api.orcamento.OrcamentoItemRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
+import com.penseprecifique.api.shared.domain.entity.Compra;
+import com.penseprecifique.api.shared.domain.entity.CompraItem;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.entity.VendaCaixa;
 import com.penseprecifique.api.shared.domain.entity.VendaCaixaItem;
+import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteGraficosResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.CompraFornecedorResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteIndicadoresResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.IndicadoresClienteResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.IndicadoresFornecedorResponse;
@@ -21,6 +28,7 @@ import com.penseprecifique.api.shared.dto.response.cliente.PedidoClienteResponse
 import com.penseprecifique.api.shared.dto.response.cliente.QuantidadeValorResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.mapper.CompraMapper;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -68,6 +76,9 @@ public class ClienteHistoricoService {
     private final OrcamentoItemRepository orcamentoItemRepository;
     private final VendaCaixaRepository vendaCaixaRepository;
     private final VendaCaixaItemRepository vendaCaixaItemRepository;
+    private final CompraRepository compraRepository;
+    private final CompraItemRepository compraItemRepository;
+    private final FornecedorInsumoRepository fornecedorInsumoRepository;
 
     /** Linha interna: pedido + itens (só carregados para os que contam como compra). */
     private record Pedido(PedidoClienteResponse resumo, List<LinhaItem> itens) {}
@@ -255,8 +266,78 @@ public class ClienteHistoricoService {
                 .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
     }
 
-    /** Lado Fornecedor (RN-NOVA-19): compras CONFIRMADAS — preenchido junto com o módulo compra/. */
+    /**
+     * Lado Fornecedor (RN-NOVA-19): só compras CONFIRMADAS (mesmo critério da RN-NOVA-15). Numa compra
+     * com vários fornecedores, conta só a parte (linhas) deste fornecedor.
+     */
     private IndicadoresFornecedorResponse indicadoresFornecedor(UUID fornecedorId, UUID usuarioId) {
-        return IndicadoresFornecedorResponse.vazio();
+        Map<Compra, List<CompraItem>> porCompra = linhasDoFornecedor(fornecedorId, usuarioId).entrySet().stream()
+                .filter(e -> e.getKey().getStatus() == StatusCompra.CONFIRMADA)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        long insumosVinculados = fornecedorInsumoRepository.countByUsuarioIdAndFornecedorId(usuarioId, fornecedorId);
+        if (porCompra.isEmpty()) {
+            return new IndicadoresFornecedorResponse(null, BigDecimal.ZERO, null, 0, null, insumosVinculados,
+                    new QuantidadeValorResponse(0, BigDecimal.ZERO));
+        }
+
+        BigDecimal total = porCompra.values().stream().map(CompraMapper::total).reduce(BigDecimal.ZERO, BigDecimal::add);
+        long n = porCompra.size();
+        Compra ultima = porCompra.keySet().stream()
+                .max(Comparator.comparing(Compra::getDataCompra).thenComparing(Compra::getNumero)).orElseThrow();
+
+        Map<UUID, IndicadoresFornecedorResponse.InsumoCompradoResponse> porInsumo = new LinkedHashMap<>();
+        porCompra.values().stream().flatMap(List::stream).filter(i -> i.getQuantidade() != null)
+                .forEach(i -> porInsumo.merge(i.getInsumo().getId(),
+                        new IndicadoresFornecedorResponse.InsumoCompradoResponse(i.getInsumo().getId(), i.getInsumo().getNome(),
+                                i.getInsumo().getUnidadeMedida() != null ? i.getInsumo().getUnidadeMedida().getSigla() : null,
+                                i.getQuantidade()),
+                        (a, b) -> new IndicadoresFornecedorResponse.InsumoCompradoResponse(a.id(), a.nome(), a.unidade(),
+                                a.quantidade().add(b.quantidade()))));
+        IndicadoresFornecedorResponse.InsumoCompradoResponse maisComprado = porInsumo.values().stream()
+                .max(Comparator.comparing(IndicadoresFornecedorResponse.InsumoCompradoResponse::quantidade)
+                        .thenComparing(IndicadoresFornecedorResponse.InsumoCompradoResponse::nome, Comparator.reverseOrder()))
+                .orElse(null);
+
+        List<Map.Entry<Compra, List<CompraItem>>> naoPagas = porCompra.entrySet().stream()
+                .filter(e -> !Boolean.TRUE.equals(e.getKey().getPago())).toList();
+
+        return new IndicadoresFornecedorResponse(
+                new IndicadoresFornecedorResponse.UltimaCompraFornecedor(ultima.getId(),
+                        IdentificadorFormatter.formatar("COM", ultima.getNumero()), ultima.getDataCompra()),
+                total,
+                total.divide(BigDecimal.valueOf(n), 2, RoundingMode.HALF_UP),
+                n,
+                maisComprado,
+                insumosVinculados,
+                new QuantidadeValorResponse(naoPagas.size(), naoPagas.stream().map(e -> CompraMapper.total(e.getValue()))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add)));
+    }
+
+    /** Aba Histórico, seção Fornecedor: todas as compras (qualquer status, sem excluídas). */
+    public Page<CompraFornecedorResponse> historicoCompras(UUID fornecedorId, Pageable pageable) {
+        UUID usuarioId = validarCadastro(fornecedorId);
+        List<CompraFornecedorResponse> todas = linhasDoFornecedor(fornecedorId, usuarioId).entrySet().stream()
+                .sorted(Comparator.comparing((Map.Entry<Compra, List<CompraItem>> e) -> e.getKey().getDataCompra())
+                        .thenComparing(e -> e.getKey().getNumero()).reversed())
+                .map(e -> new CompraFornecedorResponse(e.getKey().getId(),
+                        IdentificadorFormatter.formatar("COM", e.getKey().getNumero()), e.getKey().getDataCompra(),
+                        e.getKey().getStatus(), CompraMapper.total(e.getValue()), Boolean.TRUE.equals(e.getKey().getPago())))
+                .toList();
+        return paginar(todas, pageable);
+    }
+
+    /** Compras em que o cadastro aparece (cabeçalho ou linha) → linhas dele nessa compra. */
+    private Map<Compra, List<CompraItem>> linhasDoFornecedor(UUID fornecedorId, UUID usuarioId) {
+        List<Compra> compras = compraRepository.findDoFornecedor(usuarioId, fornecedorId);
+        if (compras.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<CompraItem>> itens = compraItemRepository.findByCompraIdIn(compras.stream().map(Compra::getId).toList())
+                .stream()
+                .filter(i -> i.getFornecedor() != null && i.getFornecedor().getId().equals(fornecedorId))
+                .collect(Collectors.groupingBy(i -> i.getCompra().getId()));
+        Map<Compra, List<CompraItem>> resultado = new LinkedHashMap<>();
+        compras.forEach(c -> resultado.put(c, itens.getOrDefault(c.getId(), List.of())));
+        return resultado;
     }
 }

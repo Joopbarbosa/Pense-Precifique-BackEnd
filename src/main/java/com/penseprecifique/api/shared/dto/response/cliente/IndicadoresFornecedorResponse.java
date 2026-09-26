@@ -20,9 +20,4 @@ public record IndicadoresFornecedorResponse(
     public record UltimaCompraFornecedor(UUID id, String identificador, java.time.LocalDate data) {}
 
     public record InsumoCompradoResponse(UUID id, String nome, String unidade, BigDecimal quantidade) {}
-
-    public static IndicadoresFornecedorResponse vazio() {
-        return new IndicadoresFornecedorResponse(null, BigDecimal.ZERO, null, 0, null, 0,
-                new QuantidadeValorResponse(0, BigDecimal.ZERO));
-    }
 }

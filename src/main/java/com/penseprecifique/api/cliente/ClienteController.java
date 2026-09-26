@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.request.cliente.ClienteRequest;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteContagensResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteGraficosResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteIndicadoresResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.CompraFornecedorResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.PedidoClienteResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteResponse;
@@ -57,6 +58,13 @@ public class ClienteController {
             @PathVariable UUID id,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(clienteHistoricoService.historicoPedidos(id, pageable));
+    }
+
+    @GetMapping("/{id}/historico/compras")
+    public ResponseEntity<Page<CompraFornecedorResponse>> historicoCompras(
+            @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(clienteHistoricoService.historicoCompras(id, pageable));
     }
 
     // #451 (V0.15.0) — gráficos do cliente; sem de/ate = últimos 12 meses.
