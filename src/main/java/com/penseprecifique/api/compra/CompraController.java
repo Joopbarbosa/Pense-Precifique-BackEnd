@@ -8,6 +8,8 @@ import com.penseprecifique.api.shared.dto.response.compra.CompraConfirmacaoRespo
 import com.penseprecifique.api.shared.dto.response.compra.CompraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.SimulacaoCancelamentoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResumoResponse;
+import com.penseprecifique.api.shared.dto.response.compra.DashboardComprasResponse;
+import com.penseprecifique.api.shared.dto.response.compra.EvolucaoPrecoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -19,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /** #541/#550 (V0.15.0) — Compras: listagem, rascunho, confirmação e pagamento. */
@@ -28,6 +31,7 @@ import java.util.UUID;
 public class CompraController {
 
     private final CompraService compraService;
+    private final DashboardCompraService dashboardCompraService;
 
     @GetMapping
     public ResponseEntity<Page<CompraResumoResponse>> listar(
@@ -37,6 +41,21 @@ public class CompraController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
             @PageableDefault(size = 20, sort = {"dataCompra", "numero"}, direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(compraService.listar(status, fornecedorId, de, ate, pageable));
+    }
+
+    /** #548/RN-NOVA-15 — cards do dashboard (só CONFIRMADAS). */
+    @GetMapping("/dashboard")
+    public ResponseEntity<DashboardComprasResponse> dashboard() {
+        return ResponseEntity.ok(dashboardCompraService.dashboard());
+    }
+
+    /** #548 — evolução do preço pago, até 5 insumos; período default = últimos 3 meses. */
+    @GetMapping("/evolucao-preco")
+    public ResponseEntity<EvolucaoPrecoResponse> evolucaoPreco(
+            @RequestParam(required = false) List<UUID> insumoIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return ResponseEntity.ok(dashboardCompraService.evolucaoPreco(insumoIds, de, ate));
     }
 
     @GetMapping("/{id}")
