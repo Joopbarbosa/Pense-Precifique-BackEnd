@@ -5,7 +5,9 @@ import com.penseprecifique.api.shared.dto.response.compra.CompraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.ListaCompraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.ListaCompraResumoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.PreviaListaCompraResponse;
+import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +25,7 @@ import java.util.UUID;
 public class ListaCompraController {
 
     private final ListaCompraService listaCompraService;
+    private final PdfService pdfService;
 
     /** Prévia calculada na hora, não salva (DT-NOVA-8). {@code insumoIds} = seleção manual. */
     @GetMapping("/previa")
@@ -52,5 +55,20 @@ public class ListaCompraController {
     @PostMapping("/{id}/criar-compra")
     public ResponseEntity<CompraResponse> criarCompra(@PathVariable UUID id) {
         return ResponseEntity.status(201).body(listaCompraService.criarCompra(id));
+    }
+
+    /** #547 (V0.15.0) — download do PDF. */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> pdf(@PathVariable UUID id) {
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=lista-compras.pdf")
+                .body(pdfService.gerarPdfListaCompras(id));
+    }
+
+    /** Preview HTML do mesmo documento (mesma fonte do PDF, sem layout duplicado no frontend). */
+    @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtml(@PathVariable UUID id) {
+        return ResponseEntity.ok(pdfService.gerarPreviewHtmlListaCompras(id));
     }
 }

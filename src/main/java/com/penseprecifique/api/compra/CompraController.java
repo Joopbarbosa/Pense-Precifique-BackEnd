@@ -10,7 +10,9 @@ import com.penseprecifique.api.shared.dto.response.compra.SimulacaoCancelamentoR
 import com.penseprecifique.api.shared.dto.response.compra.CompraResumoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.DashboardComprasResponse;
 import com.penseprecifique.api.shared.dto.response.compra.EvolucaoPrecoResponse;
+import com.penseprecifique.api.pdf.PdfService;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +33,7 @@ import java.util.UUID;
 public class CompraController {
 
     private final CompraService compraService;
+    private final PdfService pdfService;
     private final DashboardCompraService dashboardCompraService;
 
     @GetMapping
@@ -114,5 +117,20 @@ public class CompraController {
     public ResponseEntity<CompraResponse> atualizarPagamento(@PathVariable UUID id,
                                                              @Valid @RequestBody PagamentoCompraRequest request) {
         return ResponseEntity.ok(compraService.atualizarPagamento(id, request));
+    }
+
+    /** #545 (V0.15.0) — download do PDF. */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> pdf(@PathVariable UUID id) {
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=compra.pdf")
+                .body(pdfService.gerarPdfCompra(id));
+    }
+
+    /** Preview HTML do mesmo documento (mesma fonte do PDF, sem layout duplicado no frontend). */
+    @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtml(@PathVariable UUID id) {
+        return ResponseEntity.ok(pdfService.gerarPreviewHtmlCompra(id));
     }
 }
