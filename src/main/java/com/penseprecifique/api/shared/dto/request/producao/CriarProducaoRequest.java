@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.producao;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +20,7 @@ public class CriarProducaoRequest {
     @NotNull(message = "A data de término prevista é obrigatória")
     private LocalDate dataTerminoPrevista;
 
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String observacoes;
 
     @NotEmpty(message = "Informe ao menos um produto")

@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.orcamento;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,6 +32,7 @@ public class CriarProducaoVinculadaRequest {
     @NotNull(message = "A data de término prevista é obrigatória")
     private LocalDate dataTerminoPrevista;
 
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String observacoes;
 
     private List<UUID> produtoIds;

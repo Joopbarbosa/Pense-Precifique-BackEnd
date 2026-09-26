@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.orcamento;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
+import jakarta.validation.constraints.Size;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -28,6 +30,7 @@ public class OrcamentoRequest {
     @NotNull(message = "O método de pagamento é obrigatório")
     private MetodoPagamento metodoPagamento;
 
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String metodoPagamentoObs;
 
     @NotNull(message = "É obrigatório informar se o orçamento vai ter prazo de produção")
@@ -46,6 +49,7 @@ public class OrcamentoRequest {
     private String tipoDesconto = "PERCENTUAL";
     private BigDecimal descontoValor = BigDecimal.ZERO;
 
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String observacoes;
     private LocalDateTime dataValidade;
 }

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.orcamento;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import jakarta.validation.constraints.Size;
@@ -16,8 +17,10 @@ import java.util.UUID;
 public class AvancaStatusRequest {
 
     private MetodoPagamento metodoSinalRecebido;
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String metodoSinalRecebidoObs;
 
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String motivoCancelamento;
     private TipoCancelamento tipoCancelamento;
     private BigDecimal percentualMulta;
@@ -25,6 +28,7 @@ public class AvancaStatusRequest {
     private LocalDateTime dataEstornoSinal;
 
     @Size(min = 30, message = "A justificativa deve ter no mínimo 30 caracteres")
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String justificativa;
 
     // RN-052 — mesma semântica de IniciarProducaoRequest.confirmarEstoqueNegativoInsumoIds, usada ao
