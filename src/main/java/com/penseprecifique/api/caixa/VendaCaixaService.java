@@ -84,7 +84,7 @@ public class VendaCaixaService {
 
         Cliente cliente = null;
         if (request.clienteId() != null) {
-            cliente = clienteRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(request.clienteId(), usuarioId)
+            cliente = clienteRepository.findByIdAndUsuarioId(request.clienteId(), usuarioId)
                     .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
         }
 

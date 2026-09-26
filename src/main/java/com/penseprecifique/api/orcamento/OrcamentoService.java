@@ -245,7 +245,7 @@ public class OrcamentoService {
         Usuario usuario = getUsuarioAutenticado();
         UUID usuarioId = usuario.getId();
 
-        Cliente cliente = clienteRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(request.getClienteId(), usuarioId)
+        Cliente cliente = clienteRepository.findByIdAndUsuarioId(request.getClienteId(), usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
 
         validarRegras(request);
@@ -318,7 +318,7 @@ public class OrcamentoService {
             throw new BusinessException("Só é possível editar um orçamento em Rascunho.");
         }
 
-        Cliente cliente = clienteRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(request.getClienteId(), usuarioId)
+        Cliente cliente = clienteRepository.findByIdAndUsuarioId(request.getClienteId(), usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
 
         validarRegras(request);

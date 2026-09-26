@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.UUID;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,10 +41,10 @@ class PathVariableTipoInvalidoIT {
     }
 
     @Test
-    void deleteClienteComIdNaoUuidRetorna400EmVezDe500() throws Exception {
+    void inativarClienteComIdNaoUuidRetorna400EmVezDe500() throws Exception {
         String token = tokenParaNovoUsuario();
 
-        mockMvc.perform(delete("/clientes/0")
+        mockMvc.perform(post("/clientes/0/inativar")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));

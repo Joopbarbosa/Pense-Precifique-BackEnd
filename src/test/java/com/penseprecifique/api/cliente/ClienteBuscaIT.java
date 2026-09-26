@@ -89,7 +89,7 @@ class ClienteBuscaIT {
     }
 
     private List<UUID> idsEncontrados(String busca) {
-        Page<ClienteResponse> pagina = clienteService.listar(busca, PageRequest.of(0, 20));
+        Page<ClienteResponse> pagina = clienteService.listar(busca, null, null, PageRequest.of(0, 20));
         return pagina.getContent().stream().map(ClienteResponse::getId).toList();
     }
 }
