@@ -18,10 +18,14 @@ import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
+import com.penseprecifique.api.shared.dto.request.compra.CancelarCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraItemRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.PagamentoCompraRequest;
+import com.penseprecifique.api.shared.dto.response.compra.CompraConfirmacaoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResponse;
+import com.penseprecifique.api.shared.dto.response.compra.ImpactoCompraResponse;
+import com.penseprecifique.api.shared.dto.response.compra.SimulacaoCancelamentoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResumoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
@@ -42,6 +46,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -79,6 +84,7 @@ public class CompraService {
     private final ClienteService clienteService;
     private final FornecedorInsumoService fornecedorInsumoService;
     private final CompraMapper compraMapper;
+    private final ImpactoCompraService impactoCompraService;
 
     // --------------------------------------------------------------------------------- consultas
 
@@ -135,7 +141,7 @@ public class CompraService {
     // --------------------------------------------------------------------------------- confirmar
 
     /** Compra nova confirmada direto ("Confirmar" sem salvar rascunho antes). Tudo ou nada. */
-    public CompraResponse confirmarNova(CompraRequest request) {
+    public CompraConfirmacaoResponse confirmarNova(CompraRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         Compra compra = novaCompra(usuario);
         aplicarRequest(compra, request, usuario.getId(), List.of());
@@ -143,7 +149,7 @@ public class CompraService {
     }
 
     /** Confirma um rascunho, gravando antes as alterações do request (se enviado). Tudo ou nada. */
-    public CompraResponse confirmar(UUID id, CompraRequest request) {
+    public CompraConfirmacaoResponse confirmar(UUID id, CompraRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         Compra compra = buscarEntidade(id, usuario.getId());
         exigirRascunho(compra, "Só é possível confirmar uma compra em Rascunho.");
@@ -153,9 +159,12 @@ public class CompraService {
         return confirmarEntidade(compra, usuario);
     }
 
-    private CompraResponse confirmarEntidade(Compra compra, Usuario usuario) {
+    private CompraConfirmacaoResponse confirmarEntidade(Compra compra, Usuario usuario) {
         List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
         validarParaConfirmar(compra, itens);
+        // #543 — custo de cada insumo antes da compra (primeira linha dele) → comparado ao final.
+        Map<UUID, BigDecimal> custoAntes = new LinkedHashMap<>();
+        itens.forEach(i -> custoAntes.putIfAbsent(i.getInsumo().getId(), i.getInsumo().getCustoUnitario()));
 
         for (CompraItem item : itens) {
             Insumo insumo = item.getInsumo();
@@ -192,7 +201,17 @@ public class CompraService {
         compra.setStatus(StatusCompra.CONFIRMADA);
         compra.setConfirmadaEm(LocalDateTime.now());
         compraRepository.save(compra);
-        return compraMapper.toResponse(compra, itens);
+
+        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes));
+        return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), impacto);
+    }
+
+    private static List<ImpactoCompraService.MudancaCusto> mudancas(List<CompraItem> itens, Map<UUID, BigDecimal> custoAntes) {
+        Map<UUID, Insumo> insumos = new LinkedHashMap<>();
+        itens.forEach(i -> insumos.putIfAbsent(i.getInsumo().getId(), i.getInsumo()));
+        return insumos.values().stream()
+                .map(i -> new ImpactoCompraService.MudancaCusto(i, custoAntes.get(i.getId()), i.getCustoUnitario()))
+                .toList();
     }
 
     /**
@@ -223,6 +242,162 @@ public class CompraService {
         }
         if (!problemas.isEmpty()) {
             throw new BusinessException("Não foi possível confirmar a compra. " + String.join("; ", problemas) + ".");
+        }
+    }
+
+    // --------------------------------------------------------------------------------- cancelar
+
+    /** #544/RN-NOVA-9 — prévia do cancelamento (padrão simular-*): nada é gravado. */
+    @Transactional(readOnly = true)
+    public SimulacaoCancelamentoResponse simularCancelamento(UUID id) {
+        Compra compra = buscarEntidade(id, getUsuarioAutenticado().getId());
+        exigirConfirmada(compra);
+        return simular(compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
+    }
+
+    /**
+     * #544/RN-NOVA-9 — só CONFIRMADA. Estoque negativo proibido em qualquer linha bloqueia tudo.
+     * Custo: volta ao anterior só se nada mudou o custo do insumo desde esta compra
+     * (custo atual == custo posterior da linha, DT-NOVA-4); senão mantém, com AVISO confirmado antes.
+     * Linhas processadas de trás para frente, para o mesmo insumo em duas linhas voltar em cadeia.
+     * Movimentações originais ficam estornadas; nasce uma SAIDA/ESTORNO_COMPRA por linha. Preço de
+     * referência dos vínculos não é revertido.
+     */
+    public CompraConfirmacaoResponse cancelar(UUID id, CancelarCompraRequest request) {
+        Usuario usuario = getUsuarioAutenticado();
+        Compra compra = buscarEntidade(id, usuario.getId());
+        exigirConfirmada(compra);
+        List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
+
+        SimulacaoCancelamentoResponse simulacao = simular(itens);
+        if (!simulacao.bloqueios().isEmpty()) {
+            throw new BusinessException("Não é possível cancelar: o estoque ficaria negativo em "
+                    + simulacao.bloqueios().stream().map(SimulacaoCancelamentoResponse.EstoqueNegativo::nome)
+                            .collect(Collectors.joining(", "))
+                    + ", que não permite estoque negativo.");
+        }
+        if (!simulacao.avisos().isEmpty() && !Boolean.TRUE.equals(request.confirmarManterCusto())) {
+            throw new BusinessException("Confirme o cancelamento: "
+                    + simulacao.avisos().stream().map(SimulacaoCancelamentoResponse.CustoMantido::nome)
+                            .collect(Collectors.joining(", "))
+                    + " manterá o custo atual, porque o custo mudou depois desta compra.");
+        }
+
+        Map<UUID, BigDecimal> custoAntes = new LinkedHashMap<>();
+        itens.forEach(i -> custoAntes.putIfAbsent(i.getInsumo().getId(), i.getInsumo().getCustoUnitario()));
+
+        List<CompraItem> reverso = new ArrayList<>(itens);
+        java.util.Collections.reverse(reverso);
+        for (CompraItem item : reverso) {
+            Insumo insumo = item.getInsumo();
+            if (item.getCustoUnitarioPosterior() != null
+                    && insumo.getCustoUnitario().compareTo(item.getCustoUnitarioPosterior()) == 0) {
+                insumo.setCustoUnitario(item.getCustoUnitarioAnterior());
+            }
+            insumo.setEstoqueAtual(insumo.getEstoqueAtual().subtract(item.getQuantidade()));
+            insumoRepository.save(insumo);
+
+            movimentacaoInsumoRepository.save(MovimentacaoInsumo.builder()
+                    .insumo(insumo)
+                    .tipo(TipoMovimentacaoInsumo.SAIDA)
+                    .motivo(MotivoMovimentacaoInsumo.ESTORNO_COMPRA)
+                    .quantidade(item.getQuantidade())
+                    .custoUnitario(insumo.getCustoUnitario())
+                    .observacao(request.observacao())
+                    .referenciaId(compra.getId())
+                    .referenciaTipo(ReferenciaMovimentacaoTipo.COMPRA)
+                    .estornada(false)
+                    .build());
+        }
+        movimentacaoInsumoRepository.findByReferenciaIdAndReferenciaTipo(compra.getId(), ReferenciaMovimentacaoTipo.COMPRA)
+                .stream().filter(m -> m.getMotivo() == MotivoMovimentacaoInsumo.COMPRA)
+                .forEach(m -> {
+                    m.setEstornada(true);
+                    movimentacaoInsumoRepository.save(m);
+                });
+
+        compra.setStatus(StatusCompra.CANCELADA);
+        compra.setCanceladaEm(LocalDateTime.now());
+        compra.setObservacaoCancelamento(request.observacao());
+        compraRepository.save(compra);
+
+        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes));
+        return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), impacto);
+    }
+
+    private SimulacaoCancelamentoResponse simular(List<CompraItem> itens) {
+        // estoque: soma por insumo (o mesmo insumo pode estar em duas linhas)
+        Map<UUID, BigDecimal> estornoPorInsumo = new LinkedHashMap<>();
+        Map<UUID, Insumo> insumos = new LinkedHashMap<>();
+        itens.forEach(i -> {
+            insumos.putIfAbsent(i.getInsumo().getId(), i.getInsumo());
+            estornoPorInsumo.merge(i.getInsumo().getId(), i.getQuantidade(), BigDecimal::add);
+        });
+        List<SimulacaoCancelamentoResponse.EstoqueNegativo> bloqueios = new ArrayList<>();
+        estornoPorInsumo.forEach((insumoId, qtd) -> {
+            Insumo insumo = insumos.get(insumoId);
+            BigDecimal resultante = insumo.getEstoqueAtual().subtract(qtd);
+            if (resultante.signum() < 0 && !Boolean.TRUE.equals(insumo.getPermitirEstoqueNegativo())) {
+                bloqueios.add(new SimulacaoCancelamentoResponse.EstoqueNegativo(insumoId, insumo.getNome(),
+                        insumo.getUnidadeMedida() != null ? insumo.getUnidadeMedida().getSigla() : null,
+                        insumo.getEstoqueAtual(), qtd, resultante));
+            }
+        });
+
+        // custo: simula a reversão de trás para frente, como o cancelamento faz
+        Map<UUID, BigDecimal> custoSimulado = new LinkedHashMap<>();
+        insumos.forEach((insumoId, insumo) -> custoSimulado.put(insumoId, insumo.getCustoUnitario()));
+        Map<UUID, BigDecimal> mantido = new LinkedHashMap<>();
+        for (int k = itens.size() - 1; k >= 0; k--) {
+            CompraItem item = itens.get(k);
+            UUID insumoId = item.getInsumo().getId();
+            if (item.getCustoUnitarioPosterior() != null
+                    && custoSimulado.get(insumoId).compareTo(item.getCustoUnitarioPosterior()) == 0) {
+                custoSimulado.put(insumoId, item.getCustoUnitarioAnterior());
+            } else {
+                mantido.put(insumoId, item.getCustoUnitarioAnterior());
+            }
+        }
+        List<SimulacaoCancelamentoResponse.CustoMantido> avisos = mantido.entrySet().stream()
+                .map(e -> new SimulacaoCancelamentoResponse.CustoMantido(e.getKey(), insumos.get(e.getKey()).getNome(),
+                        insumos.get(e.getKey()).getCustoUnitario(), e.getValue()))
+                .toList();
+        return new SimulacaoCancelamentoResponse(bloqueios.isEmpty(), bloqueios, avisos);
+    }
+
+    // --------------------------------------------------------------------------------- duplicar
+
+    /**
+     * #544/RN-NOVA-10 — CONFIRMADA ou CANCELADA vira RASCUNHO novo (COM-N novo, data de hoje, Não pago),
+     * com cabeçalho, fornecedores, insumos, quantidades e preços copiados. Linhas com insumo hoje
+     * inativo são copiadas assim mesmo; a validação acontece ao confirmar.
+     */
+    public CompraResponse duplicar(UUID id) {
+        Usuario usuario = getUsuarioAutenticado();
+        Compra origem = buscarEntidade(id, usuario.getId());
+        if (origem.getStatus() == StatusCompra.RASCUNHO) {
+            throw new BusinessException("Só é possível duplicar uma compra confirmada ou cancelada.");
+        }
+        Compra copia = novaCompra(usuario);
+        copia.setDataCompra(LocalDate.now());
+        copia.setMultiplosFornecedores(origem.getMultiplosFornecedores());
+        copia.setFornecedor(origem.getFornecedor());
+        copia.setObservacoes(origem.getObservacoes());
+        copia.setPago(false);
+        copia.setMetodoPagamento(null);
+        compraRepository.save(copia);
+
+        List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(origem.getId()).stream()
+                .map(i -> CompraItem.builder().compra(copia).insumo(i.getInsumo()).fornecedor(i.getFornecedor())
+                        .quantidade(i.getQuantidade()).precoTotal(i.getPrecoTotal()).ordem(i.getOrdem()).build())
+                .toList();
+        compraItemRepository.saveAll(itens);
+        return compraMapper.toResponse(copia, compraItemRepository.findByCompraIdOrderByOrdemAsc(copia.getId()));
+    }
+
+    private static void exigirConfirmada(Compra compra) {
+        if (compra.getStatus() != StatusCompra.CONFIRMADA) {
+            throw new BusinessException("Só é possível cancelar uma compra confirmada.");
         }
     }
 

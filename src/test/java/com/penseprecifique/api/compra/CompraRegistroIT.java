@@ -124,7 +124,7 @@ class CompraRegistroIT {
         Insumo cola = insumo("Cola Branca 1L", "0", "12.00", true);
 
         CompraResponse r = compraService.confirmarNova(compra(null, List.of(
-                linha(papel, "500", "250.00"), linha(cola, "3", "45.00"))));
+                linha(papel, "500", "250.00"), linha(cola, "3", "45.00")))).compra();
 
         assertEquals(StatusCompra.CONFIRMADA, r.status());
         assertEquals("COM-1", r.identificador());
@@ -150,7 +150,7 @@ class CompraRegistroIT {
     void mediaPonderadaComEstoqueExistenteEValorNaoRedondo() {
         // 3 un. a R$ 12,00 + 7 un. por R$ 91,37 → 12,737 (preço pago 13,0529)
         Insumo cola = insumo("Cola Branca 1L", "3", "12.00", true);
-        CompraResponse r = compraService.confirmarNova(compra(null, List.of(linha(cola, "7", "91.37"))));
+        CompraResponse r = compraService.confirmarNova(compra(null, List.of(linha(cola, "7", "91.37")))).compra();
         assertEquals(0, new BigDecimal("12.7370").compareTo(recarregar(cola).getCustoUnitario()));
         assertEquals(0, new BigDecimal("13.0529").compareTo(r.itens().get(0).precoUnitarioPago()));
     }
@@ -261,7 +261,7 @@ class CompraRegistroIT {
         CompraResponse rascunho = compraService.criarRascunho(compra(papelaria.getId(), List.of(linha(a, "1", "1.00"))));
         papelaria.setAtiva(false);
         clienteRepository.save(papelaria);
-        assertEquals(StatusCompra.CONFIRMADA, compraService.confirmar(rascunho.id(), null).status());
+        assertEquals(StatusCompra.CONFIRMADA, compraService.confirmar(rascunho.id(), null).compra().status());
     }
 
     @Test
@@ -289,7 +289,7 @@ class CompraRegistroIT {
         assertThrows(BusinessException.class, () -> compraService.criarRascunho(comInativo));
 
         CompraResponse naoPaga = compraService.confirmarNova(new CompraRequest(LocalDate.now(), false, null, false,
-                pix.getId(), null, List.of(linha(a, "1", "1.00"))));
+                pix.getId(), null, List.of(linha(a, "1", "1.00")))).compra();
         assertFalse(naoPaga.pago());
         assertNull(naoPaga.metodoPagamento());
 

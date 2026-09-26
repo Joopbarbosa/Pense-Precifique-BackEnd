@@ -1,9 +1,12 @@
 package com.penseprecifique.api.compra;
 
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
+import com.penseprecifique.api.shared.dto.request.compra.CancelarCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.PagamentoCompraRequest;
+import com.penseprecifique.api.shared.dto.response.compra.CompraConfirmacaoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResponse;
+import com.penseprecifique.api.shared.dto.response.compra.SimulacaoCancelamentoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResumoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -60,15 +63,32 @@ public class CompraController {
 
     /** Confirmar compra nova sem rascunho prévio (tudo ou nada: se falhar, nada é criado). */
     @PostMapping("/confirmar")
-    public ResponseEntity<CompraResponse> confirmarNova(@Valid @RequestBody CompraRequest request) {
+    public ResponseEntity<CompraConfirmacaoResponse> confirmarNova(@Valid @RequestBody CompraRequest request) {
         return ResponseEntity.status(201).body(compraService.confirmarNova(request));
     }
 
     /** Confirmar rascunho; o corpo (opcional) grava as alterações antes, na mesma transação. */
     @PostMapping("/{id}/confirmar")
-    public ResponseEntity<CompraResponse> confirmar(@PathVariable UUID id,
+    public ResponseEntity<CompraConfirmacaoResponse> confirmar(@PathVariable UUID id,
                                                     @Valid @RequestBody(required = false) CompraRequest request) {
         return ResponseEntity.ok(compraService.confirmar(id, request));
+    }
+
+    /** #544 — prévia do cancelamento: bloqueios (estoque negativo) e avisos (custo mantido). */
+    @PostMapping("/{id}/simular-cancelamento")
+    public ResponseEntity<SimulacaoCancelamentoResponse> simularCancelamento(@PathVariable UUID id) {
+        return ResponseEntity.ok(compraService.simularCancelamento(id));
+    }
+
+    @PostMapping("/{id}/cancelar")
+    public ResponseEntity<CompraConfirmacaoResponse> cancelar(@PathVariable UUID id,
+                                                              @Valid @RequestBody CancelarCompraRequest request) {
+        return ResponseEntity.ok(compraService.cancelar(id, request));
+    }
+
+    @PostMapping("/{id}/duplicar")
+    public ResponseEntity<CompraResponse> duplicar(@PathVariable UUID id) {
+        return ResponseEntity.status(201).body(compraService.duplicar(id));
     }
 
     @PatchMapping("/{id}/pagamento")

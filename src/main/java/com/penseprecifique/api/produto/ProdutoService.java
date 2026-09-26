@@ -576,6 +576,32 @@ public class ProdutoService {
     }
 
     /**
+     * #543/DT-NOVA-7 (V0.15.0) — custo unitário do produto com custos de componentes substitutos, sem
+     * persistir nada: {@code custoInsumo}/{@code custoProduto} sobrepõem o custo atual do insumo e o
+     * precoCusto persistido do produto-base (quem não está no mapa usa o valor atual). Mesma fórmula
+     * de {@link #recalcularPrecoCustoPersistido}: soma da ficha + mão de obra, ÷ rendimento.
+     */
+    public BigDecimal simularCustoUnitario(Produto produto, Map<UUID, BigDecimal> custoInsumo,
+                                           Map<UUID, BigDecimal> custoProduto, BigDecimal valorHora) {
+        BigDecimal somaComponentes = fichaTecnicaItemRepository.findByProdutoId(produto.getId()).stream()
+                .map(item -> item.getQuantidade().multiply(item.getInsumo() != null
+                        ? custoInsumo.getOrDefault(item.getInsumo().getId(), item.getInsumo().getCustoUnitario())
+                        : custoProduto.getOrDefault(item.getProdutoBase().getId(), item.getProdutoBase().getPrecoCusto())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
+        return calcularCustoUnitario(custoTotalLote, produto.getRendimento());
+    }
+
+    /** #543 — preço sugerido pela fórmula vigente (PDT-004/PDT-005), exposto para o modal de impacto. */
+    public BigDecimal precoSugerido(BigDecimal custoUnitario, BigDecimal margemLucro) {
+        return calcularPrecoSugerido(custoUnitario, margemLucro);
+    }
+
+    public BigDecimal valorHora(UUID usuarioId) {
+        return buscarValorHora(usuarioId);
+    }
+
+    /**
      * Frente 5/P-BE-CONSOLIDADO-001 — reverte a inativação: {@code ativo=true}. Só atua sobre produto
      * não excluído (deletedAt null) — reativar produto excluído não é suportado, exclusão é permanente
      * (RN não permite "desexcluir"; é preciso recriar o produto). Idempotente: reativar produto já
