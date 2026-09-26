@@ -1,5 +1,7 @@
 package com.penseprecifique.api.orcamento;
 
+import java.util.Collection;
+import org.springframework.data.jpa.repository.EntityGraph;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -29,4 +31,8 @@ public interface OrcamentoItemRepository extends JpaRepository<OrcamentoItem, UU
         ORDER BY SUM(oi.quantidade) DESC
     """)
     List<Object[]> findTopProdutosMaisVendidos(@Param("uid") UUID uid, Pageable pageable);
+
+    /** #560/#451 (V0.15.0) — itens de vários orçamentos de uma vez (indicadores do cliente). */
+    @EntityGraph(attributePaths = {"itemCatalogo", "produto"})
+    List<OrcamentoItem> findByOrcamentoIdIn(Collection<UUID> orcamentoIds);
 }

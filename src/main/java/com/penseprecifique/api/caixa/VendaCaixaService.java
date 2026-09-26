@@ -3,7 +3,8 @@ package com.penseprecifique.api.caixa;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
-import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.cliente.ClienteService;
+import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoTaxaParcelaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -63,7 +64,7 @@ public class VendaCaixaService {
     private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     private final MovimentacaoProdutoRepository movimentacaoProdutoRepository;
     private final MovimentacaoInsumoRepository movimentacaoInsumoRepository;
-    private final ClienteRepository clienteRepository;
+    private final ClienteService clienteService;
     private final MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     private final MetodoPagamentoTaxaParcelaRepository metodoPagamentoTaxaParcelaRepository;
     private final PasswordEncoder passwordEncoder;
@@ -84,8 +85,9 @@ public class VendaCaixaService {
 
         Cliente cliente = null;
         if (request.clienteId() != null) {
-            cliente = clienteRepository.findByIdAndUsuarioId(request.clienteId(), usuarioId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
+            // #539/RN-NOVA-3 (V0.15.0) — venda é sempre vínculo novo: só cadastro ativo com papel Cliente.
+            cliente = clienteService.resolverParaVinculo(request.clienteId(), usuarioId,
+                    PapelCadastro.CLIENTE, null);
         }
 
         // RN-NOVA-1 (reaberta)/RN-NOVA-9 (V0.13.0, #516) — origem XOR ItemCatalogo/Produto direto;

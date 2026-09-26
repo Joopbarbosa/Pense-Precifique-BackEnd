@@ -14,4 +14,7 @@ public interface VendaCaixaRepository extends JpaRepository<VendaCaixa, UUID> {
     Optional<VendaCaixa> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 
     List<VendaCaixa> findByCaixaTurnoIdOrderByDataVendaDesc(UUID caixaTurnoId);
+
+    /** #560 (V0.15.0) — todas as vendas de um cadastro (histórico e indicadores do cliente). */
+    List<VendaCaixa> findByClienteIdAndUsuarioId(UUID clienteId, UUID usuarioId);
 }

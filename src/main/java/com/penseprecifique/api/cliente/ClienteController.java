@@ -3,6 +3,10 @@ package com.penseprecifique.api.cliente;
 import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.shared.dto.request.cliente.ClienteRequest;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteContagensResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.ClienteGraficosResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.ClienteIndicadoresResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.PedidoClienteResponse;
+import org.springframework.format.annotation.DateTimeFormat;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +16,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @RestController
@@ -20,6 +25,7 @@ import java.util.UUID;
 public class ClienteController {
 
     private final ClienteService clienteService;
+    private final ClienteHistoricoService clienteHistoricoService;
 
     // #356 — padronizado para 'busca' (mesmo nome usado por Produto/Insumo/Orçamento/Catálogo/Produção);
     // era 'nome' até V0.8.2, único endpoint divergente do padrão do resto do sistema.
@@ -38,6 +44,28 @@ public class ClienteController {
     @GetMapping("/contagens")
     public ResponseEntity<ClienteContagensResponse> contagens() {
         return ResponseEntity.ok(clienteService.contagens());
+    }
+
+    // #560 (V0.15.0) — página de detalhe: indicadores por papel e histórico (DT-NOVA-9).
+    @GetMapping("/{id}/indicadores")
+    public ResponseEntity<ClienteIndicadoresResponse> indicadores(@PathVariable UUID id) {
+        return ResponseEntity.ok(clienteHistoricoService.indicadores(id));
+    }
+
+    @GetMapping("/{id}/historico/pedidos")
+    public ResponseEntity<Page<PedidoClienteResponse>> historicoPedidos(
+            @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(clienteHistoricoService.historicoPedidos(id, pageable));
+    }
+
+    // #451 (V0.15.0) — gráficos do cliente; sem de/ate = últimos 12 meses.
+    @GetMapping("/{id}/graficos")
+    public ResponseEntity<ClienteGraficosResponse> graficos(
+            @PathVariable UUID id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return ResponseEntity.ok(clienteHistoricoService.graficos(id, de, ate));
     }
 
     @GetMapping("/{id}")

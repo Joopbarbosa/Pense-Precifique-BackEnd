@@ -34,6 +34,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -148,6 +149,10 @@ class OrcamentoStatusPagoEntregueIT {
         Orcamento apoisEntregue = orcamentoRepository.findById(orcamentoId).orElseThrow();
         assertEquals(dataPagamentoOriginal, apoisEntregue.getDataPagamento(),
                 "DT-NOVA-4 — nunca sobrescrito depois de setado uma vez");
+        // #560/RN-NOVA-22 (V0.15.0) — data de entrega gravada na transição, exposta no detalhe.
+        assertNotNull(apoisEntregue.getDataEntrega(), "RN-NOVA-22 — setado na transição pra ENTREGUE");
+        assertNotNull(detalhe.getDataEntrega(), "RN-NOVA-22 — exposto no detalhe");
+        assertNull(apoisPago.getDataEntrega(), "RN-NOVA-22 — nulo antes de ENTREGUE");
         assertEquals(dataPagamentoOriginal, detalhe.getDataPagamento(),
                 "achado do teste manual — DTO precisa continuar expondo dataPagamento em ENTREGUE também");
         assertTrue(reciboPagamentoRepository.findByOrcamentoId(orcamentoId).isPresent(),

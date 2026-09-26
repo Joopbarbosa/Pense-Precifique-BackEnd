@@ -55,6 +55,7 @@ public class OrcamentoMapper {
         response.setValorSinal(orcamento.getValorSinal());
         response.setDataSinalPago(orcamento.getDataSinalPago());
         response.setDataPagamento(orcamento.getDataPagamento()); // DT-NOVA-4/#466 — achado do teste manual
+        response.setDataEntrega(orcamento.getDataEntrega()); // #560/RN-NOVA-22
         response.setMetodoSinalRecebido(orcamento.getMetodoSinalRecebido());
         response.setMetodoSinalRecebidoObs(orcamento.getMetodoSinalRecebidoObs());
         response.setSubtotal(orcamento.getSubtotal());

@@ -52,7 +52,8 @@ import com.penseprecifique.api.shared.dto.response.orcamento.SimulacaoAvancoStat
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.OrcamentoMapper;
-import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.cliente.ClienteService;
+import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -112,7 +113,7 @@ public class OrcamentoService {
     private final OrcamentoItemComponenteRepository orcamentoItemComponenteRepository;
     private final ItemCatalogoRepository itemCatalogoRepository;
     private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
-    private final ClienteRepository clienteRepository;
+    private final ClienteService clienteService;
     private final ProdutoRepository produtoRepository;
     private final InsumoRepository insumoRepository;
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
@@ -245,8 +246,9 @@ public class OrcamentoService {
         Usuario usuario = getUsuarioAutenticado();
         UUID usuarioId = usuario.getId();
 
-        Cliente cliente = clienteRepository.findByIdAndUsuarioId(request.getClienteId(), usuarioId)
-                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
+        // #539/RN-NOVA-3 (V0.15.0) — vínculo novo: só cadastro ativo com papel Cliente.
+        Cliente cliente = clienteService.resolverParaVinculo(request.getClienteId(), usuarioId,
+                PapelCadastro.CLIENTE, null);
 
         validarRegras(request);
 
@@ -318,8 +320,10 @@ public class OrcamentoService {
             throw new BusinessException("Só é possível editar um orçamento em Rascunho.");
         }
 
-        Cliente cliente = clienteRepository.findByIdAndUsuarioId(request.getClienteId(), usuarioId)
-                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado"));
+        // #539/#538 (V0.15.0, RN-NOVA-2/3) — manter o cliente já salvo não passa pela trava de
+        // ativo/papel (CEN-NOVO-4: editar orçamento de cliente inativado); trocar de cliente passa.
+        Cliente cliente = clienteService.resolverParaVinculo(request.getClienteId(), usuarioId,
+                PapelCadastro.CLIENTE, orcamento.getCliente() != null ? orcamento.getCliente().getId() : null);
 
         validarRegras(request);
         for (OrcamentoItemRequest itemReq : request.getItens()) {
@@ -1004,6 +1008,10 @@ public class OrcamentoService {
                 break;
 
             case PAGO:
+                // #560/RN-NOVA-22 (V0.15.0) — evento pontual, gravado uma vez (DT-NOVA-10).
+                if (orcamento.getDataEntrega() == null) {
+                    orcamento.setDataEntrega(LocalDateTime.now());
+                }
                 orcamento.setStatus(StatusOrcamento.ENTREGUE);
                 break;
 
