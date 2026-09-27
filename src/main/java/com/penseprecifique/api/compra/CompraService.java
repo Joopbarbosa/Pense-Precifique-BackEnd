@@ -36,7 +36,9 @@ import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,10 +69,17 @@ import java.util.stream.Collectors;
 @Transactional
 public class CompraService {
 
+    // Expressões JPQL sobre o alias da query de listagem (c = compra, f = fornecedor do cabeçalho, em LEFT
+    // JOIN). Ajuste do teste manual (#541): a listagem ordena por qualquer coluna. Fornecedor = o do
+    // cabeçalho (compra com vários fornecedores fica sem, no fim); total e itens por subquery.
     private static final Map<String, String> CAMPOS_ORDENACAO = Map.of(
-            "dataCompra", "dataCompra",
-            "numero", "numero",
-            "createdAt", "createdAt");
+            "dataCompra", "c.dataCompra",
+            "numero", "c.numero",
+            "createdAt", "c.createdAt",
+            "fornecedor", "f.nome",
+            "status", "c.status",
+            "itens", "(SELECT COUNT(ci) FROM CompraItem ci WHERE ci.compra = c)",
+            "total", "(SELECT COALESCE(SUM(ci.precoTotal), 0) FROM CompraItem ci WHERE ci.compra = c)");
 
     static final String MSG_INSUMO_INATIVO = "Este insumo está inativo e não pode ser adicionado. Reative-o para continuar.";
     static final String MSG_SEM_METODO = "Escolha como a compra foi paga.";
@@ -92,7 +101,8 @@ public class CompraService {
     public Page<CompraResumoResponse> listar(StatusCompra status, UUID fornecedorId, LocalDate de, LocalDate ate,
                                              Pageable pageable) {
         UUID usuarioId = getUsuarioAutenticado().getId();
-        Pageable ordenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO, "dataCompra, numero, createdAt");
+        Pageable ordenado = PageableOrdenacaoResolver.resolverExpressaoJpql(comDesempate(pageable), CAMPOS_ORDENACAO,
+                "dataCompra, numero, createdAt, fornecedor, status, itens, total");
         Page<Compra> pagina = compraRepository.buscarComFiltros(usuarioId, status, fornecedorId != null,
                 fornecedorId != null ? fornecedorId : new UUID(0, 0), de, ate, ordenado);
 
@@ -103,6 +113,15 @@ public class CompraService {
                 .map(c -> compraMapper.toResumo(c, itensPorCompra.getOrDefault(c.getId(), List.of())))
                 .toList();
         return new PageImpl<>(conteudo, pageable, pagina.getTotalElements());
+    }
+
+    /** Empate numa coluna (mesmo total, mesmo fornecedor…) cai na compra mais recente, sempre estável. */
+    private static Pageable comDesempate(Pageable pageable) {
+        if (pageable.getSort().isUnsorted() || pageable.getSort().getOrderFor("numero") != null) {
+            return pageable;
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                pageable.getSort().and(Sort.by(Sort.Direction.DESC, "numero")));
     }
 
     @Transactional(readOnly = true)

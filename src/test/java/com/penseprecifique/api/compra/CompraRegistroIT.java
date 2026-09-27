@@ -321,6 +321,32 @@ class CompraRegistroIT {
     }
 
     @Test
+    void listagemOrdenaPorQualquerColuna() {
+        // Ajuste do teste manual (#541): ordenar por total, itens, fornecedor e status, com desempate estável.
+        Insumo a = insumo("Papel", "0", "0.40", true);
+        Insumo b = insumo("Cola", "0", "12.00", true);
+        Cliente zeta = cadastro("Zeta Aviamentos", false, true);
+        Cliente alfa = cadastro("Alfa Papelaria", false, true);
+        CompraResponse c1 = compraService.confirmarNova(compra(zeta.getId(), List.of(linha(a, "1", "18.35")))).compra();
+        CompraResponse c2 = compraService.criarRascunho(compra(alfa.getId(), List.of(linha(a, "1", "3.10"), linha(b, "2", "40.00"))));
+        CompraResponse c3 = compraService.criarRascunho(compra(null, List.of(linha(b, "1", "7.45"))));
+
+        java.util.function.Function<Sort, List<String>> ordem = sort -> compraService
+                .listar(null, null, null, null, PageRequest.of(0, 20, sort)).getContent().stream()
+                .map(CompraResumoResponse::identificador).toList();
+
+        assertEquals(List.of(c2.identificador(), c1.identificador(), c3.identificador()),
+                ordem.apply(Sort.by(Sort.Direction.DESC, "total")));              // 43,10 > 18,35 > 7,45
+        assertEquals(List.of(c2.identificador(), c3.identificador(), c1.identificador()),
+                ordem.apply(Sort.by(Sort.Direction.DESC, "itens")));              // 2 linhas; empate de 1 → mais recente
+        assertEquals(List.of(c2.identificador(), c1.identificador(), c3.identificador()),
+                ordem.apply(Sort.by(Sort.Direction.ASC, "fornecedor")));          // Alfa, Zeta, sem fornecedor no fim
+        assertEquals(List.of(c1.identificador(), c3.identificador(), c2.identificador()),
+                ordem.apply(Sort.by(Sort.Direction.ASC, "status")));              // CONFIRMADA antes de RASCUNHO
+        assertThrows(BusinessException.class, () -> ordem.apply(Sort.by("senha")));
+    }
+
+    @Test
     void cen29_indicadoresEHistoricoDoFornecedor() {
         Cliente papelaria = cadastro("Papelaria Central", true, true);
         Insumo papel = insumo("Papel", "0", "0.40", true);
