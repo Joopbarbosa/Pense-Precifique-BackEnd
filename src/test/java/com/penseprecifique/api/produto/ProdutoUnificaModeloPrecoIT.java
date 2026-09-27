@@ -34,6 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProdutoUnificaModeloPrecoIT {
 
     @Autowired ProdutoService produtoService;
+    @Autowired com.penseprecifique.api.empresa.ConfiguracaoService configuracaoService;
+    @Autowired ProdutoRepository produtoRepository;
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -132,7 +134,9 @@ class ProdutoUnificaModeloPrecoIT {
     }
 
     @Test
-    void precoVendaSemOverrideAcompanhaMudancaDeMargemNaEdicao() {
+    void precoVendaNaoAcompanhaMudancaDeMargemSemAArtesaDigitar() {
+        // #579/RN-NOVA-30 (V0.15.0) — inverte a regra antiga (o preço final seguia a nova margem): o preço
+        // final só muda quando a artesã digita; a margem nova move só o sugerido.
         seedUsuarioEInsumo();
 
         ProdutoRequest cadastroRequest = new ProdutoRequest();
@@ -155,9 +159,42 @@ class ProdutoUnificaModeloPrecoIT {
 
         ProdutoDetalheResponse editado = produtoService.editar(cadastrado.getId(), edicaoRequest);
 
-        // custoUnitario continua 4.00; precoSugerido = 4.00 * 2.0 = 8.00 — acompanha a nova margem
-        assertEquals(0, new BigDecimal("8.00").compareTo(editado.getPrecoVenda()));
-        assertFalse(editado.isOverride());
+        // custoUnitario continua 4.00; precoSugerido = 4.00 * 2.0 = 8.00, preço final fica nos 6.00 de antes
+        assertEquals(0, new BigDecimal("8.00").compareTo(editado.getPrecoSugerido()));
+        assertEquals(0, new BigDecimal("6.00").compareTo(editado.getPrecoVenda()));
+        assertTrue(editado.isOverride());
+
+        // Digitar um valor (mesmo igual ao sugerido) muda o preço final.
+        edicaoRequest.setPrecoVenda(new BigDecimal("8.00"));
+        ProdutoDetalheResponse digitado = produtoService.editar(cadastrado.getId(), edicaoRequest);
+        assertEquals(0, new BigDecimal("8.00").compareTo(digitado.getPrecoVenda()));
+        assertFalse(digitado.isOverride());
+    }
+
+    @Test
+    void valorHoraNovoRecalculaCustoGravadoSemMudarPrecoFinal() {
+        // #580/RN-NOVA-31 — CEN-NOVO-45: 30 min de mão de obra; valor-hora 20 → 25 soma R$ 2,50 ao custo.
+        seedUsuarioEInsumo();
+        configuracaoService.upsertConfiguracao(new com.penseprecifique.api.shared.dto.request.config.ConfiguracaoRequestDTO(
+                new BigDecimal("20.00"), new BigDecimal("50")));
+        ProdutoRequest req = new ProdutoRequest();
+        req.setNome("Laço");
+        req.setTipo(TipoProduto.PRODUTO);
+        req.setTempoProducao(30);
+        req.setRendimento(BigDecimal.ONE);
+        req.setMargemLucro(new BigDecimal("50"));
+        req.setPrecoVenda(new BigDecimal("12.00"));
+        req.setFichaTecnica(List.of(itemFichaTecnica(new BigDecimal("0.37")))); // 0,37 × 4,00 = 1,48
+        ProdutoDetalheResponse criado = produtoService.cadastrar(req);
+        assertEquals(0, new BigDecimal("11.48").compareTo(produtoRepository.findById(criado.getId()).orElseThrow().getPrecoCusto()));
+
+        configuracaoService.upsertConfiguracao(new com.penseprecifique.api.shared.dto.request.config.ConfiguracaoRequestDTO(
+                new BigDecimal("25.00"), new BigDecimal("50")));
+
+        var depois = produtoRepository.findById(criado.getId()).orElseThrow();
+        assertEquals(0, new BigDecimal("13.98").compareTo(depois.getPrecoCusto())); // 1,48 + 12,50
+        assertEquals(0, new BigDecimal("12.00").compareTo(depois.getPrecoVenda()));
+        assertEquals(0, new BigDecimal("20.97").compareTo(produtoService.buscarPorId(criado.getId()).getPrecoSugerido())); // 13,98 × 1,5
     }
 
     private UnidadeMedida unidadeMedida(String sigla) {

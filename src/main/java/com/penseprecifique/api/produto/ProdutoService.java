@@ -54,6 +54,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -229,7 +230,6 @@ public class ProdutoService {
 
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
         BigDecimal margemLucroAntigo = produto.getMargemLucro();
-        boolean overrideAntigo = Boolean.TRUE.equals(produto.getOverride());
         Boolean fracionavelAntigo = produto.getFracionavel();
         boolean fracionavelOverrideAntigo = Boolean.TRUE.equals(produto.getFracionavelOverride());
 
@@ -247,8 +247,7 @@ public class ProdutoService {
         produto.setPrecoCusto(custoUnitario);
 
         BigDecimal precoSugerido = calcularPrecoSugerido(custoUnitario, produto.getMargemLucro());
-        boolean margemMudou = !valoresIguais(margemLucroAntigo, produto.getMargemLucro());
-        aplicarPrecoVendaEdicao(produto, request.getPrecoVenda(), precoSugerido, precoVendaAntigo, overrideAntigo, margemMudou);
+        aplicarPrecoVendaEdicao(produto, request.getPrecoVenda(), precoSugerido, precoVendaAntigo);
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO) {
             validarPrecoVendaObrigatorio(produto);
         }
@@ -560,6 +559,32 @@ public class ProdutoService {
     }
 
     /**
+     * #580/RN-NOVA-31 (V0.15.0) — valor-hora novo: recalcula o custo gravado de todos os produtos da
+     * artesã, componentes antes de quem os usa (a ficha técnica lê o custo gravado do produto base).
+     * Nunca toca o preço final (RN-NOVA-30).
+     */
+    public void recalcularCustoDeTodos(UUID usuarioId) {
+        Set<UUID> feitos = new HashSet<>();
+        for (TipoProduto tipo : TipoProduto.values()) {
+            produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo)
+                    .forEach(p -> recalcularEmOrdem(p.getId(), feitos, new HashSet<>()));
+        }
+    }
+
+    private void recalcularEmOrdem(UUID produtoId, Set<UUID> feitos, Set<UUID> caminho) {
+        if (feitos.contains(produtoId) || !caminho.add(produtoId)) {
+            return;
+        }
+        for (FichaTecnicaItem item : fichaTecnicaItemRepository.findByProdutoId(produtoId)) {
+            if (item.getProdutoBase() != null) {
+                recalcularEmOrdem(item.getProdutoBase().getId(), feitos, caminho);
+            }
+        }
+        recalcularPrecoCustoPersistido(produtoId);
+        feitos.add(produtoId);
+    }
+
+    /**
      * #228/#237 — recalcula e persiste {@code produto.precoCusto} a partir da ficha técnica atual, sem
      * tocar {@code precoVenda}/{@code override} (mudança de custo nunca recalcula o preço sozinha —
      * mesma regra de {@link #editar(UUID, ProdutoRequest)}). Usado após substituição/remoção de
@@ -719,30 +744,18 @@ public class ProdutoService {
         }
     }
 
+    /**
+     * #579/RN-NOVA-30 (V0.15.0) — o preço final só muda quando a artesã digita um valor diferente do que
+     * está gravado. Mudança de margem, de ficha técnica ou de custo atualiza só o sugerido; override passa
+     * a significar apenas "preço final diferente do sugerido de agora".
+     */
     private void aplicarPrecoVendaEdicao(Produto produto, BigDecimal precoVendaInformado, BigDecimal precoSugerido,
-                                          BigDecimal precoVendaAntigo, boolean overrideAntigo, boolean margemMudou) {
-        if (precoVendaInformado != null && precoVendaInformado.compareTo(precoSugerido) != 0) {
-            // artesã editou o preço manualmente para um valor diferente do sugerido
-            produto.setPrecoVenda(precoVendaInformado);
-            produto.setOverride(true);
-            return;
-        }
-        if (precoVendaInformado != null) {
-            // veio igual ao sugerido: trata como se não fosse override
-            produto.setPrecoVenda(precoSugerido);
-            produto.setOverride(false);
-            return;
-        }
-        // precoVenda não veio no request
-        if (margemMudou && !overrideAntigo) {
-            // sem override: acompanha a nova margem
-            produto.setPrecoVenda(precoSugerido);
-            produto.setOverride(false);
-            return;
-        }
-        // com override, ou mudança apenas de custo (ficha técnica/insumo): preço persistido nunca muda sozinho
-        produto.setPrecoVenda(precoVendaAntigo);
-        produto.setOverride(overrideAntigo);
+                                          BigDecimal precoVendaAntigo) {
+        BigDecimal precoFinal = precoVendaInformado != null && precoVendaInformado.compareTo(precoVendaAntigo) != 0
+                ? precoVendaInformado
+                : precoVendaAntigo;
+        produto.setPrecoVenda(precoFinal);
+        produto.setOverride(precoFinal.compareTo(precoSugerido) != 0);
     }
 
     // ---------------------------------------------------------------
@@ -804,13 +817,6 @@ public class ProdutoService {
             throw new BusinessException(
                     "O produto não possui custo calculado. Complete o cadastro do produto (ficha técnica e rendimento) antes de usá-lo.");
         }
-    }
-
-    private boolean valoresIguais(BigDecimal a, BigDecimal b) {
-        if (a == null || b == null) {
-            return a == b;
-        }
-        return a.compareTo(b) == 0;
     }
 
     private UUID getUsuarioIdAutenticado() {
