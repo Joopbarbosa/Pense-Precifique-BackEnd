@@ -384,6 +384,10 @@ public class PdfMapper {
         return "—".equals(valorFormatado) ? null : valorFormatado;
     }
 
+    private static BigDecimal nz(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
+    }
+
     private String formatarMoeda(BigDecimal valor) {
         if (valor == null) {
             return "—";
@@ -547,6 +551,10 @@ public class PdfMapper {
         }
         BigDecimal total = itens.stream().map(CompraItem::getPrecoTotal).filter(java.util.Objects::nonNull)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCheio = itens.stream().map(CompraItem::getPrecoCheio).filter(java.util.Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalDescontos = com.penseprecifique.api.shared.mapper.CompraMapper.totalDescontos(itens);
+        BigDecimal descontoNota = compra.getDescontoNota() != null ? compra.getDescontoNota() : BigDecimal.ZERO;
 
         PdfMicroservicoDocumentoCompraPayload documento = PdfMicroservicoDocumentoCompraPayload.builder()
             .numeroFormatado(com.penseprecifique.api.util.IdentificadorFormatter.formatar("COM", compra.getNumero()))
@@ -562,6 +570,15 @@ public class PdfMapper {
             .observacoes(compra.getObservacoes())
             .dataCancelamento(compra.getCanceladaEm() != null ? formatarData(compra.getCanceladaEm()) : null)
             .observacaoCancelamento(compra.getObservacaoCancelamento())
+            .temDesconto(totalDescontos.signum() > 0)
+            .totalCheio(formatarMoeda(totalCheio))
+            .totalDescontos(formatarMoeda(totalDescontos))
+            .descontoNota(descontoNota.signum() > 0
+                ? (compra.getDescontoNotaTipo() == com.penseprecifique.api.shared.domain.enums.TipoDesconto.PERCENTUAL
+                    ? compra.getDescontoNotaInformado().stripTrailingZeros().toPlainString().replace('.', ',') + "% ("
+                        + formatarMoeda(descontoNota) + ")"
+                    : formatarMoeda(descontoNota))
+                : null)
             .itens(itens.stream().map(i -> PdfMicroservicoItemCompraPayload.builder()
                     .insumo(i.getInsumo().getNome())
                     .fornecedor(i.getFornecedor() != null ? i.getFornecedor().getNome() : null)
@@ -570,6 +587,8 @@ public class PdfMapper {
                     .precoTotal(formatarMoeda(i.getPrecoTotal()))
                     .precoUnitario(formatarMoedaUnitaria(
                         com.penseprecifique.api.shared.mapper.CompraMapper.precoUnitario(i.getPrecoTotal(), i.getQuantidade())))
+                    .precoCheio(formatarMoeda(i.getPrecoCheio()))
+                    .desconto(formatarMoeda(nz(i.getDescontoLinha()).add(nz(i.getDescontoNota()))))
                     .build())
                 .toList())
             .build();

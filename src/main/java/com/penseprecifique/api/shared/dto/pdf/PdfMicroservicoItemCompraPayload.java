@@ -12,4 +12,7 @@ public class PdfMicroservicoItemCompraPayload {
     private String quantidade;
     private String precoTotal;
     private String precoUnitario;
+    /** #576/RN-NOVA-28 — preço cheio e desconto total da linha (linha + parte da nota), formatados. */
+    private String precoCheio;
+    private String desconto;
 }

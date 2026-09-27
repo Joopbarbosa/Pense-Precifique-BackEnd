@@ -76,4 +76,8 @@ public interface OrcamentoRepository extends JpaRepository<Orcamento, UUID> {
 
     /** #560 (V0.15.0) — todos os orçamentos (qualquer status) de um cadastro. */
     List<Orcamento> findByClienteIdAndUsuarioIdAndDeletedAtIsNull(UUID clienteId, UUID usuarioId);
+
+    /** #577/RN-NOVA-27 (V0.15.0) — vendas por orçamento no período do CMV (ENTREGUE pela data de entrega). */
+    List<Orcamento> findByUsuarioIdAndStatusAndDeletedAtIsNullAndDataEntregaBetween(
+            UUID usuarioId, StatusOrcamento status, LocalDateTime de, LocalDateTime ate);
 }

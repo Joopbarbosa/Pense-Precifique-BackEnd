@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.TreeSet;
 
 @Component
@@ -43,7 +44,31 @@ public class CompraMapper {
                 compra.getCanceladaEm(),
                 compra.getObservacaoCancelamento(),
                 compra.getCreatedAt(),
-                compra.getUpdatedAt());
+                compra.getUpdatedAt(),
+                compra.getDescontoNotaTipo(),
+                compra.getDescontoNotaInformado(),
+                compra.getDescontoNota(),
+                itens.stream().map(CompraItem::getPrecoCheio).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add),
+                totalDescontos(itens));
+    }
+
+    /** #576 — soma dos descontos de linha e das partes da nota. */
+    public static BigDecimal totalDescontos(List<CompraItem> itens) {
+        return itens.stream().map(i -> nz(i.getDescontoLinha()).add(nz(i.getDescontoNota())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** RN-NOVA-24 — "Fita de cetim ×12,5 m, Cola ×3 un" (quantidade com vírgula, sem zeros à direita). */
+    public static String resumoItens(List<CompraItem> itens) {
+        return itens.stream().map(i -> i.getInsumo().getNome() + (i.getQuantidade() != null
+                        ? " ×" + i.getQuantidade().stripTrailingZeros().toPlainString().replace('.', ',')
+                                + (i.getInsumo().getUnidadeMedida() != null ? " " + i.getInsumo().getUnidadeMedida().getSigla() : "")
+                        : ""))
+                .collect(Collectors.joining(", "));
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
     }
 
     public CompraResumoResponse toResumo(Compra compra, List<CompraItem> itens) {
@@ -62,7 +87,8 @@ public class CompraMapper {
                 List.copyOf(fornecedores),
                 Boolean.TRUE.equals(compra.getPago()),
                 total(itens),
-                itens.size());
+                itens.size(),
+                resumoItens(itens));
     }
 
     public CompraItemResponse toItemResponse(CompraItem item) {
@@ -76,7 +102,12 @@ public class CompraMapper {
                 precoUnitario(item.getPrecoTotal(), item.getQuantidade()),
                 item.getPrecoUnitarioPago(),
                 item.getCustoUnitarioAnterior(),
-                item.getCustoUnitarioPosterior());
+                item.getCustoUnitarioPosterior(),
+                item.getPrecoCheio(),
+                item.getDescontoTipo(),
+                item.getDescontoInformado(),
+                item.getDescontoLinha(),
+                item.getDescontoNota());
     }
 
     /** Preço total ÷ quantidade, 4 casas (mesma escala do custo do insumo); nulo se faltar um dos dois. */

@@ -1,6 +1,7 @@
 package com.penseprecifique.api.shared.dto.response.compra;
 
 import com.penseprecifique.api.shared.domain.enums.OrigemCompra;
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 
 import java.math.BigDecimal;
@@ -28,5 +29,11 @@ public record CompraResponse(
         LocalDateTime canceladaEm,
         String observacaoCancelamento,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        /** #576/RN-NOVA-28 — desconto da nota como digitado e em R$; totais cheio e de descontos. */
+        TipoDesconto descontoNotaTipo,
+        BigDecimal descontoNotaInformado,
+        BigDecimal descontoNota,
+        BigDecimal totalCheio,
+        BigDecimal totalDescontos
 ) {}

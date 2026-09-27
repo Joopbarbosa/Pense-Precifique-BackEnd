@@ -179,7 +179,7 @@ class CompraRegistroIT {
                 linha(a, "10", "5.00"), linha(b, "2", null), linha(c, "4", "6.00"))));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> compraService.confirmar(rascunho.id(), null));
-        assertTrue(ex.getMessage().contains("Linha 2 (Cola): informe o preço total pago"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("Linha 2 (Cola): informe o preço"), ex.getMessage());
         assertEquals(0, BigDecimal.ZERO.compareTo(recarregar(a).getEstoqueAtual()));
         assertEquals(0, BigDecimal.ZERO.compareTo(recarregar(c).getEstoqueAtual()));
         assertEquals(StatusCompra.RASCUNHO, compraService.buscar(rascunho.id()).status());

@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.domain.entity;
 
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -41,8 +43,31 @@ public class CompraItem {
     @Column(precision = 15, scale = 4)
     private BigDecimal quantidade;
 
+    /** Preço PAGO da linha (líquido de descontos). #576/RN-NOVA-28: calculado a partir do preço cheio. */
     @Column(name = "preco_total", precision = 15, scale = 2)
     private BigDecimal precoTotal;
+
+    /** #576/RN-NOVA-28 (V0.15.0) — preço cheio digitado (antes de qualquer desconto). */
+    @Column(name = "preco_cheio", precision = 15, scale = 2)
+    private BigDecimal precoCheio;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "desconto_tipo", length = 20)
+    private TipoDesconto descontoTipo;
+
+    /** Como foi digitado: R$ (VALOR) ou % (PERCENTUAL). */
+    @Column(name = "desconto_informado", precision = 15, scale = 2)
+    private BigDecimal descontoInformado;
+
+    /** Desconto da própria linha em R$. */
+    @Column(name = "desconto_linha", nullable = false, precision = 15, scale = 2)
+    @Builder.Default
+    private BigDecimal descontoLinha = BigDecimal.ZERO;
+
+    /** Parte do desconto da nota rateada para esta linha, em R$. */
+    @Column(name = "desconto_nota", nullable = false, precision = 15, scale = 2)
+    @Builder.Default
+    private BigDecimal descontoNota = BigDecimal.ZERO;
 
     @Column(name = "preco_unitario_pago", precision = 15, scale = 4)
     private BigDecimal precoUnitarioPago;

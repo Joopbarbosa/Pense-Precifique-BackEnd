@@ -42,14 +42,19 @@ public class CompraController {
             @RequestParam(required = false) UUID fornecedorId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
+            @RequestParam(required = false) UUID insumoId,
+            @RequestParam(required = false) String busca,
             @PageableDefault(size = 20, sort = {"dataCompra", "numero"}, direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(compraService.listar(status, fornecedorId, de, ate, pageable));
+        return ResponseEntity.ok(compraService.listar(status, fornecedorId, de, ate, insumoId, busca, pageable));
     }
 
     /** #548/RN-NOVA-15 — cards do dashboard (só CONFIRMADAS). */
+    /** #577/RN-NOVA-29 — sem de/ate: mês atual; comparação com o período anterior. */
     @GetMapping("/dashboard")
-    public ResponseEntity<DashboardComprasResponse> dashboard() {
-        return ResponseEntity.ok(dashboardCompraService.dashboard());
+    public ResponseEntity<DashboardComprasResponse> dashboard(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return ResponseEntity.ok(dashboardCompraService.dashboard(de, ate));
     }
 
     /** #548 — evolução do preço pago, até 5 insumos; período default = últimos 3 meses. */

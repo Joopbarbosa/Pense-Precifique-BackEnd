@@ -1,10 +1,13 @@
 package com.penseprecifique.api.shared.domain.entity;
 
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
+
 import com.penseprecifique.api.shared.domain.enums.OrigemCompra;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -61,6 +64,18 @@ public class Compra {
 
     @Column(columnDefinition = "TEXT")
     private String observacoes;
+
+    /** #576/RN-NOVA-28 (V0.15.0) — desconto na nota: como foi digitado e o valor em R$ rateado nas linhas. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "desconto_nota_tipo", length = 20)
+    private TipoDesconto descontoNotaTipo;
+
+    @Column(name = "desconto_nota_informado", precision = 15, scale = 2)
+    private BigDecimal descontoNotaInformado;
+
+    @Column(name = "desconto_nota", nullable = false, precision = 15, scale = 2)
+    @Builder.Default
+    private BigDecimal descontoNota = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

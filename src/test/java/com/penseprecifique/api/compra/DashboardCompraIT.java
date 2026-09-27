@@ -7,6 +7,7 @@ import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.dto.request.compra.CancelarCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraItemRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
@@ -31,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** V0.15.0 — #548 (RN-NOVA-15). Cenários CEN-NOVO-24 e CEN-NOVO-25. */
+/** V0.15.0 — #548 (RN-NOVA-15) e #577 (RN-NOVA-29). Cenários CEN-NOVO-24, 25, 40 e 41. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class DashboardCompraIT {
 
@@ -72,67 +73,122 @@ class DashboardCompraIT {
                 List.of(new CompraItemRequest(i.getId(), null, new BigDecimal(qtd), new BigDecimal(preco))))).compra();
     }
 
+    // Período fixo (setembro/2026) para não depender do dia em que a suíte roda.
+    private static final LocalDate SET_1 = LocalDate.of(2026, 9, 1);
+    private static final LocalDate SET_30 = LocalDate.of(2026, 9, 30);
+
+    private DashboardComprasResponse setembro() {
+        return dashboardCompraService.dashboard(SET_1, SET_30);
+    }
+
     @Test
     void cen24_dashboardIgnoraRascunhoECancelada() {
         Insumo cola = insumo("Cola");
-        confirmada(hoje, null, cola, "10", "100.00");                                       // COM-10 do cenário
-        CompraResponse cancelada = confirmada(hoje, null, cola, "5", "50.00");
+        confirmada(SET_1.plusDays(4), null, cola, "10", "100.00");
+        CompraResponse cancelada = confirmada(SET_1.plusDays(5), null, cola, "5", "50.00");
         compraService.cancelar(cancelada.id(), new CancelarCompraRequest("Pedido duplicado por engano no sistema.", true));
-        compraService.criarRascunho(new CompraRequest(hoje, false, null, false, null, null,
+        compraService.criarRascunho(new CompraRequest(SET_1.plusDays(6), false, null, false, null, null,
                 List.of(new CompraItemRequest(cola.getId(), null, BigDecimal.ONE, new BigDecimal("30.00")))));
 
-        DashboardComprasResponse d = dashboardCompraService.dashboard();
-        assertEquals(0, new BigDecimal("100.00").compareTo(d.totalGastoMes()));
-        assertEquals(0, new BigDecimal("100.00").compareTo(d.totalGastoAno()));
+        DashboardComprasResponse d = setembro();
+        assertEquals(0, new BigDecimal("100.00").compareTo(d.gasto().valor()));
+        assertEquals(0, BigDecimal.ONE.compareTo(d.quantidadeCompras().valor()));
     }
 
     @Test
-    void totalDoAnoSomaMesesAnterioresEFornecedorMaisUsado() {
+    void cen40_numerosComparamComOPeriodoAnterior() {
+        // Mês "atual" começando no dia 1 → anterior = agosto inteiro.
         Insumo cola = insumo("Cola");
-        Cliente papelaria = fornecedor("Papelaria Central");
-        Cliente atacado = fornecedor("Atacado Arte");
-        LocalDate inicioDoAno = hoje.withDayOfYear(1);
-        confirmada(hoje, papelaria, cola, "1", "12.40");
-        confirmada(inicioDoAno, papelaria, cola, "1", "7.35");
-        confirmada(hoje, atacado, cola, "1", "9.99");
-        confirmada(hoje.minusYears(1), atacado, cola, "1", "99.00"); // ano passado: fora dos totais
-        confirmada(hoje.minusYears(1), atacado, cola, "1", "99.00");
+        Cliente armarinho = fornecedor("Armarinho Boa Linha");
+        confirmada(LocalDate.of(2026, 9, 14), armarinho, cola, "2", "158.10");
+        confirmada(LocalDate.of(2026, 8, 2), armarinho, cola, "1", "128.65");
+        confirmada(LocalDate.of(2026, 7, 31), armarinho, cola, "1", "999.00"); // fora dos dois períodos
 
-        DashboardComprasResponse d = dashboardCompraService.dashboard();
-        boolean janeiro = hoje.getMonthValue() == 1;
-        assertEquals(0, new BigDecimal(janeiro ? "29.74" : "22.39").compareTo(d.totalGastoMes()));
-        assertEquals(0, new BigDecimal("29.74").compareTo(d.totalGastoAno()));
-        // Atacado aparece em 3 compras (2 do ano passado), Papelaria em 2
-        assertEquals("Atacado Arte", d.fornecedorMaisUsado().fornecedor().nome());
-        assertEquals(3, d.fornecedorMaisUsado().quantidadeCompras());
+        DashboardComprasResponse d = setembro();
+        assertEquals(LocalDate.of(2026, 8, 1), d.deAnterior());
+        assertEquals(LocalDate.of(2026, 8, 31), d.ateAnterior());
+        assertEquals(0, new BigDecimal("158.10").compareTo(d.gasto().valor()));
+        assertEquals(0, new BigDecimal("128.65").compareTo(d.gasto().anterior()));
+        assertEquals(new BigDecimal("22.89"), d.gasto().variacaoPercentual()); // (158,10 − 128,65) ÷ 128,65
+        assertEquals(0, new BigDecimal("158.10").compareTo(d.ticketMedio().valor()));
+        // Série mensal: no mínimo 6 meses terminando em setembro (abr–set).
+        assertEquals(6, d.meses().size());
+        assertEquals(LocalDate.of(2026, 4, 1), d.meses().get(0).mes());
+        assertEquals(0, new BigDecimal("999.00").compareTo(d.meses().get(3).gasto())); // julho
+        assertEquals("Armarinho Boa Linha", d.fornecedoresPorGasto().get(0).fornecedor().nome());
+        assertEquals(1, d.fornecedoresPorGasto().get(0).quantidadeCompras());
     }
 
     @Test
-    void insumoComMaiorAumentoEm90Dias() {
+    void cen41_fornecedoresQueMaisDeramDesconto() {
+        Insumo fita = insumo("Fita de cetim");
+        Insumo cola = insumo("Cola Branca 1L");
+        Insumo papel = insumo("Papel");
+        Cliente armarinho = fornecedor("Armarinho");
+        Cliente papelaria = fornecedor("Papelaria");
+        compraService.confirmarNova(new CompraRequest(SET_1.plusDays(9), false, armarinho.getId(), false, null, null, List.of(
+                new CompraItemRequest(fita.getId(), null, new BigDecimal("10"), null, new BigDecimal("30.00"), TipoDesconto.PERCENTUAL, new BigDecimal("10")),
+                new CompraItemRequest(cola.getId(), null, new BigDecimal("3"), null, new BigDecimal("45.90"), TipoDesconto.VALOR, new BigDecimal("1.90"))),
+                TipoDesconto.PERCENTUAL, new BigDecimal("5")));
+        compraService.confirmarNova(new CompraRequest(SET_1.plusDays(10), false, papelaria.getId(), false, null, null, List.of(
+                new CompraItemRequest(papel.getId(), null, new BigDecimal("100"), null, new BigDecimal("60.00"), TipoDesconto.VALOR, new BigDecimal("2.00"))),
+                null, null));
+
+        DashboardComprasResponse d = setembro();
+        assertEquals(0, new BigDecimal("10.45").compareTo(d.economia().valor()));      // 8,45 + 2,00
+        assertEquals(0, new BigDecimal("135.90").compareTo(d.economia().totalCheio())); // 75,90 + 60,00
+        assertEquals(new BigDecimal("7.69"), d.economia().percentual());
+        List<DashboardComprasResponse.FornecedorDesconto> pct = d.fornecedoresPorDescontoPercentual();
+        assertEquals("Armarinho", pct.get(0).fornecedor().nome());
+        assertEquals(new BigDecimal("11.13"), pct.get(0).percentual());
+        assertEquals(new BigDecimal("3.33"), pct.get(1).percentual());
+        assertEquals("Armarinho", d.fornecedoresPorDescontoValor().get(0).fornecedor().nome());
+    }
+
+    @Test
+    void insumosQueMaisSubiramNoPeriodo() {
         Insumo cola = insumo("Cola");
         Insumo fita = insumo("Fita");
         Insumo papel = insumo("Papel");
-        confirmada(hoje.minusDays(60), null, cola, "2", "24.00"); // 12,00
-        confirmada(hoje.minusDays(5), null, cola, "2", "30.00");  // 15,00 → +25,00%
-        confirmada(hoje.minusDays(40), null, fita, "10", "15.00"); // 1,50
-        confirmada(hoje.minusDays(3), null, fita, "10", "16.50");  // 1,65 → +10,00%
-        confirmada(hoje.minusDays(120), null, papel, "1", "1.00"); // fora da janela
-        confirmada(hoje.minusDays(2), null, papel, "1", "9.00");   // só 1 na janela: não conta
+        confirmada(SET_1.plusDays(1), null, cola, "2", "24.00");  // 12,00
+        confirmada(SET_1.plusDays(20), null, cola, "2", "30.00"); // 15,00 → +25,00%
+        confirmada(SET_1.plusDays(2), null, fita, "10", "15.00"); // 1,50
+        confirmada(SET_1.plusDays(21), null, fita, "10", "16.50"); // 1,65 → +10,00%
+        confirmada(SET_1.plusDays(3), null, papel, "1", "9.00");
+        confirmada(SET_1.plusDays(22), null, papel, "1", "8.00");  // caiu: não entra
 
-        DashboardComprasResponse.InsumoMaiorAumento a = dashboardCompraService.dashboard().insumoMaiorAumento();
-        assertEquals("Cola", a.insumo().nome());
-        assertEquals(new BigDecimal("25.00"), a.variacaoPercentual());
-        assertEquals(0, new BigDecimal("12.00").compareTo(a.precoInicial()));
-        assertEquals(0, new BigDecimal("15.00").compareTo(a.precoFinal()));
+        DashboardComprasResponse d = setembro();
+        assertEquals(List.of("Cola", "Fita"), d.insumosQueMaisSubiram().stream().map(x -> x.insumo().nome()).toList());
+        assertEquals(new BigDecimal("25.00"), d.maiorAumento().variacaoPercentual());
     }
 
     @Test
     void semDadosSuficientes() {
         Insumo cola = insumo("Cola");
-        confirmada(hoje, null, cola, "1", "12.00");
-        DashboardComprasResponse d = dashboardCompraService.dashboard();
-        assertNull(d.insumoMaiorAumento());
-        assertNull(d.fornecedorMaisUsado());
+        confirmada(SET_1.plusDays(1), null, cola, "1", "12.00");
+        DashboardComprasResponse d = setembro();
+        assertNull(d.maiorAumento());
+        assertEquals(List.of(), d.fornecedoresPorGasto());
+        assertNull(d.cmv().percentual()); // sem vendas, sem faturamento
+    }
+
+    @Test
+    void listagemFiltraPorInsumoEBusca() {
+        Insumo cola = insumo("Cola Branca");
+        Insumo fita = insumo("Fita de cetim");
+        Cliente papelaria = fornecedor("Papelaria Central");
+        CompraResponse c1 = confirmada(SET_1.plusDays(1), papelaria, cola, "1", "12.40");
+        CompraResponse c2 = confirmada(SET_1.plusDays(2), null, fita, "1", "7.35");
+        org.springframework.data.domain.PageRequest p = org.springframework.data.domain.PageRequest.of(0, 20);
+        assertEquals(List.of(c1.identificador()), compraService.listar(null, null, null, null, cola.getId(), null, p)
+                .map(r -> r.identificador()).getContent());
+        assertEquals(List.of(c2.identificador()), compraService.listar(null, null, null, null, null, "cetim", p)
+                .map(r -> r.identificador()).getContent());
+        assertEquals(List.of(c1.identificador()), compraService.listar(null, null, null, null, null, "papelaria", p)
+                .map(r -> r.identificador()).getContent());
+        assertEquals(List.of(c2.identificador()), compraService.listar(null, null, null, null, null, c2.identificador(), p)
+                .map(r -> r.identificador()).getContent());
+        assertEquals("Cola Branca ×1 un", compraService.listar(null, null, null, null, cola.getId(), null, p).getContent().get(0).resumoItens());
     }
 
     @Test

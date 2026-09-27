@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.response.compra;
 
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -18,5 +20,11 @@ public record CompraItemResponse(
         BigDecimal precoUnitario,
         BigDecimal precoUnitarioPago,
         BigDecimal custoUnitarioAnterior,
-        BigDecimal custoUnitarioPosterior
+        BigDecimal custoUnitarioPosterior,
+        /** #576/RN-NOVA-28 — preço cheio, desconto como digitado e em R$ (linha e parte da nota). */
+        BigDecimal precoCheio,
+        TipoDesconto descontoTipo,
+        BigDecimal descontoInformado,
+        BigDecimal descontoLinha,
+        BigDecimal descontoNota
 ) {}

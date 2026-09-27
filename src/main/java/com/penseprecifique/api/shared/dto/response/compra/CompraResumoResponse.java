@@ -20,5 +20,7 @@ public record CompraResumoResponse(
         List<String> fornecedores,
         boolean pago,
         BigDecimal total,
-        int quantidadeItens
+        int quantidadeItens,
+        /** DT-NOVA-19 (V0.15.0) — "Fita de cetim ×10 m, Cola ×3 un" para a modal de listagem (RN-NOVA-24). */
+        String resumoItens
 ) {}

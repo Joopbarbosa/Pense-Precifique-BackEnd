@@ -21,4 +21,10 @@ public class PdfMicroservicoDocumentoCompraPayload {
     private String dataCancelamento;
     private String observacaoCancelamento;
     private List<PdfMicroservicoItemCompraPayload> itens;
+    /** #576/RN-NOVA-28 — com algum desconto, o PDF mostra Preço cheio / Desconto / Preço pago. */
+    private boolean temDesconto;
+    private String totalCheio;
+    private String totalDescontos;
+    /** Desconto na nota como digitado, ex. "5% (R$ 3,55)"; nulo sem desconto na nota. */
+    private String descontoNota;
 }

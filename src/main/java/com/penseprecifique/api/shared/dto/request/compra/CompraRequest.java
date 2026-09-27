@@ -1,11 +1,15 @@
 package com.penseprecifique.api.shared.dto.request.compra;
 
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.validation.LimitesTexto;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -36,8 +40,21 @@ public record CompraRequest(
         String observacoes,
 
         @Valid
-        List<CompraItemRequest> itens
+        List<CompraItemRequest> itens,
+
+        /** #576/RN-NOVA-28 — desconto na nota: VALOR (R$) ou PERCENTUAL, rateado nas linhas. */
+        TipoDesconto descontoNotaTipo,
+
+        @Positive(message = "O desconto da nota deve ser maior que zero")
+        @Digits(integer = 13, fraction = 2, message = "Desconto da nota com no máximo 2 casas decimais")
+        BigDecimal descontoNotaValor
 ) {
+    /** Forma anterior ao #576 (sem desconto na nota). */
+    public CompraRequest(LocalDate dataCompra, Boolean multiplosFornecedores, UUID fornecedorId, Boolean pago,
+                         UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens) {
+        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens, null, null);
+    }
+
     public List<CompraItemRequest> itensOuVazio() {
         return itens != null ? itens : List.of();
     }

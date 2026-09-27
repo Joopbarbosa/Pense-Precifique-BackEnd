@@ -100,11 +100,27 @@ public class CompraService {
     @Transactional(readOnly = true)
     public Page<CompraResumoResponse> listar(StatusCompra status, UUID fornecedorId, LocalDate de, LocalDate ate,
                                              Pageable pageable) {
+        return listar(status, fornecedorId, de, ate, null, null, pageable);
+    }
+
+    /**
+     * DT-NOVA-19 (V0.15.0) — {@code insumoId}: compras com o insumo em alguma linha; {@code busca}: número
+     * (COM-12 ou 12), nome de insumo ou de fornecedor, sem diferenciar maiúscula (drill-down do dashboard).
+     */
+    @Transactional(readOnly = true)
+    public Page<CompraResumoResponse> listar(StatusCompra status, UUID fornecedorId, LocalDate de, LocalDate ate,
+                                             UUID insumoId, String busca, Pageable pageable) {
         UUID usuarioId = getUsuarioAutenticado().getId();
         Pageable ordenado = PageableOrdenacaoResolver.resolverExpressaoJpql(comDesempate(pageable), CAMPOS_ORDENACAO,
                 "dataCompra, numero, createdAt, fornecedor, status, itens, total");
+        String termo = busca != null ? busca.trim().toLowerCase(java.util.Locale.ROOT) : "";
+        String digitos = termo.replaceAll("\\D", "");
+        Integer numeroBusca = !digitos.isEmpty() && digitos.length() <= 9 && termo.matches("(com-?\\s*)?\\d+")
+                ? Integer.valueOf(digitos) : -1;
         Page<Compra> pagina = compraRepository.buscarComFiltros(usuarioId, status, fornecedorId != null,
-                fornecedorId != null ? fornecedorId : new UUID(0, 0), de, ate, ordenado);
+                fornecedorId != null ? fornecedorId : new UUID(0, 0), de, ate,
+                insumoId != null, insumoId != null ? insumoId : new UUID(0, 0),
+                !termo.isEmpty(), numeroBusca, "%" + termo + "%", ordenado);
 
         Map<UUID, List<CompraItem>> itensPorCompra = pagina.isEmpty() ? Map.of()
                 : compraItemRepository.findByCompraIdIn(pagina.map(Compra::getId).getContent()).stream()
@@ -249,8 +265,8 @@ public class CompraService {
             if (item.getQuantidade() == null) {
                 daLinha.add("informe a quantidade");
             }
-            if (item.getPrecoTotal() == null) {
-                daLinha.add("informe o preço total pago");
+            if (item.getPrecoCheio() == null) {
+                daLinha.add("informe o preço");
             }
             if (!Boolean.TRUE.equals(item.getInsumo().getAtivo()) || item.getInsumo().getDeletedAt() != null) {
                 daLinha.add("o insumo está inativo");
@@ -402,14 +418,20 @@ public class CompraService {
         copia.setMultiplosFornecedores(origem.getMultiplosFornecedores());
         copia.setFornecedor(origem.getFornecedor());
         copia.setObservacoes(origem.getObservacoes());
+        copia.setDescontoNotaTipo(origem.getDescontoNotaTipo());
+        copia.setDescontoNotaInformado(origem.getDescontoNotaInformado());
         copia.setPago(false);
         copia.setMetodoPagamento(null);
         compraRepository.save(copia);
 
         List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(origem.getId()).stream()
                 .map(i -> CompraItem.builder().compra(copia).insumo(i.getInsumo()).fornecedor(i.getFornecedor())
-                        .quantidade(i.getQuantidade()).precoTotal(i.getPrecoTotal()).ordem(i.getOrdem()).build())
+                        .quantidade(i.getQuantidade()).precoCheio(i.getPrecoCheio())
+                        .descontoTipo(i.getDescontoTipo()).descontoInformado(i.getDescontoInformado())
+                        .ordem(i.getOrdem()).build())
                 .toList();
+        DescontoCompra.aplicar(copia, itens); // #576 — duplicar copia os descontos
+        compraRepository.save(copia);
         compraItemRepository.saveAll(itens);
         return compraMapper.toResponse(copia, compraItemRepository.findByCompraIdOrderByOrdemAsc(copia.getId()));
     }
@@ -472,6 +494,8 @@ public class CompraService {
         compra.setMultiplosFornecedores(multiplos);
         compra.setFornecedor(fornecedorCabecalho);
         compra.setObservacoes(request.observacoes());
+        compra.setDescontoNotaTipo(request.descontoNotaValor() != null ? request.descontoNotaTipo() : null);
+        compra.setDescontoNotaInformado(request.descontoNotaTipo() != null ? request.descontoNotaValor() : null);
         aplicarPagamento(compra, Boolean.TRUE.equals(request.pago()), request.metodoPagamentoId(), usuarioId);
 
         List<CompraItem> novos = new ArrayList<>();
@@ -490,9 +514,15 @@ public class CompraService {
             if (!pares.add(par)) {
                 throw new BusinessException("O insumo " + insumo.getNome() + " está repetido com o mesmo fornecedor nesta compra.");
             }
+            boolean temDesconto = linha.descontoTipo() != null && linha.descontoValor() != null;
             novos.add(CompraItem.builder().compra(compra).insumo(insumo).fornecedor(fornecedor)
-                    .quantidade(linha.quantidade()).precoTotal(linha.precoTotal()).ordem(ordem++).build());
+                    .quantidade(linha.quantidade()).precoCheio(linha.precoCheioEfetivo())
+                    .descontoTipo(temDesconto ? linha.descontoTipo() : null)
+                    .descontoInformado(temDesconto ? linha.descontoValor() : null)
+                    .ordem(ordem++).build());
         }
+        // #576/RN-NOVA-28 — preço pago de cada linha = preço cheio − desconto da linha − parte da nota.
+        DescontoCompra.aplicar(compra, novos);
 
         compraRepository.save(compra);
         if (!itensSalvos.isEmpty()) {
