@@ -60,6 +60,7 @@ import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
+import com.penseprecifique.api.produto.CustoMaterialService;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.producao.ProducaoService;
@@ -87,6 +88,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -126,6 +128,7 @@ public class OrcamentoService {
     private final ProducaoService producaoService;
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
+    private final CustoMaterialService custoMaterialService;
 
     /**
      * Frente 3/P-BE-CONSOLIDADO-001 — filtro opcional de intervalo de data de criação
@@ -1012,6 +1015,7 @@ public class OrcamentoService {
                 if (orcamento.getDataEntrega() == null) {
                     orcamento.setDataEntrega(LocalDateTime.now());
                 }
+                gravarCustoMaterial(orcamento);
                 orcamento.setStatus(StatusOrcamento.ENTREGUE);
                 break;
 
@@ -1908,4 +1912,40 @@ public class OrcamentoService {
         return usuarioRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
     }
+
+    /**
+     * #575/RN-NOVA-26 (V0.15.0) — ao passar a contar como venda (PAGO → ENTREGUE), grava o custo de
+     * material por unidade de cada item e customização. Só o que ainda não tem valor: gravado uma vez.
+     */
+    private void gravarCustoMaterial(Orcamento orcamento) {
+        CustoMaterialService.Calculo calculo = custoMaterialService.novoCalculo();
+        List<OrcamentoItem> itens = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
+        if (itens.isEmpty()) {
+            return;
+        }
+        List<UUID> ids = itens.stream().map(OrcamentoItem::getId).toList();
+        Map<UUID, List<OrcamentoItemComponente>> componentes = orcamentoItemComponenteRepository.findByOrcamentoItemIdIn(ids)
+                .stream().collect(Collectors.groupingBy(c -> c.getOrcamentoItem().getId()));
+        for (OrcamentoItem item : itens) {
+            if (item.getCustoMaterialUnitario() != null) {
+                continue;
+            }
+            if (item.getItemCatalogo() != null) {
+                List<OrcamentoItemComponente> doItem = componentes.getOrDefault(item.getId(), List.of());
+                item.setCustoMaterialUnitario(doItem.isEmpty()
+                        ? calculo.itemCatalogoAtual(item.getItemCatalogo())
+                        : calculo.itemCatalogo(doItem.stream()
+                                .map(c -> new CustoMaterialService.Componente(c.getInsumo(), c.getProdutoBase(), c.getQuantidade()))
+                                .toList(), BigDecimal.valueOf(item.getQuantidade())));
+            } else if (item.getProduto() != null) {
+                item.setCustoMaterialUnitario(calculo.produto(item.getProduto()));
+            }
+        }
+        orcamentoItemRepository.saveAll(itens);
+        List<OrcamentoItemCustomizacao> customizacoes = orcamentoItemCustomizacaoRepository.findByOrcamentoItemIdIn(ids);
+        customizacoes.stream().filter(c -> c.getCustoMaterialUnitario() == null && c.getProduto() != null)
+                .forEach(c -> c.setCustoMaterialUnitario(calculo.produto(c.getProduto())));
+        orcamentoItemCustomizacaoRepository.saveAll(customizacoes);
+    }
+
 }

@@ -46,4 +46,9 @@ public class VendaCaixaItem {
 
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal subtotal;
+
+    /** #575/RN-NOVA-26 (V0.15.0) — custo de material por unidade no momento da venda (sem mão de obra).
+     *  Nulo = venda anterior à V0.15.0 (CMV estimado, RN-NOVA-27). */
+    @Column(name = "custo_material_unitario", precision = 15, scale = 4)
+    private BigDecimal custoMaterialUnitario;
 }

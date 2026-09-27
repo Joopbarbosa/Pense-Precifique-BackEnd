@@ -2,6 +2,7 @@ package com.penseprecifique.api.caixa;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
+import com.penseprecifique.api.produto.CustoMaterialService;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.cliente.ClienteService;
 import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
@@ -53,6 +54,7 @@ public class VendaCaixaService {
     private static final BigDecimal CEM = new BigDecimal("100");
 
     private final VendaCaixaRepository vendaCaixaRepository;
+    private final CustoMaterialService custoMaterialService;
     private final VendaCaixaItemRepository vendaCaixaItemRepository;
     private final VendaCaixaItemCustomizacaoRepository vendaCaixaItemCustomizacaoRepository;
     private final VendaCaixaItemComponenteRepository vendaCaixaItemComponenteRepository;
@@ -249,7 +251,14 @@ public class VendaCaixaService {
         venda = vendaCaixaRepository.save(venda);
 
         List<VendaCaixaItemResponseDTO> itensResponse = new ArrayList<>();
+        // #575/RN-NOVA-26 (V0.15.0) — custo de material gravado na venda, base do CMV; não mexe em preço.
+        CustoMaterialService.Calculo custoMaterial = custoMaterialService.novoCalculo();
         for (ItemPreparado item : itensPreparados) {
+            BigDecimal custoItem = item.itemCatalogo() != null
+                    ? custoMaterial.itemCatalogo(item.componentes().stream()
+                            .map(cp -> new CustoMaterialService.Componente(cp.insumo(), cp.produtoBase(), cp.quantidade()))
+                            .toList(), item.quantidade())
+                    : custoMaterial.produto(item.produtoDireto());
             VendaCaixaItem itemSalvo = vendaCaixaItemRepository.save(VendaCaixaItem.builder()
                     .vendaCaixa(venda)
                     .itemCatalogo(item.itemCatalogo())
@@ -257,6 +266,7 @@ public class VendaCaixaService {
                     .quantidade(item.quantidade())
                     .precoUnitario(item.precoUnitario())
                     .subtotal(item.subtotal())
+                    .custoMaterialUnitario(custoItem)
                     .build());
 
             // RN-NOVA-1/9 (V0.13.0, #516) — snapshot dos N componentes do catálogo (Insumo XOR
@@ -280,6 +290,7 @@ public class VendaCaixaService {
                         .quantidade(cp.quantidade())
                         .precoUnitario(cp.precoUnitario())
                         .subtotal(cp.subtotal())
+                        .custoMaterialUnitario(custoMaterial.produto(cp.produto()))
                         .build());
                 customizacoesResponse.add(new VendaCaixaItemCustomizacaoResponseDTO(
                         custSalva.getId(), cp.produto().getId(), cp.produto().getNome(),
