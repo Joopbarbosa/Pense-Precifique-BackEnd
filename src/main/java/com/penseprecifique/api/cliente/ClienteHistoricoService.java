@@ -15,6 +15,7 @@ import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.entity.VendaCaixa;
 import com.penseprecifique.api.shared.domain.entity.VendaCaixaItem;
+import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa;
@@ -26,6 +27,7 @@ import com.penseprecifique.api.shared.dto.response.cliente.IndicadoresFornecedor
 import com.penseprecifique.api.shared.dto.response.cliente.ItemCompradoResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.PedidoClienteResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.QuantidadeValorResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.RegistroCadastroResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.CompraMapper;
@@ -34,21 +36,25 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -127,6 +133,133 @@ public class ClienteHistoricoService {
         return paginar(todos, pageable);
     }
 
+    // ------------------------------------------------------------------ modal de listagem (registros)
+
+    /** Linha interna da listagem: a resposta + o que serve só para filtrar/ordenar. */
+    private record Registro(RegistroCadastroResponse resposta, int numero, Collection<UUID> itemIds, List<String> nomesItens) {}
+
+    private static final Map<String, Comparator<Registro>> ORDENACAO_REGISTROS = Map.of(
+            "data", Comparator.comparing((Registro r) -> r.resposta().data()),
+            "identificador", Comparator.comparing((Registro r) -> r.resposta().tipo()).thenComparingInt(Registro::numero),
+            "valor", Comparator.comparing((Registro r) -> r.resposta().valor()),
+            "status", Comparator.comparing((Registro r) -> r.resposta().status()));
+
+    /** Desempate estável: mais recente primeiro, depois o maior número. */
+    private static final Comparator<Registro> DESEMPATE = ORDENACAO_REGISTROS.get("data").reversed()
+            .thenComparing(ORDENACAO_REGISTROS.get("identificador").reversed());
+
+    /**
+     * Ajuste do teste manual (V0.15.0, #560/#451) — modal de listagem do detalhe do cadastro, aberta pela
+     * lupa dos indicadores e pelo clique nos gráficos. Mesma agregação em memória do histórico
+     * (DT-NOVA-9); busca, filtros e ordenação no servidor, como toda listagem do sistema.
+     *
+     * <p>{@code papel} CLIENTE lista orçamentos (qualquer status) e vendas do Caixa; FORNECEDOR lista as
+     * compras em que o cadastro aparece. {@code somenteCompras}: só o que conta nos indicadores
+     * (orçamento ENTREGUE, venda CONCLUIDA, compra CONFIRMADA). {@code naoPagas}: compras confirmadas
+     * não pagas. {@code itemId}: produto/item de catálogo (cliente) ou insumo (fornecedor).
+     * {@code busca}: número ou nome de item, sem diferenciar acento nem maiúscula. {@code status}: um ou
+     * mais (ex.: "em aberto" = RASCUNHO a PAGO). RN-NOVA-24 / DT-NOVA-20.
+     */
+    public Page<RegistroCadastroResponse> registros(UUID cadastroId, PapelCadastro papel, String busca, List<String> status,
+                                                    boolean somenteCompras, boolean naoPagas, LocalDate de,
+                                                    LocalDate ate, UUID itemId, Pageable pageable) {
+        UUID usuarioId = validarCadastro(cadastroId);
+        if (papel == null) {
+            throw new BusinessException("Informe o papel: CLIENTE ou FORNECEDOR.");
+        }
+        if (de != null && ate != null && de.isAfter(ate)) {
+            throw new BusinessException("A data inicial não pode ser depois da data final.");
+        }
+        Comparator<Registro> ordem = ordenacaoRegistros(pageable.getSort());
+        String termo = normalizar(busca);
+
+        List<Registro> todos = papel == PapelCadastro.CLIENTE
+                ? registrosCliente(cadastroId, usuarioId)
+                : registrosFornecedor(cadastroId, usuarioId);
+        List<RegistroCadastroResponse> filtrados = todos.stream()
+                .filter(r -> status == null || status.isEmpty() || status.contains(r.resposta().status()))
+                .filter(r -> !somenteCompras || r.resposta().contaComoCompra())
+                .filter(r -> !naoPagas || (r.resposta().contaComoCompra() && Boolean.FALSE.equals(r.resposta().pago())))
+                .filter(r -> de == null || !r.resposta().data().isBefore(de))
+                .filter(r -> ate == null || !r.resposta().data().isAfter(ate))
+                .filter(r -> itemId == null || r.itemIds().contains(itemId))
+                .filter(r -> termo.isEmpty() || normalizar(r.resposta().identificador()).contains(termo)
+                        || r.nomesItens().stream().anyMatch(n -> normalizar(n).contains(termo)))
+                .sorted(ordem)
+                .map(Registro::resposta)
+                .toList();
+        return paginar(filtrados, pageable);
+    }
+
+    private static Comparator<Registro> ordenacaoRegistros(Sort sort) {
+        Comparator<Registro> ordem = null;
+        for (Sort.Order o : sort) {
+            Comparator<Registro> campo = ORDENACAO_REGISTROS.get(o.getProperty());
+            if (campo == null) {
+                throw new BusinessException("Campo de ordenação inválido: '" + o.getProperty()
+                        + "'. Permitidos: data, identificador, valor, status.");
+            }
+            campo = o.isAscending() ? campo : campo.reversed();
+            ordem = ordem == null ? campo : ordem.thenComparing(campo);
+        }
+        return ordem == null ? DESEMPATE : ordem.thenComparing(DESEMPATE);
+    }
+
+    private List<Registro> registrosCliente(UUID clienteId, UUID usuarioId) {
+        List<Orcamento> orcamentos = orcamentoRepository.findByClienteIdAndUsuarioIdAndDeletedAtIsNull(clienteId, usuarioId);
+        List<VendaCaixa> vendas = vendaCaixaRepository.findByClienteIdAndUsuarioId(clienteId, usuarioId);
+        Map<UUID, List<OrcamentoItem>> itensOrc = orcamentos.isEmpty() ? Map.of()
+                : orcamentoItemRepository.findByOrcamentoIdIn(orcamentos.stream().map(Orcamento::getId).toList())
+                        .stream().collect(Collectors.groupingBy(i -> i.getOrcamento().getId()));
+        Map<UUID, List<VendaCaixaItem>> itensVenda = vendas.isEmpty() ? Map.of()
+                : vendaCaixaItemRepository.findByVendaCaixaIdIn(vendas.stream().map(VendaCaixa::getId).toList())
+                        .stream().collect(Collectors.groupingBy(i -> i.getVendaCaixa().getId()));
+
+        List<Registro> registros = new ArrayList<>();
+        orcamentos.forEach(o -> registros.add(registroPedido(resumo(o), o.getNumero(),
+                itensOrc.getOrDefault(o.getId(), List.of()).stream()
+                        .map(ClienteHistoricoService::linha).filter(Objects::nonNull).toList())));
+        vendas.forEach(v -> registros.add(registroPedido(resumo(v), v.getNumero(),
+                itensVenda.getOrDefault(v.getId(), List.of()).stream()
+                        .map(ClienteHistoricoService::linha).filter(Objects::nonNull).toList())));
+        return registros;
+    }
+
+    private static Registro registroPedido(PedidoClienteResponse p, int numero, List<LinhaItem> linhas) {
+        LocalDateTime data = p.contaComoCompra() ? p.dataCompra() : p.data();
+        String resumo = linhas.stream().map(l -> l.nome() + " ×" + quantidade(l.quantidade()))
+                .collect(Collectors.joining(", "));
+        return new Registro(new RegistroCadastroResponse(p.id(), p.tipo(), p.identificador(), data.toLocalDate(),
+                p.status(), p.valor(), linhas.size(), resumo, p.contaComoCompra(), null),
+                numero, linhas.stream().map(LinhaItem::id).toList(), linhas.stream().map(LinhaItem::nome).toList());
+    }
+
+    private List<Registro> registrosFornecedor(UUID fornecedorId, UUID usuarioId) {
+        return linhasDoFornecedor(fornecedorId, usuarioId).entrySet().stream().map(e -> {
+            Compra c = e.getKey();
+            List<CompraItem> linhas = e.getValue();
+            String resumo = CompraMapper.resumoItens(linhas);
+            return new Registro(new RegistroCadastroResponse(c.getId(), "COMPRA",
+                    IdentificadorFormatter.formatar("COM", c.getNumero()), c.getDataCompra(), c.getStatus().name(),
+                    CompraMapper.total(linhas), linhas.size(), resumo, c.getStatus() == StatusCompra.CONFIRMADA,
+                    Boolean.TRUE.equals(c.getPago())),
+                    c.getNumero(), linhas.stream().map(i -> i.getInsumo().getId()).toList(),
+                    linhas.stream().map(i -> i.getInsumo().getNome()).toList());
+        }).toList();
+    }
+
+    /** 3 → "3"; 1.500 → "1,5". */
+    private static String quantidade(BigDecimal q) {
+        return q.stripTrailingZeros().toPlainString().replace('.', ',');
+    }
+
+    private static String normalizar(String texto) {
+        if (texto == null) {
+            return "";
+        }
+        return Normalizer.normalize(texto.trim(), Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
+    }
+
     /**
      * #451/RN-NOVA-20 — gasto por mês e itens mais comprados no período. Sem {@code de}/{@code ate}:
      * últimos 12 meses (do 1º dia de 11 meses atrás até hoje).
@@ -179,21 +312,27 @@ public class ClienteHistoricoService {
         List<Pedido> pedidos = new ArrayList<>();
         entregues.forEach(o -> pedidos.add(new Pedido(resumo(o),
                 itensOrc.getOrDefault(o.getId(), List.of()).stream()
-                        .map(i -> linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
-                                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
-                                i.getProduto() != null ? i.getProduto().getId() : null,
-                                i.getProduto() != null ? i.getProduto().getNome() : null,
-                                BigDecimal.valueOf(i.getQuantidade()), i.getSubtotal()))
-                        .filter(Objects::nonNull).toList())));
+                        .map(ClienteHistoricoService::linha).filter(Objects::nonNull).toList())));
         concluidas.forEach(v -> pedidos.add(new Pedido(resumo(v),
                 itensVenda.getOrDefault(v.getId(), List.of()).stream()
-                        .map(i -> linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
-                                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
-                                i.getProduto() != null ? i.getProduto().getId() : null,
-                                i.getProduto() != null ? i.getProduto().getNome() : null,
-                                i.getQuantidade(), i.getSubtotal()))
-                        .filter(Objects::nonNull).toList())));
+                        .map(ClienteHistoricoService::linha).filter(Objects::nonNull).toList())));
         return pedidos;
+    }
+
+    private static LinhaItem linha(OrcamentoItem i) {
+        return linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
+                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
+                i.getProduto() != null ? i.getProduto().getId() : null,
+                i.getProduto() != null ? i.getProduto().getNome() : null,
+                BigDecimal.valueOf(i.getQuantidade()), i.getSubtotal());
+    }
+
+    private static LinhaItem linha(VendaCaixaItem i) {
+        return linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
+                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
+                i.getProduto() != null ? i.getProduto().getId() : null,
+                i.getProduto() != null ? i.getProduto().getNome() : null,
+                i.getQuantidade(), i.getSubtotal());
     }
 
     // Adendo de análise (#560): "item mais comprado" = item de catálogo OU produto avulso; componentes

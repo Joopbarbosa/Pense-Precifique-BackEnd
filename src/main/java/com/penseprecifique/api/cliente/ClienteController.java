@@ -7,6 +7,7 @@ import com.penseprecifique.api.shared.dto.response.cliente.ClienteGraficosRespon
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteIndicadoresResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.CompraFornecedorResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.PedidoClienteResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.RegistroCadastroResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteResponse;
 import jakarta.validation.Valid;
@@ -18,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -65,6 +67,24 @@ public class ClienteController {
             @PathVariable UUID id,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(clienteHistoricoService.historicoCompras(id, pageable));
+    }
+
+    // V0.15.0 (ajuste do teste manual de #560/#451) — modal de listagem do detalhe: lupa dos
+    // indicadores e clique nos gráficos. Colunas iguais para pedidos (cliente) e compras (fornecedor).
+    @GetMapping("/{id}/registros")
+    public ResponseEntity<Page<RegistroCadastroResponse>> registros(
+            @PathVariable UUID id,
+            @RequestParam PapelCadastro papel,
+            @RequestParam(required = false) String busca,
+            @RequestParam(required = false) List<String> status,
+            @RequestParam(defaultValue = "false") boolean somenteCompras,
+            @RequestParam(defaultValue = "false") boolean naoPagas,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
+            @RequestParam(required = false) UUID itemId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(clienteHistoricoService.registros(id, papel, busca, status, somenteCompras, naoPagas,
+                de, ate, itemId, pageable));
     }
 
     // #451 (V0.15.0) — gráficos do cliente; sem de/ate = últimos 12 meses.
