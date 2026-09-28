@@ -39,8 +39,10 @@ public class ClienteController {
             @RequestParam(required = false) String busca,
             @RequestParam(required = false) Boolean ativo,
             @RequestParam(required = false) PapelCadastro papel,
+            // #583 (adendo 2) — seletores: ativos e inativos, ativos primeiro
+            @RequestParam(defaultValue = "false") boolean incluirInativos,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(clienteService.listar(busca, ativo, papel, pageable));
+        return ResponseEntity.ok(clienteService.listar(busca, ativo, papel, incluirInativos, pageable));
     }
 
     // #537 (V0.15.0) — contadores dos filtros da tela, mesmo padrão de GET /insumos/contagens.
@@ -92,8 +94,10 @@ public class ClienteController {
     public ResponseEntity<ClienteGraficosResponse> graficos(
             @PathVariable UUID id,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
-        return ResponseEntity.ok(clienteHistoricoService.graficos(id, de, ate));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
+            // #587 (adendo 2) — FORNECEDOR: compras confirmadas por mês e insumos mais comprados dele
+            @RequestParam(defaultValue = "CLIENTE") PapelCadastro papel) {
+        return ResponseEntity.ok(clienteHistoricoService.graficos(id, papel, de, ate));
     }
 
     @GetMapping("/{id}")

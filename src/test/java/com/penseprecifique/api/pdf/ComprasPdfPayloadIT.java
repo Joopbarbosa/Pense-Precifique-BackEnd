@@ -86,7 +86,7 @@ class ComprasPdfPayloadIT {
         MetodoPagamentoConfiguravel pix = metodoPagamentoRepository.save(MetodoPagamentoConfiguravel.builder()
                 .usuario(usuario).tipo(TipoMetodoPagamento.PIX).ativo(true).ordem(1).build());
         LocalDate data = LocalDate.now().minusDays(2);
-        // 1.250 folhas por R$ 15,63 → R$ 0,0125 a folha (4 casas no PDF, sem zeros inúteis)
+        // 1.250 folhas por R$ 15,63 → R$ 0,0125 a folha; #603/RN-NOVA-33: sai com 2 casas (R$ 0,01)
         CompraResponse c = compraService.confirmarNova(new CompraRequest(data, false, papelaria.getId(), true, pix.getId(),
                 "Entrega na terça.", List.of(new CompraItemRequest(papel.getId(), null, new BigDecimal("1250"), new BigDecimal("15.63"))))).compra();
 
@@ -100,7 +100,7 @@ class ComprasPdfPayloadIT {
         assertEquals("Pago — Pix", p.getDocumento().getPagamento());
         assertEquals("R$ 15,63", p.getDocumento().getTotal());
         assertEquals("1.250 fl", p.getDocumento().getItens().get(0).getQuantidade());
-        assertEquals("R$ 0,0125", p.getDocumento().getItens().get(0).getPrecoUnitario());
+        assertEquals("R$ 0,01", p.getDocumento().getItens().get(0).getPrecoUnitario());
         assertEquals("Entrega na terça.", p.getDocumento().getObservacoes());
         assertNull(p.getDocumento().getObservacaoCancelamento());
     }

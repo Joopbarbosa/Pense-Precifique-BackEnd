@@ -35,6 +35,31 @@ public interface CompraItemRepository extends JpaRepository<CompraItem, UUID> {
                                            @Param("insumoIds") Collection<UUID> insumoIds,
                                            @Param("status") StatusCompra status);
 
+    /**
+     * #590/RN-NOVA-39 — linhas de compras CONFIRMADAS de um par fornecedor + insumo com data da compra
+     * a partir de {@code desde} (janela de 12 meses do preço de referência).
+     */
+    @Query("SELECT ci FROM CompraItem ci WHERE ci.fornecedor.id = :fornecedorId AND ci.insumo.id = :insumoId " +
+            "AND ci.compra.deletedAt IS NULL AND ci.compra.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.CONFIRMADA " +
+            "AND ci.compra.dataCompra >= :desde")
+    List<CompraItem> findConfirmadasDoPar(@Param("fornecedorId") UUID fornecedorId,
+                                          @Param("insumoId") UUID insumoId,
+                                          @Param("desde") java.time.LocalDate desde);
+
+    /** #586/#590 — linhas CONFIRMADAS do par, mais recente primeiro (use com PageRequest.of(0, 1)). */
+    @EntityGraph(attributePaths = {"compra"})
+    @Query("SELECT ci FROM CompraItem ci WHERE ci.fornecedor.id = :fornecedorId AND ci.insumo.id = :insumoId " +
+            "AND ci.compra.deletedAt IS NULL AND ci.compra.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.CONFIRMADA " +
+            "ORDER BY ci.compra.dataCompra DESC, ci.compra.numero DESC")
+    List<CompraItem> findUltimasConfirmadasDoPar(@Param("fornecedorId") UUID fornecedorId,
+                                                 @Param("insumoId") UUID insumoId,
+                                                 org.springframework.data.domain.Pageable pageable);
+
+    /** #596/RN-NOVA-41 — ids dos insumos em compras CONFIRMADAS criadas a partir da lista. */
+    @Query("SELECT DISTINCT ci.insumo.id FROM CompraItem ci WHERE ci.compra.listaCompra.id = :listaId " +
+            "AND ci.compra.deletedAt IS NULL AND ci.compra.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.CONFIRMADA")
+    List<UUID> findInsumosCompradosDaLista(@Param("listaId") UUID listaId);
+
     /** Todas as linhas de compras em um status, de um usuário (dashboard, indicadores de fornecedor). */
     @EntityGraph(attributePaths = {"compra", "fornecedor", "insumo", "insumo.unidadeMedida"})
     @Query("SELECT ci FROM CompraItem ci WHERE ci.compra.usuario.id = :usuarioId " +

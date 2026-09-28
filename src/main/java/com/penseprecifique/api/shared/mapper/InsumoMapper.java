@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.RegraPrecoReferencia;
 import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
@@ -37,7 +38,8 @@ public class InsumoMapper {
                 insumo.getEstoqueMinimo(),
                 insumo.getAtivo(),
                 insumo.getCreatedAt(),
-                insumo.getUpdatedAt()
+                insumo.getUpdatedAt(),
+                insumo.getRegraPrecoReferencia()
         );
     }
 
@@ -54,6 +56,8 @@ public class InsumoMapper {
                 .custoUnitario(BigDecimal.ZERO)
                 .estoqueAtual(BigDecimal.ZERO)
                 .estoqueMinimo(request.estoqueMinimo())
+                .regraPrecoReferencia(request.regraPrecoReferencia() != null
+                        ? request.regraPrecoReferencia() : RegraPrecoReferencia.MEDIA)
                 .ativo(true)
                 .build();
     }
@@ -71,6 +75,9 @@ public class InsumoMapper {
             insumo.setPermitirEstoqueNegativo(request.permitirEstoqueNegativo());
         }
         insumo.setEstoqueMinimo(request.estoqueMinimo());
+        if (request.regraPrecoReferencia() != null) {
+            insumo.setRegraPrecoReferencia(request.regraPrecoReferencia());
+        }
         // custoUnitario e estoqueAtual só mudam via movimentação
     }
 

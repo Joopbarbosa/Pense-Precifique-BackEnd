@@ -24,10 +24,7 @@ public class PdfMapper {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DecimalFormat MOEDA_FORMATTER =
         new DecimalFormat("#,##0.00", new DecimalFormatSymbols(Locale.of("pt", "BR")));
-    // #545/#547 (V0.15.0) — preço unitário de insumo (ex.: R$ 0,0125 a folha) e quantidade com fração:
-    // mínimo de casas do formato, sem zeros inúteis à direita.
-    private static final DecimalFormat MOEDA_UNITARIA_FORMATTER =
-        new DecimalFormat("#,##0.00##", new DecimalFormatSymbols(Locale.of("pt", "BR")));
+    // #545/#547 (V0.15.0) — quantidade com fração: sem zeros inúteis à direita.
     private static final DecimalFormat QUANTIDADE_FORMATTER =
         new DecimalFormat("#,##0.####", new DecimalFormatSymbols(Locale.of("pt", "BR")));
 
@@ -659,8 +656,12 @@ public class PdfMapper {
         };
     }
 
+    /**
+     * #603/RN-NOVA-33 (adendo 2) — preço unitário também sai com 2 casas, arredondando a 3ª para cima
+     * a partir de 5 (0,0153 → R$ 0,02). O cálculo continua com 4 casas; só a exibição arredonda.
+     */
     private String formatarMoedaUnitaria(BigDecimal valor) {
-        return valor == null ? "—" : "R$ " + MOEDA_UNITARIA_FORMATTER.format(valor);
+        return valor == null ? "—" : "R$ " + MOEDA_FORMATTER.format(valor.setScale(2, java.math.RoundingMode.HALF_UP));
     }
 
     private String formatarQuantidade(BigDecimal quantidade, String unidade) {

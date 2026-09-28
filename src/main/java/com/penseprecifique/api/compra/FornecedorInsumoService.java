@@ -4,6 +4,8 @@ import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteService;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.enums.RegraPrecoReferencia;
+import com.penseprecifique.api.shared.domain.entity.CompraItem;
 import com.penseprecifique.api.shared.domain.entity.FornecedorInsumo;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -14,12 +16,15 @@ import com.penseprecifique.api.shared.dto.response.compra.FornecedorInsumoRespon
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.CompraMapper;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -40,6 +45,9 @@ public class FornecedorInsumoService {
     private final ClienteService clienteService;
     private final UsuarioRepository usuarioRepository;
     private final CompraMapper compraMapper;
+    private final CompraItemRepository compraItemRepository;
+
+    static final int JANELA_MESES = 12;
 
     @Transactional(readOnly = true)
     public List<FornecedorInsumoResponse> listar(UUID fornecedorId, UUID insumoId) {
@@ -63,10 +71,14 @@ public class FornecedorInsumoService {
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(request.insumoId(), usuario.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + request.insumoId()));
         if (!Boolean.TRUE.equals(insumo.getAtivo())) {
-            throw new BusinessException("Este insumo está inativo e não pode ser vinculado. Reative-o para continuar.");
+            throw BusinessException.explicado("Insumo inativo", "Este insumo está inativo e não pode ser vinculado. Reative-o para continuar.",
+                    "Insumo inativo não recebe vínculos novos com fornecedores.",
+                    "Reative o insumo na tela de Insumos e vincule de novo.");
         }
         if (fornecedorInsumoRepository.findByFornecedorIdAndInsumoId(fornecedor.getId(), insumo.getId()).isPresent()) {
-            throw new BusinessException("Este insumo já está vinculado a este fornecedor.");
+            throw BusinessException.explicado("Vínculo já existe", "Este insumo já está vinculado a este fornecedor.",
+                    "Cada par fornecedor + insumo tem um vínculo só, com um preço de referência.",
+                    "Abra o vínculo existente para ver ou atualizar o preço de referência.");
         }
         FornecedorInsumo vinculo = fornecedorInsumoRepository.save(FornecedorInsumo.builder()
                 .usuario(usuario).fornecedor(fornecedor).insumo(insumo)
@@ -90,14 +102,60 @@ public class FornecedorInsumoService {
     }
 
     /**
-     * RN-NOVA-6 — chamado pela confirmação da compra, na mesma transação: cria o par se não existe e
-     * sobrescreve o preço de referência com o preço unitário pago na linha. Não valida ativo/papel
-     * (vínculo existente da compra, RN-NOVA-2).
+     * RN-NOVA-6 + #590/RN-NOVA-39 — chamado pela confirmação da compra, na mesma transação e depois de
+     * a compra já estar CONFIRMADA: cria o par se não existe (com o preço pago, em qualquer regra) e
+     * recalcula o preço de referência pela regra do insumo. Não valida ativo/papel (vínculo existente
+     * da compra, RN-NOVA-2).
      */
     public void registrarPrecoDaCompra(Usuario usuario, Cliente fornecedor, Insumo insumo, BigDecimal precoUnitarioPago) {
         FornecedorInsumo vinculo = fornecedorInsumoRepository.findByFornecedorIdAndInsumoId(fornecedor.getId(), insumo.getId())
-                .orElseGet(() -> FornecedorInsumo.builder().usuario(usuario).fornecedor(fornecedor).insumo(insumo).build());
-        vinculo.setPrecoReferencia(precoUnitarioPago);
+                .orElseGet(() -> fornecedorInsumoRepository.save(FornecedorInsumo.builder().usuario(usuario)
+                        .fornecedor(fornecedor).insumo(insumo).precoReferencia(precoUnitarioPago).build()));
+        aplicarRegra(vinculo);
+    }
+
+    /** #590 — cancelamento de compra: recalcula o par sem a compra cancelada (MANUAL não muda). */
+    public void recalcular(Cliente fornecedor, Insumo insumo) {
+        fornecedorInsumoRepository.findByFornecedorIdAndInsumoId(fornecedor.getId(), insumo.getId())
+                .ifPresent(this::aplicarRegra);
+    }
+
+    /** #590 — troca da regra do insumo: recalcula todos os vínculos dele. */
+    public void recalcularDoInsumo(Insumo insumo) {
+        fornecedorInsumoRepository.findByUsuarioIdAndInsumoId(insumo.getUsuario().getId(), insumo.getId())
+                .forEach(this::aplicarRegra);
+    }
+
+    /**
+     * #590/RN-NOVA-39 — MEDIA: soma do pago ÷ soma das quantidades (média ponderada pela quantidade);
+     * MENOR_VALOR: menor preço unitário pago; ambas nas linhas CONFIRMADAS do par nos últimos 12 meses.
+     * Sem linha na janela, mantém o valor. Ex.: 10 un a 2,565 + 20 un a 2,80 → 81,65 ÷ 30 = 2,7217.
+     */
+    private void aplicarRegra(FornecedorInsumo vinculo) {
+        RegraPrecoReferencia regra = vinculo.getInsumo().getRegraPrecoReferencia();
+        if (regra == null || regra == RegraPrecoReferencia.MANUAL) {
+            return;
+        }
+        List<CompraItem> linhas = compraItemRepository.findConfirmadasDoPar(vinculo.getFornecedor().getId(),
+                        vinculo.getInsumo().getId(), LocalDate.now().minusMonths(JANELA_MESES)).stream()
+                .filter(i -> i.getQuantidade() != null && i.getQuantidade().signum() > 0 && i.getPrecoTotal() != null)
+                .toList();
+        if (linhas.isEmpty()) {
+            return;
+        }
+        BigDecimal preco;
+        if (regra == RegraPrecoReferencia.MEDIA) {
+            BigDecimal pago = linhas.stream().map(CompraItem::getPrecoTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal quantidade = linhas.stream().map(CompraItem::getQuantidade).reduce(BigDecimal.ZERO, BigDecimal::add);
+            preco = pago.divide(quantidade, 4, RoundingMode.HALF_UP);
+        } else {
+            preco = linhas.stream().map(i -> CompraMapper.precoUnitario(i.getPrecoTotal(), i.getQuantidade()))
+                    .min(Comparator.naturalOrder()).orElseThrow();
+        }
+        if (preco.signum() <= 0) {
+            return;
+        }
+        vinculo.setPrecoReferencia(preco);
         fornecedorInsumoRepository.save(vinculo);
     }
 
@@ -107,8 +165,17 @@ public class FornecedorInsumoService {
     }
 
     private FornecedorInsumoResponse toResponse(FornecedorInsumo v) {
+        FornecedorInsumoResponse.UltimaCompra ultima = compraItemRepository
+                .findUltimasConfirmadasDoPar(v.getFornecedor().getId(), v.getInsumo().getId(),
+                        org.springframework.data.domain.PageRequest.of(0, 1))
+                .stream().findFirst()
+                .map(i -> new FornecedorInsumoResponse.UltimaCompra(i.getCompra().getId(),
+                        IdentificadorFormatter.formatar("COM", i.getCompra().getNumero()),
+                        i.getCompra().getDataCompra(), i.getPrecoUnitarioPago()))
+                .orElse(null);
         return new FornecedorInsumoResponse(v.getId(), compraMapper.toRef(v.getFornecedor()),
-                compraMapper.toRef(v.getInsumo()), v.getPrecoReferencia(), v.getUpdatedAt());
+                compraMapper.toRef(v.getInsumo()), v.getPrecoReferencia(), v.getUpdatedAt(),
+                v.getInsumo().getRegraPrecoReferencia(), ultima);
     }
 
     private Usuario getUsuarioAutenticado() {

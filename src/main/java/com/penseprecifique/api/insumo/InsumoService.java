@@ -1,5 +1,7 @@
 package com.penseprecifique.api.insumo;
 
+import com.penseprecifique.api.shared.domain.enums.RegraPrecoReferencia;
+import com.penseprecifique.api.compra.FornecedorInsumoService;
 import com.penseprecifique.api.caixa.VendaCaixaRepository;
 import com.penseprecifique.api.compra.CompraRepository;
 import com.penseprecifique.api.shared.domain.entity.Compra;
@@ -47,6 +49,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -91,12 +95,26 @@ public class InsumoService {
     private final UnidadeMedidaRepository unidadeMedidaRepository;
     private final CompraRepository compraRepository;
     private final VendaCaixaRepository vendaCaixaRepository;
+    private final FornecedorInsumoService fornecedorInsumoService;
 
     @Transactional(readOnly = true)
     public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, Pageable pageable) {
+        return listar(busca, ativo, false, pageable);
+    }
+
+    /**
+     * #616/RN-NOVA-40 (adendo 2) — {@code incluirInativos}: ativos e inativos, ativos primeiro (seletores
+     * mostram o inativo riscado, sem poder escolher); ignora {@code ativo}.
+     */
+    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, boolean incluirInativos, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_INSUMO,
                 "nome, numero, custoUnitario, estoqueAtual, createdAt");
+        if (incluirInativos) {
+            ativo = null;
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "ativo").and(pageableOrdenado.getSort()));
+        }
 
         // #336 (V0.10.0) — filtro de status agora é server-side (era client-side sobre a janela
         // paginada, causa raiz confirmada de "insumo inativado não aparece no filtro de inativados").
@@ -175,8 +193,14 @@ public class InsumoService {
         }
 
         UnidadeMedida unidadeMedida = buscarUnidadeMedidaDoUsuario(request.unidadeMedidaId(), usuarioId);
+        RegraPrecoReferencia regraAntes = insumo.getRegraPrecoReferencia();
         insumoMapper.updateEntity(request, insumo, unidadeMedida);
-        return insumoMapper.toResponse(insumoRepository.save(insumo));
+        Insumo salvo = insumoRepository.save(insumo);
+        // #590/RN-NOVA-39 — trocar a regra recalcula o preço de referência de todos os fornecedores.
+        if (salvo.getRegraPrecoReferencia() != regraAntes) {
+            fornecedorInsumoService.recalcularDoInsumo(salvo);
+        }
+        return insumoMapper.toResponse(salvo);
     }
 
     private UnidadeMedida buscarUnidadeMedidaDoUsuario(UUID unidadeMedidaId, UUID usuarioId) {

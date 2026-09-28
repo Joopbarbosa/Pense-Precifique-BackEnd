@@ -82,6 +82,16 @@ public class Compra {
     @Builder.Default
     private OrigemCompra origem = OrigemCompra.MANUAL;
 
+    // #596/RN-NOVA-41 (V0.15.0) — lista de onde a compra foi criada (RN-NOVA-13), para o status da lista.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lista_compra_id")
+    private ListaCompra listaCompra;
+
+    // #597/RN-NOVA-42 (V0.15.0) — só quando paga no cartão de crédito.
+    @Column(name = "parcelas")
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.SMALLINT)
+    private Integer parcelas;
+
     @Column(name = "confirmada_em")
     private LocalDateTime confirmadaEm;
 

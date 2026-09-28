@@ -35,5 +35,11 @@ public record CompraResponse(
         BigDecimal descontoNotaInformado,
         BigDecimal descontoNota,
         BigDecimal totalCheio,
-        BigDecimal totalDescontos
-) {}
+        BigDecimal totalDescontos,
+        /** #597/RN-NOVA-42 — só com Cartão de crédito. */
+        Integer parcelas,
+        /** #596/RN-NOVA-41 — lista de onde a compra foi criada (nula se não veio de lista). */
+        ListaCompraRef listaCompra
+) {
+    public record ListaCompraRef(UUID id, String identificador) {}
+}

@@ -31,7 +31,11 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
-                null
+                null,
+                ex.getTitulo(),
+                ex.getMotivo(),
+                ex.getComoResolver(),
+                ex.getItens()
         ));
     }
 

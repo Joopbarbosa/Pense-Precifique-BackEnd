@@ -49,7 +49,10 @@ public class CompraMapper {
                 compra.getDescontoNotaInformado(),
                 compra.getDescontoNota(),
                 itens.stream().map(CompraItem::getPrecoCheio).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add),
-                totalDescontos(itens));
+                totalDescontos(itens),
+                compra.getParcelas(),
+                compra.getListaCompra() == null ? null : new CompraResponse.ListaCompraRef(compra.getListaCompra().getId(),
+                        IdentificadorFormatter.formatar("LST", compra.getListaCompra().getNumero())));
     }
 
     /** #576 — soma dos descontos de linha e das partes da nota. */

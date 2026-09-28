@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.domain.entity;
 
+import com.penseprecifique.api.shared.domain.enums.StatusListaCompra;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -27,11 +28,22 @@ public class ListaCompra {
     @Column(nullable = false)
     private Integer numero;
 
-    @Column(name = "gerada_em", nullable = false)
+    /** Nulo enquanto RASCUNHO (#596). */
+    @Column(name = "gerada_em")
     private LocalDateTime geradaEm;
+
+    // #596/RN-NOVA-41 (V0.15.0)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    @Builder.Default
+    private StatusListaCompra status = StatusListaCompra.GERADA;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
     @PrePersist
     void prePersist() {
-        if (geradaEm == null) geradaEm = LocalDateTime.now();
+        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (geradaEm == null && status != StatusListaCompra.RASCUNHO) geradaEm = createdAt;
     }
 }

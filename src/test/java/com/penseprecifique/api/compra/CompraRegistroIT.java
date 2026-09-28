@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -180,6 +181,7 @@ class CompraRegistroIT {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> compraService.confirmar(rascunho.id(), null));
         assertTrue(ex.getMessage().contains("Linha 2 (Cola): informe o preço"), ex.getMessage());
+        assertEquals(List.of("Linha 2 (Cola): informe o preço"), ex.getItens()); // #602 — um problema por item
         assertEquals(0, BigDecimal.ZERO.compareTo(recarregar(a).getEstoqueAtual()));
         assertEquals(0, BigDecimal.ZERO.compareTo(recarregar(c).getEstoqueAtual()));
         assertEquals(StatusCompra.RASCUNHO, compraService.buscar(rascunho.id()).status());
@@ -198,8 +200,12 @@ class CompraRegistroIT {
         Insumo a = insumo("Papel", "0", "0.40", true);
         CompraRequest futura = new CompraRequest(LocalDate.now().plusDays(1), false, null, false, null, null,
                 List.of(linha(a, "1", "1.00")));
-        assertEquals("A data da compra não pode ser futura",
-                assertThrows(BusinessException.class, () -> compraService.criarRascunho(futura)).getMessage());
+        BusinessException ex = assertThrows(BusinessException.class, () -> compraService.criarRascunho(futura));
+        assertEquals("A data da compra não pode ser futura", ex.getMessage());
+        // #602/RN-NOVA-32 — erro explicado para a modal de erro padrão
+        assertEquals("Data no futuro", ex.getTitulo());
+        assertNotNull(ex.getMotivo());
+        assertNotNull(ex.getComoResolver());
     }
 
     @Test
@@ -215,7 +221,8 @@ class CompraRegistroIT {
         compraService.confirmarNova(compra(papelaria.getId(), List.of(linha(fita, "10", "18.00"))));
         List<FornecedorInsumoResponse> v2 = fornecedorInsumoService.listar(null, fita.getId());
         assertEquals(1, v2.size());
-        assertEquals(0, new BigDecimal("1.80").compareTo(v2.get(0).precoReferencia()));
+        // #590/RN-NOVA-39 (adendo 2) — regra padrão Média ponderada: (15,00 + 18,00) ÷ 20 = 1,65 (antes: último pago 1,80)
+        assertEquals(0, new BigDecimal("1.65").compareTo(v2.get(0).precoReferencia()));
     }
 
     @Test

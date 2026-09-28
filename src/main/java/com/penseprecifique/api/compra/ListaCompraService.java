@@ -13,6 +13,8 @@ import com.penseprecifique.api.shared.domain.entity.ListaCompraItem;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
+import com.penseprecifique.api.shared.domain.enums.StatusListaCompra;
 import com.penseprecifique.api.shared.dto.request.compra.CompraItemRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.GerarListaCompraRequest;
@@ -36,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -136,11 +139,78 @@ public class ListaCompraService {
     /** RN-NOVA-12 — grava a LST-N com o retrato das linhas. Lista vazia ou quantidade ≤ 0 é BLOQUEIO. */
     public ListaCompraResponse gerar(GerarListaCompraRequest request) {
         Usuario usuario = getUsuarioAutenticado();
-        List<GerarListaCompraRequest.Linha> linhas = request.itensOuVazio();
-        if (linhas.isEmpty()) {
-            throw new BusinessException("Escolha pelo menos um insumo para gerar a lista.");
-        }
+        List<ListaCompraItem> itens = montarItens(usuario, request.itensOuVazio(), true);
+        ListaCompra lista = novaLista(usuario, StatusListaCompra.GERADA);
+        itens.forEach(i -> i.setLista(lista));
+        listaCompraItemRepository.saveAll(itens);
+        return toResponse(lista, itens);
+    }
 
+    /** #596/RN-NOVA-41 — "Salvar rascunho": ganha LST-N, status RASCUNHO; quantidade pode ficar vazia. */
+    public ListaCompraResponse salvarRascunho(GerarListaCompraRequest request) {
+        Usuario usuario = getUsuarioAutenticado();
+        List<ListaCompraItem> itens = montarItens(usuario, request.itensOuVazio(), false);
+        ListaCompra lista = novaLista(usuario, StatusListaCompra.RASCUNHO);
+        itens.forEach(i -> i.setLista(lista));
+        listaCompraItemRepository.saveAll(itens);
+        return toResponse(lista, itens);
+    }
+
+    /** #596 — edita as linhas de um RASCUNHO (substitui todas). */
+    public ListaCompraResponse atualizarRascunho(UUID id, GerarListaCompraRequest request) {
+        ListaCompra lista = buscarEntidade(id);
+        exigirRascunho(lista);
+        List<ListaCompraItem> itens = montarItens(lista.getUsuario(), request.itensOuVazio(), false);
+        substituirItens(lista, itens);
+        return toResponse(lista, itens);
+    }
+
+    /**
+     * #596 — "Gerar lista" a partir do rascunho: mesmas validações do gerar direto e o retrato é tirado
+     * AGORA (estoques, nome, unidade e preço de referência atuais). Depois disso não muda mais.
+     */
+    public ListaCompraResponse gerarRascunho(UUID id) {
+        ListaCompra lista = buscarEntidade(id);
+        exigirRascunho(lista);
+        List<GerarListaCompraRequest.Linha> linhas = listaCompraItemRepository.findByListaIdOrderByOrdemAsc(lista.getId()).stream()
+                .map(i -> new GerarListaCompraRequest.Linha(i.getInsumo().getId(), i.getQuantidade(),
+                        i.getFornecedor() != null ? i.getFornecedor().getId() : null))
+                .toList();
+        List<ListaCompraItem> itens = montarItens(lista.getUsuario(), linhas, true);
+        substituirItens(lista, itens);
+        lista.setStatus(StatusListaCompra.GERADA);
+        lista.setGeradaEm(LocalDateTime.now());
+        listaCompraRepository.save(lista);
+        return toResponse(lista, itens);
+    }
+
+    /**
+     * #596/RN-NOVA-41 — troca manual, livre entre GERADA, PARCIALMENTE_COMPRADA, COMPRADA e CANCELADA.
+     * Nenhuma lista volta para RASCUNHO; o RASCUNHO só sai para GERADA (pelo "Gerar lista") ou CANCELADA.
+     */
+    public ListaCompraResponse alterarStatus(UUID id, StatusListaCompra novo) {
+        ListaCompra lista = buscarEntidade(id);
+        if (novo == StatusListaCompra.RASCUNHO) {
+            throw BusinessException.explicado("Status não permitido", "Uma lista não volta para Rascunho.",
+                    "A lista gerada é um retrato do que comprar e não é mais editada.",
+                    "Para montar outra lista com os mesmos insumos, crie uma Nova lista.");
+        }
+        if (lista.getStatus() == StatusListaCompra.RASCUNHO && novo != StatusListaCompra.CANCELADA) {
+            throw BusinessException.explicado("Lista em rascunho", "O rascunho só pode ser gerado ou cancelado.",
+                    "Enquanto é rascunho, a lista ainda não foi gerada; comprada ou parcialmente comprada só depois de gerada.",
+                    "Abra o rascunho e use \"Gerar lista\", ou cancele.");
+        }
+        lista.setStatus(novo);
+        listaCompraRepository.save(lista);
+        return toResponse(lista, listaCompraItemRepository.findByListaIdOrderByOrdemAsc(lista.getId()));
+    }
+
+    private List<ListaCompraItem> montarItens(Usuario usuario, List<GerarListaCompraRequest.Linha> linhas, boolean exigirQuantidade) {
+        if (linhas.isEmpty()) {
+            throw BusinessException.explicado("Lista vazia", "Escolha pelo menos um insumo para gerar a lista.",
+                    "A lista gerada é o retrato do que comprar; sem insumos não há o que listar.",
+                    "Marque um filtro em \"O que entra na lista\" ou use \"Adicionar insumos\".");
+        }
         List<ListaCompraItem> itens = new ArrayList<>();
         List<String> problemas = new ArrayList<>();
         Set<UUID> vistos = new HashSet<>();
@@ -149,12 +219,17 @@ public class ListaCompraService {
             Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(linha.insumoId(), usuario.getId())
                     .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + linha.insumoId()));
             if (!Boolean.TRUE.equals(insumo.getAtivo())) {
-                throw new BusinessException("O insumo " + insumo.getNome() + " está inativo e não pode entrar na lista.");
+                throw BusinessException.explicado("Insumo inativo", "O insumo " + insumo.getNome() + " está inativo e não pode entrar na lista.",
+                        "Insumo inativo não é mais comprado.",
+                        "Reative o insumo na tela de Insumos ou tire-o da lista.");
             }
             if (!vistos.add(insumo.getId())) {
-                throw new BusinessException("O insumo " + insumo.getNome() + " está repetido na lista.");
+                throw BusinessException.explicado("Insumo repetido", "O insumo " + insumo.getNome() + " está repetido na lista.",
+                        "Cada insumo aparece uma vez na lista, com a quantidade total a comprar.",
+                        "Some as quantidades numa linha só e remova a outra.");
             }
-            if (linha.quantidade() == null || linha.quantidade().signum() <= 0) {
+            boolean semQuantidade = linha.quantidade() == null || linha.quantidade().signum() <= 0;
+            if (semQuantidade && (exigirQuantidade || linha.quantidade() != null)) {
                 problemas.add("Linha " + ordem + " (" + insumo.getNome() + "): informe uma quantidade maior que zero");
             }
             Cliente fornecedor = linha.fornecedorId() == null ? null
@@ -170,30 +245,61 @@ public class ListaCompraService {
                     .precoReferencia(preco).ordem(ordem++).build());
         }
         if (!problemas.isEmpty()) {
-            throw new BusinessException("Não foi possível gerar a lista. " + String.join("; ", problemas) + ".");
+            throw BusinessException.explicado("Lista incompleta", "Não foi possível gerar a lista. " + String.join("; ", problemas) + ".",
+                    "Cada linha precisa de uma quantidade para a lista dizer quanto comprar.",
+                    "Preencha a quantidade das linhas apontadas (ex.: 12) ou remova a linha.")
+                    .comItens(problemas);
         }
+        return itens;
+    }
 
+    private ListaCompra novaLista(Usuario usuario, StatusListaCompra status) {
         usuarioRepository.lockPorId(usuario.getId());
-        ListaCompra lista = listaCompraRepository.save(ListaCompra.builder().usuario(usuario)
+        return listaCompraRepository.save(ListaCompra.builder().usuario(usuario).status(status)
                 .numero(NumeroSequencialUtil.proximoNumero(
                         listaCompraRepository.findTopByUsuarioIdOrderByNumeroDesc(usuario.getId()).map(ListaCompra::getNumero)))
                 .build());
+    }
+
+    private void substituirItens(ListaCompra lista, List<ListaCompraItem> itens) {
+        listaCompraItemRepository.deleteAll(listaCompraItemRepository.findByListaIdOrderByOrdemAsc(lista.getId()));
+        listaCompraItemRepository.flush();
         itens.forEach(i -> i.setLista(lista));
         listaCompraItemRepository.saveAll(itens);
-        return toResponse(lista, itens);
     }
+
+    private static void exigirRascunho(ListaCompra lista) {
+        if (lista.getStatus() != StatusListaCompra.RASCUNHO) {
+            throw BusinessException.explicado("Lista já gerada", "Só a lista em rascunho pode ser editada.",
+                    "A lista gerada é um retrato do que comprar e não muda mais.",
+                    "Crie uma Nova lista se precisar de outra seleção.");
+        }
+    }
+
+    // #595/RN-NOVA-41 — allowlist de ordenação do histórico (padrão: mais recente primeiro).
+    private static final Map<String, String> CAMPOS_ORDENACAO_LISTA = Map.of(
+            "numero", "l.numero",
+            "geradaEm", "l.geradaEm",
+            "status", "l.status",
+            "quantidadeItens", "(SELECT COUNT(i) FROM ListaCompraItem i WHERE i.lista = l)");
 
     @Transactional(readOnly = true)
     public Page<ListaCompraResumoResponse> historico(Pageable pageable) {
         UUID usuarioId = getUsuarioAutenticado().getId();
-        Pageable ordenado = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                Sort.by(Sort.Direction.DESC, "numero"));
-        Page<ListaCompra> pagina = listaCompraRepository.findByUsuarioId(usuarioId, ordenado);
+        Pageable base = pageable.getSort().isSorted() ? pageable
+                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "numero"));
+        Sort comDesempate = base.getSort().getOrderFor("numero") != null ? base.getSort()
+                : base.getSort().and(Sort.by(Sort.Direction.DESC, "numero"));
+        Pageable ordenado = PageableOrdenacaoResolver.resolverExpressaoJpql(
+                PageRequest.of(base.getPageNumber(), base.getPageSize(), comDesempate),
+                CAMPOS_ORDENACAO_LISTA, "numero, geradaEm, status, quantidadeItens");
+        Page<ListaCompra> pagina = listaCompraRepository.buscarDoUsuario(usuarioId, ordenado);
         Map<UUID, Long> contagem = pagina.isEmpty() ? Map.of()
                 : listaCompraItemRepository.contarPorLista(pagina.map(ListaCompra::getId).getContent()).stream()
                         .collect(Collectors.toMap(r -> (UUID) r[0], r -> (Long) r[1]));
         return pagina.map(l -> new ListaCompraResumoResponse(l.getId(), l.getNumero(),
-                IdentificadorFormatter.formatar("LST", l.getNumero()), l.getGeradaEm(), contagem.getOrDefault(l.getId(), 0L)));
+                IdentificadorFormatter.formatar("LST", l.getNumero()), l.getGeradaEm(), contagem.getOrDefault(l.getId(), 0L),
+                l.getStatus(), l.getCreatedAt()));
     }
 
     @Transactional(readOnly = true)
@@ -210,6 +316,13 @@ public class ListaCompraService {
      */
     public CompraResponse criarCompra(UUID id) {
         ListaCompra lista = buscarEntidade(id);
+        // #596/RN-NOVA-41 — só de lista gerada ainda não comprada por inteiro.
+        if (lista.getStatus() != StatusListaCompra.GERADA && lista.getStatus() != StatusListaCompra.PARCIALMENTE_COMPRADA) {
+            throw BusinessException.explicado("Lista sem compra pendente",
+                    "Só é possível criar compra de uma lista Gerada ou Parcialmente comprada.",
+                    "Rascunho ainda não foi gerado; lista Comprada ou Cancelada não tem mais o que comprar.",
+                    "Gere o rascunho primeiro, ou mude o status da lista se ainda falta comprar algo.");
+        }
         List<ListaCompraItem> itens = listaCompraItemRepository.findByListaIdOrderByOrdemAsc(lista.getId());
         Set<UUID> fornecedores = itens.stream()
                 .map(i -> i.getFornecedor() != null ? i.getFornecedor().getId() : null)
@@ -221,7 +334,9 @@ public class ListaCompraService {
                 .map(i -> new CompraItemRequest(i.getInsumo().getId(),
                         i.getFornecedor() != null ? i.getFornecedor().getId() : null, i.getQuantidade(), null))
                 .toList();
-        return compraService.criarRascunho(new CompraRequest(LocalDate.now(), multiplos, cabecalho, false, null, null, linhas));
+        CompraResponse rascunho = compraService.criarRascunho(new CompraRequest(LocalDate.now(), multiplos, cabecalho, false, null, null, linhas));
+        compraService.vincularLista(rascunho.id(), lista);
+        return compraService.buscar(rascunho.id());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -273,7 +388,7 @@ public class ListaCompraService {
 
     private ListaCompraResponse toResponse(ListaCompra lista, List<ListaCompraItem> itens) {
         return new ListaCompraResponse(lista.getId(), lista.getNumero(),
-                IdentificadorFormatter.formatar("LST", lista.getNumero()), lista.getGeradaEm(),
+                IdentificadorFormatter.formatar("LST", lista.getNumero()), lista.getGeradaEm(), lista.getStatus(),
                 itens.stream().map(i -> new ListaCompraResponse.Item(i.getOrdem(), i.getInsumo().getId(), i.getInsumoNome(),
                         i.getUnidade(), i.getEstoqueAtual(), i.getEstoqueMinimo(), i.getQuantidade(),
                         i.getFornecedor() != null ? i.getFornecedor().getId() : null, i.getFornecedorNome(),

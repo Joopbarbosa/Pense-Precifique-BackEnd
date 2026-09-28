@@ -9,5 +9,13 @@ public record PagamentoCompraRequest(
         @NotNull(message = "Informe se a compra foi paga")
         Boolean pago,
 
-        UUID metodoPagamentoId
-) {}
+        UUID metodoPagamentoId,
+
+        /** #597/RN-NOVA-42 — só com método Cartão de crédito; ignorado nos demais. */
+        Integer parcelas
+) {
+    /** Forma anterior ao #597. */
+    public PagamentoCompraRequest(Boolean pago, UUID metodoPagamentoId) {
+        this(pago, metodoPagamentoId, null);
+    }
+}

@@ -1,6 +1,7 @@
 package com.penseprecifique.api.auth;
 
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelService;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaService;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.dto.request.auth.CadastroRequestDTO;
 import com.penseprecifique.api.shared.dto.request.auth.LoginRequestDTO;
@@ -21,6 +22,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final MetodoPagamentoConfiguravelService metodoPagamentoService;
+    private final UnidadeMedidaService unidadeMedidaService;
 
     @Value("${jwt.expiration-ms}")
     private long expirationMs;
@@ -45,6 +47,7 @@ public class AuthServiceImpl implements AuthService {
         // DT-NOVA-6 — seed eager (não lazy como Empresa/ConfiguracaoPrecificacao, ver AUT-004):
         // Caixa exige pelo menos 1 método existente na primeira venda.
         metodoPagamentoService.seedMetodosPadrao(usuario);
+        unidadeMedidaService.seedUnidadesPadrao(usuario); // #605 — unidades básicas do sistema
 
         String token = jwtTokenProvider.generateToken(usuario);
         return new AuthResponseDTO(token, usuario.getId(), usuario.getEmail(), expirationMs);

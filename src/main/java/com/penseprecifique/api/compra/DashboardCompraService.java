@@ -71,7 +71,9 @@ public class DashboardCompraService {
         LocalDate fim = ate != null ? ate : LocalDate.now();
         LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
         if (inicio.isAfter(fim)) {
-            throw new BusinessException("A data inicial não pode ser depois da data final.");
+            throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
+                    "O período vai da data inicial até a data final.",
+                    "Troque as datas de lugar (ex.: de 01/09/2026 até 30/09/2026).");
         }
         LocalDate fimAnterior = inicio.minusDays(1);
         LocalDate inicioAnterior = inicio.getDayOfMonth() == 1
@@ -113,7 +115,11 @@ public class DashboardCompraService {
             List<CmvService.Venda> vm = vendasEntre(vendas, a, b);
             BigDecimal fat = somarFaturamento(vm);
             BigDecimal c = somarCmv(vm);
-            meses.add(new DashboardComprasResponse.Mes(a, somar(entre(linhas, a, b)), c, fat, percentual(c, fat)));
+            // #599/RN-NOVA-37 (adendo 2) — mês sem faturamento = 0% no gráfico (linha sem buraco); o
+            // número CMV % do período continua "—" sem faturamento (RN-NOVA-27).
+            BigDecimal pct = percentual(c, fat);
+            meses.add(new DashboardComprasResponse.Mes(a, somar(entre(linhas, a, b)), c, fat,
+                    pct != null ? pct : BigDecimal.ZERO.setScale(2)));
         }
 
         List<Compra> naoPagas = linhas.stream().map(CompraItem::getCompra).distinct()
@@ -156,7 +162,9 @@ public class DashboardCompraService {
         LocalDate fim = ate != null ? ate : LocalDate.now();
         LocalDate inicio = de != null ? de : fim.minusMonths(3);
         if (inicio.isAfter(fim)) {
-            throw new BusinessException("A data inicial não pode ser depois da data final.");
+            throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
+                    "O período vai da data inicial até a data final.",
+                    "Troque as datas de lugar (ex.: de 01/09/2026 até 30/09/2026).");
         }
 
         Map<UUID, Insumo> insumos = new HashMap<>();

@@ -44,7 +44,7 @@ public class ListaCompraItem {
     @Column(name = "estoque_minimo", precision = 15, scale = 4)
     private BigDecimal estoqueMinimo;
 
-    @Column(nullable = false, precision = 15, scale = 4)
+    @Column(precision = 15, scale = 4) // nula só em RASCUNHO (#596)
     private BigDecimal quantidade;
 
     @ManyToOne(fetch = FetchType.LAZY)

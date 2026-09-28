@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.request.compra.CancelarCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.PagamentoCompraRequest;
 import com.penseprecifique.api.shared.dto.response.compra.CompraConfirmacaoResponse;
+import com.penseprecifique.api.shared.dto.response.compra.CompraContagensResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.SimulacaoCancelamentoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResumoResponse;
@@ -38,14 +39,24 @@ public class CompraController {
 
     @GetMapping
     public ResponseEntity<Page<CompraResumoResponse>> listar(
-            @RequestParam(required = false) StatusCompra status,
+            // #585 (adendo 2) — status aceita vários valores (?status=RASCUNHO&status=CONFIRMADA)
+            @RequestParam(required = false) List<StatusCompra> status,
             @RequestParam(required = false) UUID fornecedorId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
             @RequestParam(required = false) UUID insumoId,
             @RequestParam(required = false) String busca,
+            @RequestParam(required = false) Boolean pago,
+            @RequestParam(defaultValue = "false") boolean comDesconto,
             @PageableDefault(size = 20, sort = {"dataCompra", "numero"}, direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(compraService.listar(status, fornecedorId, de, ate, insumoId, busca, pageable));
+        return ResponseEntity.ok(compraService.listar(status == null ? List.of() : status, fornecedorId, de, ate,
+                insumoId, busca, pago, comDesconto, pageable));
+    }
+
+    /** #591/RN-NOVA-44 — contagens dos filtros (total da conta). */
+    @GetMapping("/contagens")
+    public ResponseEntity<CompraContagensResponse> contagens() {
+        return ResponseEntity.ok(compraService.contagens());
     }
 
     /** #548/RN-NOVA-15 — cards do dashboard (só CONFIRMADAS). */
@@ -114,8 +125,9 @@ public class CompraController {
     }
 
     @PostMapping("/{id}/duplicar")
-    public ResponseEntity<CompraResponse> duplicar(@PathVariable UUID id) {
-        return ResponseEntity.status(201).body(compraService.duplicar(id));
+    public ResponseEntity<CompraResponse> duplicar(@PathVariable UUID id,
+                                                   @RequestParam(defaultValue = "true") boolean manterDescontos) {
+        return ResponseEntity.status(201).body(compraService.duplicar(id, manterDescontos));
     }
 
     @PatchMapping("/{id}/pagamento")

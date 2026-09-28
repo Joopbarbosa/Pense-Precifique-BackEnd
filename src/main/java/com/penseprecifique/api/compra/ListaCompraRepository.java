@@ -15,4 +15,9 @@ public interface ListaCompraRepository extends JpaRepository<ListaCompra, UUID> 
     Optional<ListaCompra> findByIdAndUsuarioId(UUID id, UUID usuarioId);
 
     Page<ListaCompra> findByUsuarioId(UUID usuarioId, Pageable pageable);
+
+    /** #595 — histórico com ordenação por expressão JPQL (alias {@code l}). */
+    @org.springframework.data.jpa.repository.Query(value = "SELECT l FROM ListaCompra l WHERE l.usuario.id = :usuarioId",
+            countQuery = "SELECT COUNT(l) FROM ListaCompra l WHERE l.usuario.id = :usuarioId")
+    Page<ListaCompra> buscarDoUsuario(@org.springframework.data.repository.query.Param("usuarioId") UUID usuarioId, Pageable pageable);
 }

@@ -47,12 +47,23 @@ public record CompraRequest(
 
         @Positive(message = "O desconto da nota deve ser maior que zero")
         @Digits(integer = 13, fraction = 2, message = "Desconto da nota com no máximo 2 casas decimais")
-        BigDecimal descontoNotaValor
+        BigDecimal descontoNotaValor,
+
+        /** #597/RN-NOVA-42 — só com método Cartão de crédito e pago; ignorado nos demais. */
+        Integer parcelas
 ) {
     /** Forma anterior ao #576 (sem desconto na nota). */
     public CompraRequest(LocalDate dataCompra, Boolean multiplosFornecedores, UUID fornecedorId, Boolean pago,
                          UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens) {
-        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens, null, null);
+        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens, null, null, null);
+    }
+
+    /** Forma anterior ao #597 (sem parcelas). */
+    public CompraRequest(LocalDate dataCompra, Boolean multiplosFornecedores, UUID fornecedorId, Boolean pago,
+                         UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens,
+                         TipoDesconto descontoNotaTipo, BigDecimal descontoNotaValor) {
+        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens,
+                descontoNotaTipo, descontoNotaValor, null);
     }
 
     public List<CompraItemRequest> itensOuVazio() {

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.compra;
 
+import com.penseprecifique.api.shared.dto.request.compra.AlterarStatusListaCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.GerarListaCompraRequest;
 import com.penseprecifique.api.shared.dto.response.compra.CompraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.ListaCompraResponse;
@@ -42,6 +43,33 @@ public class ListaCompraController {
         return ResponseEntity.status(201).body(listaCompraService.gerar(request));
     }
 
+    /** #596/RN-NOVA-41 — "Salvar rascunho" (LST-N em RASCUNHO; quantidade pode ficar vazia). */
+    @PostMapping("/rascunho")
+    public ResponseEntity<ListaCompraResponse> salvarRascunho(@Valid @RequestBody GerarListaCompraRequest request) {
+        return ResponseEntity.status(201).body(listaCompraService.salvarRascunho(request));
+    }
+
+    /** #596 — edita as linhas de um RASCUNHO. */
+    @PutMapping("/{id}")
+    public ResponseEntity<ListaCompraResponse> atualizarRascunho(@PathVariable UUID id,
+                                                                 @Valid @RequestBody GerarListaCompraRequest request) {
+        return ResponseEntity.ok(listaCompraService.atualizarRascunho(id, request));
+    }
+
+    /** #596 — "Gerar lista" a partir do rascunho (retrato tirado agora). */
+    @PostMapping("/{id}/gerar")
+    public ResponseEntity<ListaCompraResponse> gerarRascunho(@PathVariable UUID id) {
+        return ResponseEntity.ok(listaCompraService.gerarRascunho(id));
+    }
+
+    /** #596 — troca manual do status. */
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<ListaCompraResponse> alterarStatus(@PathVariable UUID id,
+                                                             @Valid @RequestBody AlterarStatusListaCompraRequest request) {
+        return ResponseEntity.ok(listaCompraService.alterarStatus(id, request.status()));
+    }
+
+    // #595 — sort por allowlist: numero, geradaEm, status, quantidadeItens (padrão: numero desc).
     @GetMapping
     public ResponseEntity<Page<ListaCompraResumoResponse>> historico(@PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(listaCompraService.historico(pageable));

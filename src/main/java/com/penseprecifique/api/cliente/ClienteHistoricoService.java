@@ -168,7 +168,9 @@ public class ClienteHistoricoService {
             throw new BusinessException("Informe o papel: CLIENTE ou FORNECEDOR.");
         }
         if (de != null && ate != null && de.isAfter(ate)) {
-            throw new BusinessException("A data inicial não pode ser depois da data final.");
+            throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
+                    "O período vai da data inicial até a data final.",
+                    "Troque as datas de lugar (ex.: de 01/09/2026 até 30/09/2026).");
         }
         Comparator<Registro> ordem = ordenacaoRegistros(pageable.getSort());
         String termo = normalizar(busca);
@@ -265,11 +267,25 @@ public class ClienteHistoricoService {
      * últimos 12 meses (do 1º dia de 11 meses atrás até hoje).
      */
     public ClienteGraficosResponse graficos(UUID clienteId, LocalDate de, LocalDate ate) {
+        return graficos(clienteId, PapelCadastro.CLIENTE, de, ate);
+    }
+
+    /**
+     * #587/RN-NOVA-36 (adendo 2) — {@code papel=FORNECEDOR}: compras CONFIRMADAS por mês (só a parte do
+     * fornecedor nas compras com vários) e os 10 insumos com mais valor pago a ele no período
+     * ({@code tipo = INSUMO}).
+     */
+    public ClienteGraficosResponse graficos(UUID clienteId, PapelCadastro papel, LocalDate de, LocalDate ate) {
         UUID usuarioId = validarCadastro(clienteId);
         LocalDate fim = ate != null ? ate : LocalDate.now();
         LocalDate inicio = de != null ? de : YearMonth.from(fim).minusMonths(11).atDay(1);
         if (inicio.isAfter(fim)) {
-            throw new BusinessException("A data inicial não pode ser depois da data final.");
+            throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
+                    "O período vai da data inicial até a data final.",
+                    "Troque as datas de lugar (ex.: de 01/09/2026 até 30/09/2026).");
+        }
+        if (papel == PapelCadastro.FORNECEDOR) {
+            return graficosFornecedor(clienteId, usuarioId, inicio, fim);
         }
 
         List<Pedido> noPeriodo = comprasComItens(
@@ -292,6 +308,37 @@ public class ClienteHistoricoService {
         List<ItemCompradoResponse> ranking = rankingItens(noPeriodo);
         return new ClienteGraficosResponse(inicio, fim, gasto,
                 ranking.subList(0, Math.min(MAX_ITENS_GRAFICO, ranking.size())));
+    }
+
+    private ClienteGraficosResponse graficosFornecedor(UUID fornecedorId, UUID usuarioId, LocalDate inicio, LocalDate fim) {
+        Map<YearMonth, BigDecimal> porMes = new LinkedHashMap<>();
+        for (YearMonth m = YearMonth.from(inicio); !m.isAfter(YearMonth.from(fim)); m = m.plusMonths(1)) {
+            porMes.put(m, BigDecimal.ZERO);
+        }
+        Map<UUID, ItemCompradoResponse> porInsumo = new LinkedHashMap<>();
+        linhasDoFornecedor(fornecedorId, usuarioId).forEach((compra, linhas) -> {
+            if (compra.getStatus() != StatusCompra.CONFIRMADA
+                    || compra.getDataCompra().isBefore(inicio) || compra.getDataCompra().isAfter(fim)) {
+                return;
+            }
+            porMes.merge(YearMonth.from(compra.getDataCompra()), CompraMapper.total(linhas), BigDecimal::add);
+            for (CompraItem l : linhas) {
+                BigDecimal qtd = l.getQuantidade() != null ? l.getQuantidade() : BigDecimal.ZERO;
+                BigDecimal valor = l.getPrecoTotal() != null ? l.getPrecoTotal() : BigDecimal.ZERO;
+                porInsumo.merge(l.getInsumo().getId(),
+                        new ItemCompradoResponse(l.getInsumo().getId(), "INSUMO", l.getInsumo().getNome(), qtd, valor),
+                        (a, b) -> new ItemCompradoResponse(a.id(), a.tipo(), a.nome(), a.quantidade().add(b.quantidade()),
+                                a.valor().add(b.valor())));
+            }
+        });
+        List<ClienteGraficosResponse.GastoMensal> gasto = porMes.entrySet().stream()
+                .map(e -> new ClienteGraficosResponse.GastoMensal(e.getKey().atDay(1), e.getValue()))
+                .toList();
+        List<ItemCompradoResponse> ranking = porInsumo.values().stream()
+                .sorted(Comparator.comparing(ItemCompradoResponse::valor).reversed()
+                        .thenComparing(ItemCompradoResponse::nome, String.CASE_INSENSITIVE_ORDER))
+                .limit(MAX_ITENS_GRAFICO).toList();
+        return new ClienteGraficosResponse(inicio, fim, gasto, ranking);
     }
 
     // ---------------------------------------------------------------------------------------------

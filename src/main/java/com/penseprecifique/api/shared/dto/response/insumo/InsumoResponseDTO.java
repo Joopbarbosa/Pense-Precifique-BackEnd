@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.response.insumo;
 
+import com.penseprecifique.api.shared.domain.enums.RegraPrecoReferencia;
 import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 
 import java.math.BigDecimal;
@@ -25,5 +26,7 @@ public record InsumoResponseDTO(
         BigDecimal estoqueMinimo,
         boolean ativo,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        // #590/RN-NOVA-39 (V0.15.0)
+        RegraPrecoReferencia regraPrecoReferencia
 ) {}

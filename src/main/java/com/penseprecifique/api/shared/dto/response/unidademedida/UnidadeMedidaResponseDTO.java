@@ -8,5 +8,7 @@ public record UnidadeMedidaResponseDTO(
         String nome,
         String sigla,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        /** #605 — unidade do sistema (Padrão): não pode ser editada nem excluída. */
+        boolean padrao
 ) {}

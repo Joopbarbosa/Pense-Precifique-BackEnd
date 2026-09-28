@@ -24,7 +24,7 @@ public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
     // CAST(:busca AS string) obrigatório — mesmo motivo de InsumoRepository#buscarComFiltros
     // (parâmetro nulo inferido como bytea). Busca por nome ou por documento (sem máscara).
     @Query("SELECT c FROM Cliente c WHERE c.usuario.id = :usuarioId " +
-            "AND c.ativa = :ativo " +
+            "AND (:incluirInativos = true OR c.ativa = :ativo) " +
             "AND (:somenteClientes = false OR c.ehCliente = true) " +
             "AND (:somenteFornecedores = false OR c.ehFornecedor = true) " +
             "AND (:busca IS NULL OR LOWER(c.nome) LIKE LOWER(CONCAT('%', CAST(:busca AS string), '%')) " +
@@ -33,6 +33,7 @@ public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
                                    @Param("busca") String busca,
                                    @Param("buscaDocumento") String buscaDocumento,
                                    @Param("ativo") boolean ativo,
+                                   @Param("incluirInativos") boolean incluirInativos,
                                    @Param("somenteClientes") boolean somenteClientes,
                                    @Param("somenteFornecedores") boolean somenteFornecedores,
                                    Pageable pageable);

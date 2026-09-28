@@ -39,6 +39,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,11 +100,25 @@ public class ProdutoService {
      */
     @Transactional(readOnly = true)
     public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Boolean semCatalogo, Boolean ativo, Pageable pageable) {
+        return listar(tipo, busca, semCatalogo, ativo, false, pageable);
+    }
+
+    /**
+     * #616/RN-NOVA-40 (adendo 2) — {@code incluirInativos}: ativos e inativos, ativos primeiro (seletores
+     * mostram o inativo riscado, sem poder escolher); ignora {@code ativo}.
+     */
+    public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Boolean semCatalogo, Boolean ativo,
+                                        boolean incluirInativos, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
         boolean filtrarSemCatalogo = Boolean.TRUE.equals(semCatalogo);
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_PRODUTO,
                 "nome, numero, precoVenda, precoCusto, estoqueAtual, createdAt");
+        if (incluirInativos) {
+            ativo = null;
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "ativo").and(pageableOrdenado.getSort()));
+        }
         Page<Produto> pagina = temBusca
                 ? produtoRepository.buscarComBusca(usuarioId, tipo, filtrarSemCatalogo, busca, ativo, pageableOrdenado)
                 : produtoRepository.buscar(usuarioId, tipo, filtrarSemCatalogo, ativo, pageableOrdenado);

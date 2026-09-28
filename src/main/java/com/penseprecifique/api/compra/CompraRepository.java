@@ -30,7 +30,10 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
      */
     @EntityGraph(attributePaths = {"fornecedor", "metodoPagamento"})
     @Query(value = "SELECT c FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +
-            "AND (:status IS NULL OR c.status = :status) " +
+            "AND (:filtrarStatus = false OR c.status IN :statuses) " +
+            "AND (:filtrarPago = false OR c.pago = :pago) " +
+            "AND (:comDesconto = false OR c.descontoNota > 0 " +
+            "     OR EXISTS (SELECT 1 FROM CompraItem ci5 WHERE ci5.compra = c AND ci5.descontoLinha > 0)) " +
             "AND (CAST(:de AS date) IS NULL OR c.dataCompra >= :de) " +
             "AND (CAST(:ate AS date) IS NULL OR c.dataCompra <= :ate) " +
             "AND (:filtrarFornecedor = false OR f.id = :fornecedorId " +
@@ -40,7 +43,10 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
             "     OR EXISTS (SELECT 1 FROM CompraItem ci4 LEFT JOIN ci4.fornecedor f4 WHERE ci4.compra = c " +
             "                AND (LOWER(ci4.insumo.nome) LIKE :busca OR LOWER(f4.nome) LIKE :busca)))",
             countQuery = "SELECT COUNT(c) FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +
-            "AND (:status IS NULL OR c.status = :status) " +
+            "AND (:filtrarStatus = false OR c.status IN :statuses) " +
+            "AND (:filtrarPago = false OR c.pago = :pago) " +
+            "AND (:comDesconto = false OR c.descontoNota > 0 " +
+            "     OR EXISTS (SELECT 1 FROM CompraItem ci5 WHERE ci5.compra = c AND ci5.descontoLinha > 0)) " +
             "AND (CAST(:de AS date) IS NULL OR c.dataCompra >= :de) " +
             "AND (CAST(:ate AS date) IS NULL OR c.dataCompra <= :ate) " +
             "AND (:filtrarFornecedor = false OR f.id = :fornecedorId " +
@@ -50,7 +56,11 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
             "     OR EXISTS (SELECT 1 FROM CompraItem ci4 LEFT JOIN ci4.fornecedor f4 WHERE ci4.compra = c " +
             "                AND (LOWER(ci4.insumo.nome) LIKE :busca OR LOWER(f4.nome) LIKE :busca)))")
     Page<Compra> buscarComFiltros(@Param("usuarioId") UUID usuarioId,
-                                  @Param("status") StatusCompra status,
+                                  @Param("filtrarStatus") boolean filtrarStatus,
+                                  @Param("statuses") java.util.Collection<StatusCompra> statuses,
+                                  @Param("filtrarPago") boolean filtrarPago,
+                                  @Param("pago") boolean pago,
+                                  @Param("comDesconto") boolean comDesconto,
                                   @Param("filtrarFornecedor") boolean filtrarFornecedor,
                                   @Param("fornecedorId") UUID fornecedorId,
                                   @Param("de") LocalDate de,
@@ -61,6 +71,9 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
                                   @Param("numeroBusca") Integer numeroBusca,
                                   @Param("busca") String busca,
                                   Pageable pageable);
+
+    /** #591/RN-NOVA-44 — contagem por status (total da conta, sem filtros). */
+    long countByUsuarioIdAndStatusAndDeletedAtIsNull(UUID usuarioId, StatusCompra status);
 
     /** Compras (não excluídas) em que o cadastro é fornecedor no cabeçalho ou em alguma linha. */
     @Query("SELECT c FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +

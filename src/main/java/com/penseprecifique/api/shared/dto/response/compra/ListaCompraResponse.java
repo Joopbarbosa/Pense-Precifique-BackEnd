@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.response.compra;
 
+import com.penseprecifique.api.shared.domain.enums.StatusListaCompra;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,6 +13,7 @@ public record ListaCompraResponse(
         Integer numero,
         String identificador,
         LocalDateTime geradaEm,
+        StatusListaCompra status, // #596/RN-NOVA-41
         List<Item> itens
 ) {
     public record Item(int ordem, UUID insumoId, String insumoNome, String unidade, BigDecimal estoqueAtual,

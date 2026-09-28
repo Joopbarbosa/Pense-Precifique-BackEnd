@@ -19,6 +19,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,7 +45,8 @@ public class ClienteService {
             "nome", "nome",
             "numero", "numero",
             "email", "email",
-            "createdAt", "createdAt"
+            "createdAt", "createdAt",
+            "documento", "documento" // #582 (adendo 2) — ordenar por CPF/CNPJ
     );
 
     static final String MSG_SEM_PAPEL = "Marque se é Cliente, Fornecedor ou os dois.";
@@ -58,9 +61,23 @@ public class ClienteService {
      */
     @Transactional(readOnly = true)
     public Page<ClienteResponse> listar(String busca, Boolean ativo, PapelCadastro papel, Pageable pageable) {
+        return listar(busca, ativo, papel, false, pageable);
+    }
+
+    /**
+     * #583/RN-NOVA-40 (adendo 2) — {@code incluirInativos}: ativos e inativos do papel, ativos primeiro
+     * (seletores mostram o inativo riscado, sem poder escolher); ignora {@code ativo}.
+     */
+    @Transactional(readOnly = true)
+    public Page<ClienteResponse> listar(String busca, Boolean ativo, PapelCadastro papel, boolean incluirInativos,
+                                        Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_CLIENTE,
-                "nome, numero, email, createdAt");
+                "nome, numero, email, createdAt, documento");
+        if (incluirInativos) {
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "ativa").and(pageableOrdenado.getSort()));
+        }
 
         String buscaNormalizada = (busca != null && !busca.isBlank()) ? busca.trim() : null;
         // Documento só entra na busca quando o texto tem algum dígito (evita casar "ANA" com CNPJ
@@ -70,6 +87,7 @@ public class ClienteService {
 
         Page<Cliente> pagina = clienteRepository.buscarComFiltros(usuarioId, buscaNormalizada, buscaDocumento,
                 ativo == null || ativo,
+                incluirInativos,
                 papel == PapelCadastro.CLIENTE,
                 papel == PapelCadastro.FORNECEDOR,
                 pageableOrdenado);
@@ -147,9 +165,11 @@ public class ClienteService {
                 ? Boolean.TRUE.equals(cliente.getEhCliente())
                 : Boolean.TRUE.equals(cliente.getEhFornecedor());
         if (!Boolean.TRUE.equals(cliente.getAtiva()) || !temPapel) {
-            throw new BusinessException(papel == PapelCadastro.CLIENTE
+            throw BusinessException.explicado("Cadastro indisponível", papel == PapelCadastro.CLIENTE
                     ? "Este cadastro não está ativo como Cliente."
-                    : "Este cadastro não está ativo como Fornecedor.");
+                    : "Este cadastro não está ativo como Fornecedor.",
+                    "Só cadastros ativos e com o papel certo entram em registros novos.",
+                    "Em Clientes e Fornecedores, reative o cadastro ou marque o papel que falta.");
         }
         return cliente;
     }
@@ -165,7 +185,9 @@ public class ClienteService {
      */
     private String validarPapeisEDocumento(ClienteRequest request, UUID usuarioId, UUID idAtual) {
         if (!Boolean.TRUE.equals(request.getEhCliente()) && !Boolean.TRUE.equals(request.getEhFornecedor())) {
-            throw new BusinessException(MSG_SEM_PAPEL);
+            throw BusinessException.explicado("Papel do cadastro", MSG_SEM_PAPEL,
+                    "O papel define onde o cadastro aparece: como cliente no Orçamento e no Caixa, como fornecedor nas Compras.",
+                    "Marque Cliente, Fornecedor ou os dois.");
         }
 
         TipoPessoa tipo = request.getTipoPessoa() != null ? request.getTipoPessoa() : TipoPessoa.FISICA;
@@ -176,18 +198,24 @@ public class ClienteService {
             return null;
         }
         if (tipo == TipoPessoa.FISICA && !DocumentoFiscal.cpfValido(documento)) {
-            throw new BusinessException("CPF inválido");
+            throw BusinessException.explicado("CPF inválido", "CPF inválido",
+                    "Os dois últimos dígitos do CPF são calculados a partir dos outros; o número digitado não fecha essa conta.",
+                    "Confira o CPF no documento (11 dígitos, ex.: 529.982.247-25) ou deixe o campo vazio.");
         }
         if (tipo == TipoPessoa.JURIDICA && !DocumentoFiscal.cnpjValido(documento)) {
-            throw new BusinessException("CNPJ inválido");
+            throw BusinessException.explicado("CNPJ inválido", "CNPJ inválido",
+                    "Os dois últimos dígitos do CNPJ são calculados a partir dos outros; o número digitado não fecha essa conta.",
+                    "Confira o CNPJ no cartão da empresa (14 caracteres, podendo ter letras, ex.: 12.ABC.345/01DE-35) ou deixe o campo vazio.");
         }
 
         clienteRepository.findByUsuarioIdAndDocumento(usuarioId, documento)
                 .filter(existente -> !existente.getId().equals(idAtual))
                 .ifPresent(existente -> {
-                    throw new BusinessException("Já existe um cadastro com este CPF/CNPJ: "
+                    throw BusinessException.explicado("Documento já cadastrado", "Já existe um cadastro com este CPF/CNPJ: "
                             + IdentificadorFormatter.formatar("CLI", existente.getNumero())
-                            + " — " + existente.getNome());
+                            + " — " + existente.getNome(),
+                            "Cada CPF/CNPJ pertence a um cadastro só, para o histórico da pessoa ou empresa não se dividir.",
+                            "Abra o cadastro existente; se ele for cliente e agora também fornecedor, marque os dois papéis nele.");
                 });
         return documento;
     }

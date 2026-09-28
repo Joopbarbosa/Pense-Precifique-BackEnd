@@ -44,8 +44,10 @@ final class DescontoCompra {
             BigDecimal desconto = valorDoDesconto(item.getDescontoTipo(), item.getDescontoInformado(), item.getPrecoCheio(),
                     "Linha " + (i + 1) + " (" + item.getInsumo().getNome() + ")");
             if (desconto.compareTo(item.getPrecoCheio()) >= 0) {
-                throw new BusinessException("Linha " + (i + 1) + " (" + item.getInsumo().getNome()
-                        + "): o desconto precisa ser menor que o preço cheio.");
+                throw BusinessException.explicado("Desconto maior que o preço", "Linha " + (i + 1) + " (" + item.getInsumo().getNome()
+                        + "): o desconto precisa ser menor que o preço cheio.",
+                        "O preço pago é o preço cheio menos o desconto; ele precisa ficar maior que zero.",
+                        "Informe um desconto menor que o preço cheio (ex.: preço cheio 30,00 e desconto 3,00 → paga 27,00).");
             }
             item.setDescontoLinha(desconto);
             item.setPrecoTotal(item.getPrecoCheio().subtract(desconto));
@@ -59,7 +61,9 @@ final class DescontoCompra {
             return;
         }
         if (descontoNota.compareTo(soma) >= 0) {
-            throw new BusinessException("O desconto da nota precisa ser menor que a soma das linhas.");
+            throw BusinessException.explicado("Desconto da nota maior que a compra", "O desconto da nota precisa ser menor que a soma das linhas.",
+                    "O desconto da nota é dividido entre as linhas; se ele for igual ou maior que a soma, o total pago fica zerado.",
+                    "Informe um desconto na nota menor que a soma das linhas (ex.: linhas de 71,00 → desconto de até 70,99).");
         }
 
         CompraItem maior = null;
@@ -84,8 +88,10 @@ final class DescontoCompra {
             }
             item.setPrecoTotal(item.getPrecoTotal().subtract(item.getDescontoNota()));
             if (item.getPrecoTotal().signum() <= 0) {
-                throw new BusinessException("Linha " + (i + 1) + " (" + item.getInsumo().getNome()
-                        + "): o preço pago ficou zerado com os descontos.");
+                throw BusinessException.explicado("Preço pago zerado", "Linha " + (i + 1) + " (" + item.getInsumo().getNome()
+                        + "): o preço pago ficou zerado com os descontos.",
+                        "Somando o desconto da linha com a parte do desconto da nota, a linha ficou sem valor a pagar.",
+                        "Diminua o desconto da linha ou o desconto da nota.");
             }
         }
     }
@@ -98,7 +104,9 @@ final class DescontoCompra {
             return informado.setScale(2, RoundingMode.HALF_UP);
         }
         if (informado.signum() <= 0 || informado.compareTo(CEM) >= 0) {
-            throw new BusinessException(onde + ": o desconto em % precisa ser maior que 0 e menor que 100.");
+            throw BusinessException.explicado("Desconto em %", onde + ": o desconto em % precisa ser maior que 0 e menor que 100.",
+                    "Com 100% ou mais o preço pago zeraria; com 0% não há desconto.",
+                    "Informe um percentual entre 0 e 100 (ex.: 10%), ou deixe o campo vazio para não dar desconto.");
         }
         return base.multiply(informado).divide(CEM, 2, RoundingMode.HALF_UP);
     }

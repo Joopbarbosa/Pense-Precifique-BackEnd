@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.domain.entity;
 
+import com.penseprecifique.api.shared.domain.enums.RegraPrecoReferencia;
+
 import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import jakarta.persistence.*;
 import lombok.*;
@@ -65,6 +67,12 @@ public class Insumo {
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_exibicao_quantidade")
     private TipoExibicaoQuantidade tipoExibicaoQuantidade;
+
+    // #590/RN-NOVA-39 (V0.15.0) — regra do preço de referência dos vínculos com fornecedores.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "regra_preco_referencia", nullable = false, length = 20)
+    @Builder.Default
+    private RegraPrecoReferencia regraPrecoReferencia = RegraPrecoReferencia.MEDIA;
 
     @Column(name = "permitir_estoque_negativo", nullable = false)
     @Builder.Default
