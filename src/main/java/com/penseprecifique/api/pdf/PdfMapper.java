@@ -560,8 +560,10 @@ public class PdfMapper {
             .dataCompra(compra.getDataCompra().format(DATE_FORMATTER))
             .fornecedor(fornecedor)
             .multiplosFornecedores(multiplos)
+            // #597/RN-NOVA-42 (adendo 2) — crédito parcelado: "Pago — Cartão Crédito · 3x"
             .pagamento(Boolean.TRUE.equals(compra.getPago()) && compra.getMetodoPagamento() != null
                 ? "Pago — " + com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(compra.getMetodoPagamento())
+                    + (compra.getParcelas() != null ? " · " + compra.getParcelas() + "x" : "")
                 : "Não pago")
             .total(formatarMoeda(total))
             .observacoes(compra.getObservacoes())
@@ -619,7 +621,10 @@ public class PdfMapper {
             .empresa(toEmpresaDoUsuario(empresa))
             .documento(PdfMicroservicoDocumentoListaComprasPayload.builder()
                 .numeroFormatado(com.penseprecifique.api.util.IdentificadorFormatter.formatar("LST", lista.getNumero()))
-                .dataGeracao(formatarData(lista.getGeradaEm()))
+                // #596/RN-NOVA-41 (adendo 2) — status da lista; rascunho não tem geradaEm (usa a data em que foi salvo)
+                .dataGeracao(formatarData(lista.getGeradaEm() != null ? lista.getGeradaEm() : lista.getCreatedAt()))
+                .status(formatarStatusLista(lista.getStatus()))
+                .rascunho(lista.getStatus() == com.penseprecifique.api.shared.domain.enums.StatusListaCompra.RASCUNHO)
                 .quantidadeItens(itens.size())
                 .grupos(grupos)
                 .build())
@@ -634,7 +639,7 @@ public class PdfMapper {
                 .map(i -> PdfMicroservicoDocumentoListaComprasPayload.Item.builder()
                     .insumo(i.getInsumoNome())
                     .unidade(i.getUnidade())
-                    .quantidade(QUANTIDADE_FORMATTER.format(i.getQuantidade()))
+                    .quantidade(i.getQuantidade() != null ? QUANTIDADE_FORMATTER.format(i.getQuantidade()) : "—")
                     .precoReferencia(i.getPrecoReferencia() != null ? formatarMoedaUnitaria(i.getPrecoReferencia()) : null)
                     .build())
                 .toList())
@@ -646,6 +651,16 @@ public class PdfMapper {
             empresa != null ? empresa.getEmail() : null,
             empresa != null ? empresa.getWhatsapp() : null,
             empresa != null ? empresa.getLogoUrl() : null);
+    }
+
+    private static String formatarStatusLista(com.penseprecifique.api.shared.domain.enums.StatusListaCompra status) {
+        return switch (status) {
+            case RASCUNHO -> "Rascunho";
+            case GERADA -> "Gerada";
+            case PARCIALMENTE_COMPRADA -> "Parcialmente comprada";
+            case COMPRADA -> "Comprada";
+            case CANCELADA -> "Cancelada";
+        };
     }
 
     private static String formatarStatusCompra(com.penseprecifique.api.shared.domain.enums.StatusCompra status) {

@@ -151,4 +151,27 @@ class ComprasPdfPayloadIT {
         assertNull(grupos.get(2).getItens().get(0).getPrecoReferencia());
         assertEquals("fl", grupos.get(0).getItens().get(0).getUnidade());
     }
+
+    @Test
+    void adendo2ParcelasNoPagamentoEStatusDaListaEmRascunho() {
+        Insumo papel = insumo(1, "Papel");
+        MetodoPagamentoConfiguravel credito = metodoPagamentoRepository.save(MetodoPagamentoConfiguravel.builder()
+                .usuario(usuario).tipo(TipoMetodoPagamento.CARTAO_CREDITO).ativo(true).ordem(1).maxParcelas(6).build());
+        CompraResponse c = compraService.confirmarNova(new CompraRequest(LocalDate.now(), false, null, true, credito.getId(), null,
+                List.of(new CompraItemRequest(papel.getId(), null, BigDecimal.TEN, new BigDecimal("30.00"))), null, null, 3)).compra();
+        // #597/RN-NOVA-42 — "Cartão Crédito · 3x" no PDF
+        assertTrue(comprasPdfPayloadService.montarPayloadCompra(c.id()).getDocumento().getPagamento().endsWith(" · 3x"));
+
+        // #596/RN-NOVA-41 — rascunho sem quantidade gera PDF com status e "salvo em"
+        ListaCompraResponse rascunho = listaCompraService.salvarRascunho(new GerarListaCompraRequest(List.of(
+                new GerarListaCompraRequest.Linha(papel.getId(), null, null))));
+        PdfMicroservicoListaComprasPayload p = comprasPdfPayloadService.montarPayloadListaCompras(rascunho.id());
+        assertEquals("Rascunho", p.getDocumento().getStatus());
+        assertTrue(p.getDocumento().isRascunho());
+        assertTrue(p.getDocumento().getDataGeracao() != null);
+        assertEquals("—", p.getDocumento().getGrupos().get(0).getItens().get(0).getQuantidade());
+        ListaCompraResponse gerada = listaCompraService.gerarRascunho(listaCompraService.atualizarRascunho(rascunho.id(),
+                new GerarListaCompraRequest(List.of(new GerarListaCompraRequest.Linha(papel.getId(), new BigDecimal("5"), null)))).id());
+        assertEquals("Gerada", comprasPdfPayloadService.montarPayloadListaCompras(gerada.id()).getDocumento().getStatus());
+    }
 }

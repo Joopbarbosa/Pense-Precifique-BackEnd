@@ -11,6 +11,9 @@ import java.util.List;
 public class PdfMicroservicoDocumentoListaComprasPayload {
     private String numeroFormatado;
     private String dataGeracao;
+    /** #596/RN-NOVA-41 (adendo 2) — rótulo do status ("Parcialmente comprada"); rascunho: dataGeracao = salva em. */
+    private String status;
+    private boolean rascunho;
     private int quantidadeItens;
     private List<Grupo> grupos;
 
