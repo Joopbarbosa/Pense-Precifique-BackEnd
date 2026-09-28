@@ -83,10 +83,14 @@ public class ClienteController {
             @RequestParam(defaultValue = "false") boolean naoPagas,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
-            @RequestParam(required = false) UUID itemId,
+            // #585/RN-NOVA-35 (adendo 2) — itemId aceita vários (OU); tipo, pago e comDesconto do campo de filtros
+            @RequestParam(required = false) List<UUID> itemId,
+            @RequestParam(required = false) List<String> tipo,
+            @RequestParam(required = false) Boolean pago,
+            @RequestParam(defaultValue = "false") boolean comDesconto,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(clienteHistoricoService.registros(id, papel, busca, status, somenteCompras, naoPagas,
-                de, ate, itemId, pageable));
+        return ResponseEntity.ok(clienteHistoricoService.registrosComFiltros(id, papel, busca, status, somenteCompras, naoPagas,
+                de, ate, itemId == null ? List.of() : itemId, tipo == null ? List.of() : tipo, pago, comDesconto, pageable));
     }
 
     // #451 (V0.15.0) — gráficos do cliente; sem de/ate = últimos 12 meses.

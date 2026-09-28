@@ -119,15 +119,26 @@ public class CompraService {
         return listar(status == null ? List.of() : List.of(status), fornecedorId, de, ate, insumoId, busca, null, false, pageable);
     }
 
-    /**
-     * #585/#601 (adendo 2, DT-NOVA-27) — {@code statuses} vazio = todos; valores do mesmo filtro somam
-     * como OU e filtros diferentes como E (RN-NOVA-35). {@code pago} nulo = tanto faz;
-     * {@code comDesconto} = desconto de linha ou de nota.
-     */
     @Transactional(readOnly = true)
     public Page<CompraResumoResponse> listar(Collection<StatusCompra> statuses, UUID fornecedorId, LocalDate de, LocalDate ate,
                                              UUID insumoId, String busca, Boolean pago, boolean comDesconto,
                                              Pageable pageable) {
+        return listarComFiltros(statuses, fornecedorId == null ? List.of() : List.of(fornecedorId), de, ate,
+                insumoId == null ? List.of() : List.of(insumoId), busca, pago, comDesconto, pageable);
+    }
+
+    /**
+     * #585/#601 (adendo 2, DT-NOVA-27) — {@code statuses} vazio = todos; valores do mesmo filtro somam
+     * como OU e filtros diferentes como E (RN-NOVA-35). {@code pago} nulo = tanto faz;
+     * {@code comDesconto} = desconto de linha ou de nota. Vários fornecedores/insumos somam como OU
+     * (campo de filtros da modal de listagem).
+     */
+    @Transactional(readOnly = true)
+    public Page<CompraResumoResponse> listarComFiltros(Collection<StatusCompra> statuses, Collection<UUID> fornecedorIds, LocalDate de,
+                                             LocalDate ate, Collection<UUID> insumoIds, String busca, Boolean pago,
+                                             boolean comDesconto, Pageable pageable) {
+        boolean filtrarFornecedor = fornecedorIds != null && !fornecedorIds.isEmpty();
+        boolean filtrarInsumo = insumoIds != null && !insumoIds.isEmpty();
         UUID usuarioId = getUsuarioAutenticado().getId();
         Pageable ordenado = PageableOrdenacaoResolver.resolverExpressaoJpql(comDesempate(pageable), CAMPOS_ORDENACAO,
                 "dataCompra, numero, createdAt, fornecedor, status, itens, total");
@@ -138,9 +149,9 @@ public class CompraService {
         boolean filtrarStatus = statuses != null && !statuses.isEmpty();
         Page<Compra> pagina = compraRepository.buscarComFiltros(usuarioId, filtrarStatus,
                 filtrarStatus ? statuses : List.of(StatusCompra.values()), pago != null, Boolean.TRUE.equals(pago),
-                comDesconto, fornecedorId != null,
-                fornecedorId != null ? fornecedorId : new UUID(0, 0), de, ate,
-                insumoId != null, insumoId != null ? insumoId : new UUID(0, 0),
+                comDesconto, filtrarFornecedor,
+                filtrarFornecedor ? fornecedorIds : List.of(new UUID(0, 0)), de, ate,
+                filtrarInsumo, filtrarInsumo ? insumoIds : List.of(new UUID(0, 0)),
                 !termo.isEmpty(), numeroBusca, "%" + termo + "%", ordenado);
 
         Map<UUID, List<CompraItem>> itensPorCompra = pagina.isEmpty() ? Map.of()

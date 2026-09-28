@@ -36,9 +36,9 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
             "     OR EXISTS (SELECT 1 FROM CompraItem ci5 WHERE ci5.compra = c AND ci5.descontoLinha > 0)) " +
             "AND (CAST(:de AS date) IS NULL OR c.dataCompra >= :de) " +
             "AND (CAST(:ate AS date) IS NULL OR c.dataCompra <= :ate) " +
-            "AND (:filtrarFornecedor = false OR f.id = :fornecedorId " +
-            "     OR EXISTS (SELECT 1 FROM CompraItem ci WHERE ci.compra = c AND ci.fornecedor.id = :fornecedorId)) " +
-            "AND (:filtrarInsumo = false OR EXISTS (SELECT 1 FROM CompraItem ci3 WHERE ci3.compra = c AND ci3.insumo.id = :insumoId)) " +
+            "AND (:filtrarFornecedor = false OR f.id IN :fornecedorIds " +
+            "     OR EXISTS (SELECT 1 FROM CompraItem ci WHERE ci.compra = c AND ci.fornecedor.id IN :fornecedorIds)) " +
+            "AND (:filtrarInsumo = false OR EXISTS (SELECT 1 FROM CompraItem ci3 WHERE ci3.compra = c AND ci3.insumo.id IN :insumoIds)) " +
             "AND (:filtrarBusca = false OR c.numero = :numeroBusca OR LOWER(f.nome) LIKE :busca " +
             "     OR EXISTS (SELECT 1 FROM CompraItem ci4 LEFT JOIN ci4.fornecedor f4 WHERE ci4.compra = c " +
             "                AND (LOWER(ci4.insumo.nome) LIKE :busca OR LOWER(f4.nome) LIKE :busca)))",
@@ -49,9 +49,9 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
             "     OR EXISTS (SELECT 1 FROM CompraItem ci5 WHERE ci5.compra = c AND ci5.descontoLinha > 0)) " +
             "AND (CAST(:de AS date) IS NULL OR c.dataCompra >= :de) " +
             "AND (CAST(:ate AS date) IS NULL OR c.dataCompra <= :ate) " +
-            "AND (:filtrarFornecedor = false OR f.id = :fornecedorId " +
-            "     OR EXISTS (SELECT 1 FROM CompraItem ci WHERE ci.compra = c AND ci.fornecedor.id = :fornecedorId)) " +
-            "AND (:filtrarInsumo = false OR EXISTS (SELECT 1 FROM CompraItem ci3 WHERE ci3.compra = c AND ci3.insumo.id = :insumoId)) " +
+            "AND (:filtrarFornecedor = false OR f.id IN :fornecedorIds " +
+            "     OR EXISTS (SELECT 1 FROM CompraItem ci WHERE ci.compra = c AND ci.fornecedor.id IN :fornecedorIds)) " +
+            "AND (:filtrarInsumo = false OR EXISTS (SELECT 1 FROM CompraItem ci3 WHERE ci3.compra = c AND ci3.insumo.id IN :insumoIds)) " +
             "AND (:filtrarBusca = false OR c.numero = :numeroBusca OR LOWER(f.nome) LIKE :busca " +
             "     OR EXISTS (SELECT 1 FROM CompraItem ci4 LEFT JOIN ci4.fornecedor f4 WHERE ci4.compra = c " +
             "                AND (LOWER(ci4.insumo.nome) LIKE :busca OR LOWER(f4.nome) LIKE :busca)))")
@@ -62,11 +62,11 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
                                   @Param("pago") boolean pago,
                                   @Param("comDesconto") boolean comDesconto,
                                   @Param("filtrarFornecedor") boolean filtrarFornecedor,
-                                  @Param("fornecedorId") UUID fornecedorId,
+                                  @Param("fornecedorIds") java.util.Collection<UUID> fornecedorIds,
                                   @Param("de") LocalDate de,
                                   @Param("ate") LocalDate ate,
                                   @Param("filtrarInsumo") boolean filtrarInsumo,
-                                  @Param("insumoId") UUID insumoId,
+                                  @Param("insumoIds") java.util.Collection<UUID> insumoIds,
                                   @Param("filtrarBusca") boolean filtrarBusca,
                                   @Param("numeroBusca") Integer numeroBusca,
                                   @Param("busca") String busca,

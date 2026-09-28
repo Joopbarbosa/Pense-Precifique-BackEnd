@@ -314,6 +314,39 @@ class Adendo2TesteManualIT {
                 null, null, null, false, PageRequest.of(0, 20)).getTotalElements());
     }
 
+    @Test
+    void cen52_variosInsumosSomamComoOuEFiltrosDoHistoricoDoFornecedor() {
+        Cliente papelaria = cadastro("Papelaria Central", false, true, true);
+        Insumo fita = insumo("Fita de cetim");
+        Insumo cola = insumo("Cola Branca 1L");
+        Insumo kraft = insumo("Papel Kraft");
+        CompraResponse comFita = confirmar(papelaria, LocalDate.now(), linha(fita, "10", "25.65"));
+        CompraResponse comCola = confirmar(papelaria, LocalDate.now(), linha(cola, "2", "30.60"));
+        confirmar(papelaria, LocalDate.now(), linha(kraft, "5", "12.00"));
+        MetodoPagamentoConfiguravel pix = metodo("Pix", TipoMetodoPagamento.PIX, null);
+        CompraResponse pagaComDesconto = compraService.confirmarNova(new CompraRequest(LocalDate.now(), false, papelaria.getId(),
+                true, pix.getId(), null, List.of(new CompraItemRequest(fita.getId(), null, BigDecimal.ONE, null,
+                        new BigDecimal("3.00"), TipoDesconto.VALOR, new BigDecimal("0.50"))))).compra();
+
+        // GET /compras?insumoId=fita&insumoId=cola → OU entre os insumos
+        List<UUID> fitaOuCola = compraService.listarComFiltros(List.of(), List.of(papelaria.getId()), null, null,
+                List.of(fita.getId(), cola.getId()), null, null, false, PageRequest.of(0, 20))
+                .map(CompraResumoResponse::id).getContent();
+        assertEquals(3, fitaOuCola.size());
+        assertTrue(fitaOuCola.containsAll(List.of(comFita.id(), comCola.id(), pagaComDesconto.id())));
+
+        // Histórico do fornecedor: Pagamento "Paga", "Com desconto" e vários insumos
+        assertEquals(List.of(pagaComDesconto.id()), clienteHistoricoService.registrosComFiltros(papelaria.getId(),
+                PapelCadastro.FORNECEDOR, null, null, false, false, null, null, List.of(), List.of(), true, false,
+                PageRequest.of(0, 20)).map(r -> r.id()).getContent());
+        assertEquals(List.of(pagaComDesconto.id()), clienteHistoricoService.registrosComFiltros(papelaria.getId(),
+                PapelCadastro.FORNECEDOR, null, null, false, false, null, null, List.of(), List.of(), null, true,
+                PageRequest.of(0, 20)).map(r -> r.id()).getContent());
+        assertEquals(2, clienteHistoricoService.registrosComFiltros(papelaria.getId(), PapelCadastro.FORNECEDOR, null, null,
+                false, false, null, null, List.of(cola.getId(), kraft.getId()), List.of("COMPRA"), null, false,
+                PageRequest.of(0, 20)).getTotalElements());
+    }
+
     // ------------------------------------------------------------------ #587 — gráficos de fornecedor
 
     @Test

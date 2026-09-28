@@ -187,7 +187,8 @@ public class DashboardCompraService {
                     .map(i -> new EvolucaoPrecoResponse.Ponto(i.getCompra().getDataCompra(), i.getCompra().getId(),
                             IdentificadorFormatter.formatar("COM", i.getCompra().getNumero()), i.getPrecoUnitarioPago(),
                             i.getQuantidade(), i.getFornecedor() != null ? i.getFornecedor().getNome() : null,
-                            variacao(base, i.getPrecoUnitarioPago())))
+                            variacao(base, i.getPrecoUnitarioPago()),
+                            i.getFornecedor() != null ? i.getFornecedor().getId() : null))
                     .toList()));
         }
         return new EvolucaoPrecoResponse(inicio, fim, series);

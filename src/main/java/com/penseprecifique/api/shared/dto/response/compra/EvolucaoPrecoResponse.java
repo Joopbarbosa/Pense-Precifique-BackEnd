@@ -14,6 +14,12 @@ public record EvolucaoPrecoResponse(LocalDate de, LocalDate ate, List<Serie> ser
 
     public record Serie(InsumoRefResponse insumo, List<Ponto> pontos) {}
 
+    /** {@code fornecedorId} (#590, adendo 2): a modal do vínculo filtra as compras do par fornecedor + insumo. */
     public record Ponto(LocalDate data, UUID compraId, String identificador, BigDecimal precoUnitarioPago,
-                        BigDecimal quantidade, String fornecedor, BigDecimal variacaoPercentual) {}
+                        BigDecimal quantidade, String fornecedor, BigDecimal variacaoPercentual, UUID fornecedorId) {
+        public Ponto(LocalDate data, UUID compraId, String identificador, BigDecimal precoUnitarioPago,
+                     BigDecimal quantidade, String fornecedor, BigDecimal variacaoPercentual) {
+            this(data, compraId, identificador, precoUnitarioPago, quantidade, fornecedor, variacaoPercentual, null);
+        }
+    }
 }

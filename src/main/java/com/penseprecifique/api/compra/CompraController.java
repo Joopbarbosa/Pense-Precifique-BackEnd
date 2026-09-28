@@ -41,16 +41,18 @@ public class CompraController {
     public ResponseEntity<Page<CompraResumoResponse>> listar(
             // #585 (adendo 2) — status aceita vários valores (?status=RASCUNHO&status=CONFIRMADA)
             @RequestParam(required = false) List<StatusCompra> status,
-            @RequestParam(required = false) UUID fornecedorId,
+            // #585 — fornecedorId e insumoId também aceitam vários valores (OU entre eles)
+            @RequestParam(required = false) List<UUID> fornecedorId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
-            @RequestParam(required = false) UUID insumoId,
+            @RequestParam(required = false) List<UUID> insumoId,
             @RequestParam(required = false) String busca,
             @RequestParam(required = false) Boolean pago,
             @RequestParam(defaultValue = "false") boolean comDesconto,
             @PageableDefault(size = 20, sort = {"dataCompra", "numero"}, direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(compraService.listar(status == null ? List.of() : status, fornecedorId, de, ate,
-                insumoId, busca, pago, comDesconto, pageable));
+        return ResponseEntity.ok(compraService.listarComFiltros(status == null ? List.of() : status,
+                fornecedorId == null ? List.of() : fornecedorId, de, ate, insumoId == null ? List.of() : insumoId,
+                busca, pago, comDesconto, pageable));
     }
 
     /** #591/RN-NOVA-44 — contagens dos filtros (total da conta). */

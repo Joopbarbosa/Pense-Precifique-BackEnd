@@ -136,7 +136,12 @@ public class ClienteHistoricoService {
     // ------------------------------------------------------------------ modal de listagem (registros)
 
     /** Linha interna da listagem: a resposta + o que serve só para filtrar/ordenar. */
-    private record Registro(RegistroCadastroResponse resposta, int numero, Collection<UUID> itemIds, List<String> nomesItens) {}
+    private record Registro(RegistroCadastroResponse resposta, int numero, Collection<UUID> itemIds, List<String> nomesItens,
+                            boolean comDesconto) {
+        Registro(RegistroCadastroResponse resposta, int numero, Collection<UUID> itemIds, List<String> nomesItens) {
+            this(resposta, numero, itemIds, nomesItens, false);
+        }
+    }
 
     private static final Map<String, Comparator<Registro>> ORDENACAO_REGISTROS = Map.of(
             "data", Comparator.comparing((Registro r) -> r.resposta().data()),
@@ -163,6 +168,19 @@ public class ClienteHistoricoService {
     public Page<RegistroCadastroResponse> registros(UUID cadastroId, PapelCadastro papel, String busca, List<String> status,
                                                     boolean somenteCompras, boolean naoPagas, LocalDate de,
                                                     LocalDate ate, UUID itemId, Pageable pageable) {
+        return registrosComFiltros(cadastroId, papel, busca, status, somenteCompras, naoPagas, de, ate,
+                itemId == null ? List.of() : List.of(itemId), List.of(), null, false, pageable);
+    }
+
+    /**
+     * #585/RN-NOVA-35 (adendo 2) — campo de filtros da modal: vários itens somam como OU; {@code tipos}
+     * (ORCAMENTO, VENDA_CAIXA, COMPRA); {@code pago} nulo = tanto faz (vale para compra do fornecedor);
+     * {@code comDesconto}: compra com desconto de linha ou de nota nas linhas deste fornecedor.
+     */
+    public Page<RegistroCadastroResponse> registrosComFiltros(UUID cadastroId, PapelCadastro papel, String busca, List<String> status,
+                                                    boolean somenteCompras, boolean naoPagas, LocalDate de,
+                                                    LocalDate ate, Collection<UUID> itemIds, Collection<String> tipos,
+                                                    Boolean pago, boolean comDesconto, Pageable pageable) {
         UUID usuarioId = validarCadastro(cadastroId);
         if (papel == null) {
             throw new BusinessException("Informe o papel: CLIENTE ou FORNECEDOR.");
@@ -184,7 +202,10 @@ public class ClienteHistoricoService {
                 .filter(r -> !naoPagas || (r.resposta().contaComoCompra() && Boolean.FALSE.equals(r.resposta().pago())))
                 .filter(r -> de == null || !r.resposta().data().isBefore(de))
                 .filter(r -> ate == null || !r.resposta().data().isAfter(ate))
-                .filter(r -> itemId == null || r.itemIds().contains(itemId))
+                .filter(r -> itemIds == null || itemIds.isEmpty() || r.itemIds().stream().anyMatch(itemIds::contains))
+                .filter(r -> tipos == null || tipos.isEmpty() || tipos.contains(r.resposta().tipo()))
+                .filter(r -> pago == null || pago.equals(r.resposta().pago()))
+                .filter(r -> !comDesconto || r.comDesconto())
                 .filter(r -> termo.isEmpty() || normalizar(r.resposta().identificador()).contains(termo)
                         || r.nomesItens().stream().anyMatch(n -> normalizar(n).contains(termo)))
                 .sorted(ordem)
@@ -246,8 +267,13 @@ public class ClienteHistoricoService {
                     CompraMapper.total(linhas), linhas.size(), resumo, c.getStatus() == StatusCompra.CONFIRMADA,
                     Boolean.TRUE.equals(c.getPago())),
                     c.getNumero(), linhas.stream().map(i -> i.getInsumo().getId()).toList(),
-                    linhas.stream().map(i -> i.getInsumo().getNome()).toList());
+                    linhas.stream().map(i -> i.getInsumo().getNome()).toList(),
+                    linhas.stream().anyMatch(i -> positivo(i.getDescontoLinha()) || positivo(i.getDescontoNota())));
         }).toList();
+    }
+
+    private static boolean positivo(BigDecimal v) {
+        return v != null && v.signum() > 0;
     }
 
     /** 3 → "3"; 1.500 → "1,5". */
