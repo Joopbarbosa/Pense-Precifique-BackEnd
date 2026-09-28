@@ -27,22 +27,43 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
      * {@code ProdutoRepository#buscar}); {@code Page<>} completa é devolvida pelo contrato HTTP.
      * Ordena por {@code ic.nome} (V0.13.0 — item de catálogo ganhou nome próprio, RN-NOVA-1; antes
      * ordenava por {@code ic.produto.nome}, que deixou de existir).
+     *
+     * <p>#643 — a subconsulta usa LEFT JOIN explícito em produtoBase/insumo: o caminho implícito
+     * ({@code comp.produtoBase.ativo}) vira INNER JOIN no Hibernate 6 e, como o componente é XOR, a
+     * subconsulta nunca achava linha — item com componente inativo aparecia na busca.
      */
-    @Query("""
+    @Query(value = """
         SELECT ic FROM ItemCatalogo ic
         WHERE ic.catalogo.usuario.id = :usuarioId
         AND ic.deletedAt IS NULL
-        AND ic.catalogo.ativo = true
-        AND NOT EXISTS (
-            SELECT 1 FROM ItemCatalogoComponente comp WHERE comp.itemCatalogo = ic
-            AND ((comp.produtoBase IS NOT NULL AND (comp.produtoBase.ativo = false OR comp.produtoBase.deletedAt IS NOT NULL))
-              OR (comp.insumo IS NOT NULL AND (comp.insumo.ativo = false OR comp.insumo.deletedAt IS NOT NULL)))
-        )
+        AND (:incluirInativos = true OR (ic.catalogo.ativo = true
+            AND NOT EXISTS (
+                SELECT 1 FROM ItemCatalogoComponente comp LEFT JOIN comp.produtoBase comppb LEFT JOIN comp.insumo compins WHERE comp.itemCatalogo = ic
+                AND ((comppb IS NOT NULL AND (comppb.ativo = false OR comppb.deletedAt IS NOT NULL))
+                  OR (compins IS NOT NULL AND (compins.ativo = false OR compins.deletedAt IS NOT NULL)))
+            )))
         AND (:catalogoId IS NULL OR ic.catalogo.id = :catalogoId)
-        ORDER BY ic.nome
+        ORDER BY CASE WHEN ic.catalogo.ativo = true
+                AND NOT EXISTS (
+                    SELECT 1 FROM ItemCatalogoComponente comp2 LEFT JOIN comp2.produtoBase comp2pb LEFT JOIN comp2.insumo comp2ins WHERE comp2.itemCatalogo = ic
+                    AND ((comp2pb IS NOT NULL AND (comp2pb.ativo = false OR comp2pb.deletedAt IS NOT NULL))
+                      OR (comp2ins IS NOT NULL AND (comp2ins.ativo = false OR comp2ins.deletedAt IS NOT NULL)))
+                ) THEN 0 ELSE 1 END, ic.nome
+    """, countQuery = """
+        SELECT COUNT(ic) FROM ItemCatalogo ic
+        WHERE ic.catalogo.usuario.id = :usuarioId
+        AND ic.deletedAt IS NULL
+        AND (:incluirInativos = true OR (ic.catalogo.ativo = true
+            AND NOT EXISTS (
+                SELECT 1 FROM ItemCatalogoComponente comp LEFT JOIN comp.produtoBase comppb LEFT JOIN comp.insumo compins WHERE comp.itemCatalogo = ic
+                AND ((comppb IS NOT NULL AND (comppb.ativo = false OR comppb.deletedAt IS NOT NULL))
+                  OR (compins IS NOT NULL AND (compins.ativo = false OR compins.deletedAt IS NOT NULL)))
+            )))
+        AND (:catalogoId IS NULL OR ic.catalogo.id = :catalogoId)
     """)
     Page<ItemCatalogo> buscarDisponiveisParaOrcamento(@Param("usuarioId") UUID usuarioId,
                                                         @Param("catalogoId") UUID catalogoId,
+                                                        @Param("incluirInativos") boolean incluirInativos,
                                                         Pageable pageable);
 
     /**
@@ -50,23 +71,45 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
      * separado (em vez de {@code :busca IS NULL OR ...}) porque bind de parâmetro nulo dentro de
      * {@code LOWER(CONCAT(...))} faz o Postgres inferir o tipo como {@code bytea} e rejeitar — mesmo
      * padrão de {@code ProdutoService#listar}.
+     *
+     * <p>#641/RN-NOVA-40 (V0.15.0) — {@code incluirInativos = true} traz também os itens indisponíveis
+     * (catálogo inativo ou componente inativo/excluído), sempre depois dos disponíveis; o seletor os
+     * mostra riscados, sem poder escolher. Vale para as duas queries.
      */
-    @Query("""
+    @Query(value = """
         SELECT ic FROM ItemCatalogo ic
         WHERE ic.catalogo.usuario.id = :usuarioId
         AND ic.deletedAt IS NULL
-        AND ic.catalogo.ativo = true
-        AND NOT EXISTS (
-            SELECT 1 FROM ItemCatalogoComponente comp WHERE comp.itemCatalogo = ic
-            AND ((comp.produtoBase IS NOT NULL AND (comp.produtoBase.ativo = false OR comp.produtoBase.deletedAt IS NOT NULL))
-              OR (comp.insumo IS NOT NULL AND (comp.insumo.ativo = false OR comp.insumo.deletedAt IS NOT NULL)))
-        )
+        AND (:incluirInativos = true OR (ic.catalogo.ativo = true
+            AND NOT EXISTS (
+                SELECT 1 FROM ItemCatalogoComponente comp LEFT JOIN comp.produtoBase comppb LEFT JOIN comp.insumo compins WHERE comp.itemCatalogo = ic
+                AND ((comppb IS NOT NULL AND (comppb.ativo = false OR comppb.deletedAt IS NOT NULL))
+                  OR (compins IS NOT NULL AND (compins.ativo = false OR compins.deletedAt IS NOT NULL)))
+            )))
         AND (:catalogoId IS NULL OR ic.catalogo.id = :catalogoId)
         AND LOWER(ic.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
-        ORDER BY ic.nome
+        ORDER BY CASE WHEN ic.catalogo.ativo = true
+                AND NOT EXISTS (
+                    SELECT 1 FROM ItemCatalogoComponente comp2 LEFT JOIN comp2.produtoBase comp2pb LEFT JOIN comp2.insumo comp2ins WHERE comp2.itemCatalogo = ic
+                    AND ((comp2pb IS NOT NULL AND (comp2pb.ativo = false OR comp2pb.deletedAt IS NOT NULL))
+                      OR (comp2ins IS NOT NULL AND (comp2ins.ativo = false OR comp2ins.deletedAt IS NOT NULL)))
+                ) THEN 0 ELSE 1 END, ic.nome
+    """, countQuery = """
+        SELECT COUNT(ic) FROM ItemCatalogo ic
+        WHERE ic.catalogo.usuario.id = :usuarioId
+        AND ic.deletedAt IS NULL
+        AND (:incluirInativos = true OR (ic.catalogo.ativo = true
+            AND NOT EXISTS (
+                SELECT 1 FROM ItemCatalogoComponente comp LEFT JOIN comp.produtoBase comppb LEFT JOIN comp.insumo compins WHERE comp.itemCatalogo = ic
+                AND ((comppb IS NOT NULL AND (comppb.ativo = false OR comppb.deletedAt IS NOT NULL))
+                  OR (compins IS NOT NULL AND (compins.ativo = false OR compins.deletedAt IS NOT NULL)))
+            )))
+        AND (:catalogoId IS NULL OR ic.catalogo.id = :catalogoId)
+        AND LOWER(ic.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
     """)
     Page<ItemCatalogo> buscarDisponiveisParaOrcamentoComBusca(@Param("usuarioId") UUID usuarioId,
                                                                  @Param("catalogoId") UUID catalogoId,
                                                                  @Param("busca") String busca,
+                                                                 @Param("incluirInativos") boolean incluirInativos,
                                                                  Pageable pageable);
 }

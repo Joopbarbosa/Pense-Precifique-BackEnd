@@ -82,11 +82,21 @@ public class ItemCatalogoService {
      */
     @Transactional(readOnly = true)
     public Page<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca, Pageable pageable) {
+        return buscarParaOrcamento(catalogoId, busca, false, pageable);
+    }
+
+    /**
+     * #641/RN-NOVA-40 (V0.15.0) — {@code incluirInativos}: traz também os itens indisponíveis
+     * (catálogo inativo ou componente inativo/excluído), depois dos disponíveis, com {@code ativo=false}.
+     */
+    @Transactional(readOnly = true)
+    public Page<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca, boolean incluirInativos,
+                                                              Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
         Page<ItemCatalogo> itens = temBusca
-                ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim(), pageable)
-                : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId, pageable);
+                ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim(), incluirInativos, pageable)
+                : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId, incluirInativos, pageable);
         return itens.map(item -> itemCatalogoMapper.toBuscaResponse(item, componenteRepository.findByItemCatalogoId(item.getId())));
     }
 

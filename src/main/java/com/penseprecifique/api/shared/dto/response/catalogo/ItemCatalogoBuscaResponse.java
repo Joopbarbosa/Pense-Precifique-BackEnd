@@ -35,4 +35,7 @@ public class ItemCatalogoBuscaResponse {
      *  quantidade que a usuária ainda vai digitar no carrinho — isso só se sabe depois de
      *  adicionar (painel `avisosEstoque`), este campo é só o sinal grosseiro pra busca. */
     private boolean algumComponenteSemEstoque;
+    /** #641/RN-NOVA-40 (V0.15.0) — false quando o catálogo está inativo ou algum componente está
+     *  inativo/excluído (item indisponível para venda). Só aparece false com {@code incluirInativos=true}. */
+    private boolean ativo;
 }
