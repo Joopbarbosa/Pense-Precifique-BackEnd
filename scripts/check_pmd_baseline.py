@@ -20,7 +20,7 @@ def findings(report):
             raise ValueError('Relatório PMD sem caminho do arquivo.')
         path = path.replace('\\', '/')
         if '/src/' in path:
-            path = 'src/' + path.split('/src/', 1)[1]
+            path = 'src/' + path.rsplit('/src/', 1)[1]
         for violation in file_node.findall('{*}violation'):
             rule = violation.get('rule')
             message = ' '.join((violation.text or '').split())
@@ -68,10 +68,11 @@ def main():
             return 0
         baseline = from_rows(json.loads(args.baseline.read_text()))
         new = current - baseline
-        print(json.dumps({'status': 'aprovado' if not new else 'reprovado',
+        stale = baseline - current
+        print(json.dumps({'status': 'aprovado' if not new and not stale else 'reprovado',
                           'baseline': sum(baseline.values()), 'current': sum(current.values()),
-                          'new': to_rows(new)}, ensure_ascii=False))
-        return 0 if not new else 1
+                          'new': to_rows(new), 'stale': to_rows(stale)}, ensure_ascii=False))
+        return 0 if not new and not stale else 1
     except (OSError, ValueError, ET.ParseError, json.JSONDecodeError) as error:
         print(f'Falha na checagem PMD: {error}', file=sys.stderr)
         return 2

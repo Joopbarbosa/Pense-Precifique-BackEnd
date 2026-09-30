@@ -18,6 +18,9 @@ o resultado com a linha de base. Violação nova, saída ilegível ou linha
 de base ausente reprova o portão e o CI. A comparação considera a
 quantidade de ocorrências por arquivo, regra e mensagem: outra
 ocorrência igual no mesmo arquivo também reprova.
+Se uma violação existente desaparecer, o portão também reprova e lista
+`stale`: revise a correção e reduza a linha de base no mesmo commit para
+não deixar folga para uma nova ocorrência idêntica.
 
 Para atualizar a linha de base, revise cada achado e registre a decisão
 antes de alterar `pmd-baseline.json`; o comando `--write-baseline` recusa
