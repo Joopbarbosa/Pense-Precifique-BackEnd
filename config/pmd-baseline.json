@@ -1,0 +1,44 @@
+[
+  {
+    "file": "src/main/java/com/penseprecifique/api/caixa/VendaCaixaService.java",
+    "rule": "UnnecessaryImport",
+    "message": "Unused import 'com.penseprecifique.api.shared.domain.entity.*'",
+    "count": 1
+  },
+  {
+    "file": "src/main/java/com/penseprecifique/api/caixa/VendaCaixaService.java",
+    "rule": "UnnecessaryImport",
+    "message": "Unused import 'com.penseprecifique.api.shared.domain.enums.*'",
+    "count": 1
+  },
+  {
+    "file": "src/main/java/com/penseprecifique/api/pdf/PdfMapper.java",
+    "rule": "UnnecessaryImport",
+    "message": "Unused import 'com.penseprecifique.api.shared.domain.entity.*'",
+    "count": 1
+  },
+  {
+    "file": "src/main/java/com/penseprecifique/api/pdf/PdfMapper.java",
+    "rule": "UnnecessaryImport",
+    "message": "Unused import 'com.penseprecifique.api.shared.dto.pdf.*'",
+    "count": 1
+  },
+  {
+    "file": "src/main/java/com/penseprecifique/api/producao/ProducaoService.java",
+    "rule": "UnusedLocalVariable",
+    "message": "Avoid unused local variables such as 'produtosGravados'.",
+    "count": 2
+  },
+  {
+    "file": "src/main/java/com/penseprecifique/api/produto/ProdutoService.java",
+    "rule": "CompareObjectsWithEquals",
+    "message": "Use equals() to compare object references.",
+    "count": 1
+  },
+  {
+    "file": "src/main/java/com/penseprecifique/api/shared/domain/entity/Orcamento.java",
+    "rule": "UnnecessaryImport",
+    "message": "Unused import 'com.penseprecifique.api.shared.domain.enums.*'",
+    "count": 1
+  }
+]
