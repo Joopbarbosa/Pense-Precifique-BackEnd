@@ -12,7 +12,7 @@ LOG = ROOT / 'target' / 'pmd-gate.log'
 def main():
     LOG.parent.mkdir(exist_ok=True)
     with LOG.open('w', encoding='utf-8') as stream:
-        result = subprocess.run(['./mvnw', '-B', 'pmd:check'], cwd=ROOT,
+        result = subprocess.run(['./mvnw', '-B', 'compile', 'pmd:check'], cwd=ROOT,
                                 stdout=stream, stderr=subprocess.STDOUT, check=False)
     if result.returncode:
         print(LOG.read_text(encoding='utf-8')[-2000:], file=sys.stderr)
