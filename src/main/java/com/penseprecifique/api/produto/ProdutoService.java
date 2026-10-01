@@ -250,6 +250,11 @@ public class ProdutoService {
         boolean fracionavelOverrideAntigo = Boolean.TRUE.equals(produto.getFracionavelOverride());
 
         produtoMapper.updateEntity(request, produto);
+        // #661 — Hibernate 6.6 pode sincronizar a entidade antes do cálculo da ficha técnica.
+        // Sem preço no request, mantenha o valor persistido também durante esse flush intermediário.
+        if (produto.getPrecoVenda() == null) {
+            produto.setPrecoVenda(precoVendaAntigo);
+        }
         if (produto.getMargemLucro() == null) {
             // margemLucro não veio no request: preserva o valor anterior (não tem conceito de override próprio)
             produto.setMargemLucro(margemLucroAntigo);
