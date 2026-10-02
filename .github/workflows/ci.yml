@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging, main, feature/V0.15.0]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: maven:3.9-eclipse-temurin-21
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pense_ci
+          POSTGRES_USER: pense_ci
+          POSTGRES_PASSWORD: pense_ci
+        options: >-
+          --health-cmd "pg_isready -U pense_ci -d pense_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pense_ci
+      SPRING_DATASOURCE_USERNAME: pense_ci
+      SPRING_DATASOURCE_PASSWORD: pense_ci
+      JWT_SECRET: Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQw==
+      JWT_EXPIRATION_MS: "86400000"
+      R2_ACCOUNT_ID: ci
+      R2_ACCESS_KEY_ID: ci
+      R2_SECRET_ACCESS_KEY: ci
+      R2_BUCKET_NAME: ci
+      R2_PUBLIC_URL: http://localhost/ci
+      R2_ENDPOINT: http://localhost:9000
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Testes e build
+        run: ./mvnw --batch-mode test
