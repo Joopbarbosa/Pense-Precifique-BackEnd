@@ -3,19 +3,21 @@
 > Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`. Projeto pré-produção
 > (primeiro deploy estável com usuários reais = v1). Caminho:
 > `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Última atualização: 24/09/2026 (Retomada V0.14.0) · Branch padrão atual: `feature/V0.14.0`
+> Última atualização: 02/10/2026 (Retomada V0.15.0) · Branch padrão atual: `feature/V0.15.0`
 > Se este arquivo e o prompt da sessão divergirem, este arquivo vence.
 >
 > Histórico de versões (V0.5 a V0.8.2) migrado para os `regras-*.md`/`decisoes-*.md` de cada
 > módulo em `docs-pense-precifique/` — não vive mais aqui. Ver seção 2.
 
-**Stack:** Java 21 · Spring Boot 3.3.5 · PostgreSQL 16 (Docker) · JWT stateless (HS512) ·
+**Stack:** Java 21 · Spring Boot 3.5.16 (migrado de 3.3.5 na V0.15.0/#661; overrides de
+Tomcat/Jackson/Spring documentados no `pom.xml`) · PostgreSQL 16 (Docker) · JWT stateless (HS512) ·
 Flyway (`resources/db/migration/`, número mais alto sempre via `ls`, não copiar aqui) · Maven
 (`./mvnw`) · Springdoc/Swagger só em `dev`.
 
 **PDF: 100% via microsserviço externo `pense-precifique-pdf`** (Node/Express/React SSR/Puppeteer,
-desde #262/V0.8.1) para os 6 tipos de documento (Orçamento, recibo-sinal, recibo-pagamento,
-pdf-multa, recibo-estorno, catalogo — V0.13.0/#519, 1º que não deriva de Orçamento) — não existe
+desde #262/V0.8.1) para os 8 tipos de documento (Orçamento, recibo-sinal, recibo-pagamento,
+pdf-multa, recibo-estorno, catalogo — V0.13.0/#519, 1º que não deriva de Orçamento —, compra e
+lista-compras — V0.15.0/#545,#547) — não existe
 mais geração local (Thymeleaf/OpenHTMLToPDF foi removido por completo). Ver "PdfMapper Pattern"
 abaixo e `docs-pense-precifique/modulos/PDF/`.
 
@@ -84,13 +86,16 @@ antigo extinto desde o refactor V0.5):
 
 ```
 com/penseprecifique/api/
-├── auth/ caixa/ catalogo/ cliente/ dashboard/ empresa/ insumo/ orcamento/ producao/ produto/
-│   unidademedida/
+├── auth/ caixa/ catalogo/ cliente/ compra/ dashboard/ empresa/ insumo/ orcamento/ producao/
+│   produto/ unidademedida/
 │   → *Controller, *Service(+Impl quando houver), *Repository de cada módulo
 │   (`unidademedida/`, V0.14.0/#298: entidade `UnidadeMedida` referenciada por FK em `Insumo` —
 │   regras documentadas no módulo INSUMO, não num módulo próprio)
 │   (`caixa/`, V0.12.0: VendaCaixa/VendaCaixaItem/VendaCaixaPagamento, CaixaTurno/CaixaMovimento —
 │   `empresa/` também ganhou `MetodoPagamentoConfiguravel`, ver seção 3 sobre a colisão de nome)
+│   (`compra/`, V0.15.0: Compra COM-N, Lista de compras LST-N, vínculo fornecedor↔insumo, impacto,
+│   dashboard e CMV — substituiu `lotes_compra`; fornecedor é um `Cliente` com papel FORNECEDOR,
+│   não entidade própria)
 ├── pdf/               # PdfService, PdfMapper (ver seção própria)
 ├── shared/
 │   ├── domain/{entity,enums,converter}/   # entidades JPA, enums, converters
@@ -141,6 +146,13 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   vivem no mesmo package (`shared.domain.entity`), o nome simples vencia o import wildcard do enum
   em 4 arquivos de Orçamento/PDF — só descoberto ao compilar de verdade (`mvn clean`), não no
   incremental do host. Renomeada para `MetodoPagamentoConfiguravel`.
+- **Algo que entra no custo do produto mudou** (compra confirmada/cancelada, valor-hora, substituição
+  de insumo)? Recalcular a coluna gravada via `ProdutoService#recalcularPrecoCustoPersistido` (ou
+  `recalcularCustoDeTodos`, para o valor-hora — V0.15.0/#580) — nunca deixar `precoCusto` gravado
+  desatualizado nem reimplementar a soma da ficha + mão de obra.
+- **Seletor do frontend precisa mostrar inativos riscados?** Parâmetro `incluirInativos` na própria
+  busca (V0.15.0/#583,#616,#641 — clientes, insumos, produtos, ficha técnica, itens de venda); o
+  padrão sem o parâmetro continua sendo só ativos.
 
 ---
 
@@ -162,7 +174,9 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
 - **XOR entre duas origens/campos:** CHECK constraint no banco + validação explícita no Service
   com `BusinessException` distinguindo "os dois preenchidos" de "nenhum preenchido" — nunca
   mensagem genérica única.
-- **Exceção:** `BusinessException` genérica, só `message` — não criar tipos novos.
+- **Exceção:** `BusinessException` genérica — não criar tipos novos. Desde V0.15.0 (#602,
+  RN-NOVA-32) a fábrica `BusinessException.explicado(titulo, oQueAconteceu, motivo, comoResolver)`
+  leva os campos da modal de erro padrão do frontend; mensagem simples continua válida para o resto.
 - Toda correção/tech debt termina com commit + push antes de encerrar o chat, mesmo sem
   fechamento de épico.
 - **GitFlow por versão:** trabalho de uma versão vai para `feature/V[X.Y]`, criada no início da
@@ -242,8 +256,10 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   arquivo remove o anterior do storage (melhor esforço, nunca falha a troca); remover a entidade
   dona do arquivo também remove o arquivo do storage (nunca deixa órfão cobrando armazenamento
   sem uso). Aplicado hoje em 3 pontos: foto de item de catálogo, foto de produto, logo da empresa.
-  Débito conhecido: `MultipartException` (request não-multipart) cai no handler genérico e vira 500
-  em vez de 400 nos 3 — OpenProject #553.
+  Request não-multipart nesses 3 pontos responde 400 desde V0.15.0/#660 (`GlobalExceptionHandler`
+  restringe o 400 à mensagem `Current request is not a multipart request`; outra falha multipart
+  continua 500 com log — regressão em `UploadNaoMultipartIT`). Se o Spring mudar essa mensagem, o
+  teste quebra antes de virar 500 silencioso.
 
 ---
 
