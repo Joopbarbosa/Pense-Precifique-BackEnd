@@ -202,6 +202,9 @@ public class GlobalExceptionHandler {
     /** #660 — JSON ou outro corpo não multipart em rota de upload é entrada inválida, não falha interna. */
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ErrorResponseDTO> handleMultipartException(MultipartException ex) {
+        if (!"Current request is not a multipart request".equals(ex.getMessage())) {
+            return handleGenericException(ex);
+        }
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(
                 "Arquivo não enviado corretamente. Envie o arquivo como formulário multipart.",
                 HttpStatus.BAD_REQUEST.value(),

@@ -2,7 +2,9 @@ package com.penseprecifique.api.shared.exception;
 
 import com.penseprecifique.api.shared.dto.response.ErrorResponseDTO;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.multipart.MultipartException;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,5 +40,16 @@ class GlobalExceptionHandlerExplicadoTest {
         assertNull(body.motivo());
         assertNull(body.comoResolver());
         assertNull(body.itens());
+    }
+
+    @Test
+    void falhaDeInfraestruturaMultipartContinuaSendoErroInterno() {
+        MultipartException ex = new MultipartException(
+                "Failed to parse multipart servlet request", new IOException("Falha no armazenamento temporário"));
+
+        ErrorResponseDTO body = handler.handleMultipartException(ex).getBody();
+
+        assertEquals(500, body.status());
+        assertEquals("Erro interno do servidor", body.message());
     }
 }
