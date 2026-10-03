@@ -348,9 +348,10 @@ class ProdutoResolverVinculosIT {
         ItemCatalogoComponente componenteCatalogoAtualizado =
                 itemCatalogoComponenteRepository.findByItemCatalogoId(item.getId()).get(0);
         assertEquals(substitutoPrincipal.getId(), componenteCatalogoAtualizado.getProdutoBase().getId());
-        // precoVenda = custoComponentes = substitutoPrincipal.precoCusto(4.00) x quantidade(1) = 4.00
-        // (sem mão de obra — tempoProducao=0 — nem margem — padrão 0, sem ConfiguracaoPrecificacao)
-        assertEquals(0, new BigDecimal("4.00").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda deveria acompanhar o custo do produto substituto (sem override)");
+        // #579/RN-NOVA-30 (V0.15.0) — o sugerido passa a 4.00 (substitutoPrincipal.precoCusto x 1, sem mão de obra
+        // nem margem), mas o preço final fica nos 2.00 aprovados na criação; override marca a diferença.
+        assertEquals(0, new BigDecimal("2.00").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda não pode mudar sem a artesã digitar");
+        assertTrue(itemAtualizado.getOverride());
 
         FichaTecnicaItem componenteAtualizado = fichaTecnicaItemRepository.findById(componente.getId()).orElseThrow();
         assertEquals(substitutoComponente.getId(), componenteAtualizado.getProdutoBase().getId());
@@ -453,8 +454,8 @@ class ProdutoResolverVinculosIT {
         assertTrue(componentesAtualizados.stream().anyMatch(c -> substituto.getId().equals(c.getProdutoBase().getId())));
 
         ItemCatalogo itemAtualizado = itemCatalogoRepository.findById(item.getId()).orElseThrow();
-        // precoVenda = custoComponentes = principal.precoCusto(2.00) x 1 + substituto.precoCusto(3.00) x 1 = 5.00
-        assertEquals(0, new BigDecimal("5.00").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda deveria acompanhar o custo do componente substituto (sem override)");
+        // #579/RN-NOVA-30 — sugerido vai a 5.00 (2.00 + 3.00); o preço final fica nos 3.00 da criação (2.00 + 1.00).
+        assertEquals(0, new BigDecimal("3.00").compareTo(itemAtualizado.getPrecoVenda()), "precoVenda não pode mudar sem a artesã digitar");
 
         assertTrue(produtoRepository.findById(alvo.getId()).orElseThrow().getDeletedAt() != null);
     }

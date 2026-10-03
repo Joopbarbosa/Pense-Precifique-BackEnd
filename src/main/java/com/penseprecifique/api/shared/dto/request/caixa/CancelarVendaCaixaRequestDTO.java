@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.caixa;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -12,6 +13,7 @@ import jakarta.validation.constraints.Size;
 public record CancelarVendaCaixaRequestDTO(
         @NotBlank(message = "O motivo do cancelamento é obrigatório")
         @Size(min = 30, message = "O motivo do cancelamento deve ter pelo menos 30 caracteres")
+        @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
         String cancelamentoMotivo,
 
         @NotBlank(message = "Confirme sua senha para cancelar a venda")

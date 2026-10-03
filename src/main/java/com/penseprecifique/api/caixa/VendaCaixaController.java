@@ -34,8 +34,9 @@ public class VendaCaixaController {
     @GetMapping("/busca-itens-catalogo")
     public ResponseEntity<Page<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
             @RequestParam(required = false) String busca,
+            @RequestParam(defaultValue = "false") boolean incluirInativos,
             @PageableDefault(size = 8) Pageable pageable) {
-        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(null, busca, pageable));
+        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(null, busca, incluirInativos, pageable));
     }
 
     /** Retorna {@code VendaCaixaResponseDTO} no sucesso ou {@code ConfirmacaoEstoqueNegativoResponse}

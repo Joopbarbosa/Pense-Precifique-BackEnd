@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.producao;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -38,6 +39,7 @@ public class AgruparProducoesRequest {
 
     @NotBlank(message = "A justificativa é obrigatória")
     @Size(min = 30, message = "Justificativa deve ter no mínimo 30 caracteres")
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String justificativa;
 
     // RN-052 — mesma semântica de IniciarProducaoRequest.confirmarEstoqueNegativoInsumoIds, usada quando

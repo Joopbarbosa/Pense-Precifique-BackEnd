@@ -326,6 +326,79 @@ class ItemCatalogoBuscaOrcamentoIT {
         assertTrue(resultado.isLast());
     }
 
+    /**
+     * #641/RN-NOVA-40 (V0.15.0) — com {@code incluirInativos=true}, os itens indisponíveis (componente
+     * inativo, catálogo inativo) vêm depois dos disponíveis, com {@code ativo=false}; sem o parâmetro,
+     * continuam fora da busca.
+     */
+    @Test
+    void incluirInativosTrazIndisponiveisDepoisDosDisponiveis() {
+        seedUsuarioECatalogo();
+        ItemCatalogoResponse comProdutoInativo = novoItem("Agenda Bordada");
+        novoItem("Kit Convite Floral");
+        Catalogo catalogoInativo = catalogoRepository.save(Catalogo.builder()
+                .usuario(usuario).numero(2).nome("Catálogo Antigo").ativo(true).build());
+        novoItemEmCatalogo(catalogoInativo.getId(), "Caderno Antigo");
+        Produto base = produtoRepository.findById(
+                itemCatalogoComponenteRepository.findByItemCatalogoId(comProdutoInativo.getId()).get(0).getProdutoBase().getId()).orElseThrow();
+        base.setAtivo(false);
+        produtoRepository.save(base);
+        catalogoInativo.setAtivo(false);
+        catalogoRepository.save(catalogoInativo);
+
+        Page<ItemCatalogoBuscaResponse> semInativos = itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(0, 8));
+        assertEquals(List.of("Kit Convite Floral"), semInativos.getContent().stream().map(ItemCatalogoBuscaResponse::getNome).toList());
+        assertTrue(semInativos.getContent().get(0).isAtivo());
+
+        Page<ItemCatalogoBuscaResponse> comInativos = itemCatalogoService.buscarParaOrcamento(null, null, true, PageRequest.of(0, 8));
+        assertEquals(List.of("Kit Convite Floral", "Agenda Bordada", "Caderno Antigo"),
+                comInativos.getContent().stream().map(ItemCatalogoBuscaResponse::getNome).toList(),
+                "disponíveis primeiro; depois os indisponíveis, por nome");
+        assertEquals(List.of(true, false, false),
+                comInativos.getContent().stream().map(ItemCatalogoBuscaResponse::isAtivo).toList());
+        assertEquals(3, comInativos.getTotalElements());
+    }
+
+    /** #641 — mesma regra com busca por nome (query separada). */
+    @Test
+    void incluirInativosComBuscaTrazIndisponivelQueCasaComONome() {
+        seedUsuarioECatalogo();
+        ItemCatalogoResponse inativo = novoItem("Convite Antigo");
+        novoItem("Convite Floral");
+        novoItem("Laço Decorativo");
+        Produto base = produtoRepository.findById(
+                itemCatalogoComponenteRepository.findByItemCatalogoId(inativo.getId()).get(0).getProdutoBase().getId()).orElseThrow();
+        base.setAtivo(false);
+        produtoRepository.save(base);
+
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, "convite", true, PageRequest.of(0, 8));
+
+        assertEquals(List.of("Convite Floral", "Convite Antigo"),
+                resultado.getContent().stream().map(ItemCatalogoBuscaResponse::getNome).toList());
+        assertEquals(List.of(true, false), resultado.getContent().stream().map(ItemCatalogoBuscaResponse::isAtivo).toList());
+        assertEquals(2, resultado.getTotalElements());
+    }
+
+    /** #643 — item com componente Insumo inativo sai da busca de venda (RN-NOVA-4); antes a subconsulta
+     *  com caminho implícito virava INNER JOIN e nunca excluía nada. */
+    @Test
+    void itemComInsumoInativoNaoApareceNaBusca() {
+        seedUsuarioECatalogo();
+        Insumo fita = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(1).nome("Fita Cetim").unidadeMedida(unidadeMedida("un"))
+                .custoUnitario(new BigDecimal("1.3700")).estoqueAtual(BigDecimal.TEN)
+                .fracionavel(true).permitirEstoqueNegativo(true).build());
+        itemCatalogoService.adicionar(catalogo.getId(), itemComComponentes("Laço de Fita", componenteInsumo(fita.getId())));
+        novoItem("Kit Convite Floral");
+        fita.setAtivo(false);
+        insumoRepository.save(fita);
+
+        Page<ItemCatalogoBuscaResponse> resultado = itemCatalogoService.buscarParaOrcamento(null, null, PageRequest.of(0, 8));
+
+        assertEquals(List.of("Kit Convite Floral"), resultado.getContent().stream().map(ItemCatalogoBuscaResponse::getNome).toList());
+        assertEquals(1, resultado.getTotalElements());
+    }
+
     private UnidadeMedida unidadeMedida(String sigla) {
         return unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), sigla)
                 .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()

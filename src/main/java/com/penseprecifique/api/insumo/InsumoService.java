@@ -1,6 +1,12 @@
 package com.penseprecifique.api.insumo;
 
+import com.penseprecifique.api.shared.domain.enums.RegraPrecoReferencia;
+import com.penseprecifique.api.compra.FornecedorInsumoService;
+import com.penseprecifique.api.caixa.VendaCaixaRepository;
+import com.penseprecifique.api.compra.CompraRepository;
+import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.VendaCaixa;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
@@ -43,6 +49,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -85,12 +93,28 @@ public class InsumoService {
     private final ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     private final ItemCatalogoService itemCatalogoService;
     private final UnidadeMedidaRepository unidadeMedidaRepository;
+    private final CompraRepository compraRepository;
+    private final VendaCaixaRepository vendaCaixaRepository;
+    private final FornecedorInsumoService fornecedorInsumoService;
 
     @Transactional(readOnly = true)
     public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, Pageable pageable) {
+        return listar(busca, ativo, false, pageable);
+    }
+
+    /**
+     * #616/RN-NOVA-40 (adendo 2) — {@code incluirInativos}: ativos e inativos, ativos primeiro (seletores
+     * mostram o inativo riscado, sem poder escolher); ignora {@code ativo}.
+     */
+    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, boolean incluirInativos, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_INSUMO,
                 "nome, numero, custoUnitario, estoqueAtual, createdAt");
+        if (incluirInativos) {
+            ativo = null;
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "ativo").and(pageableOrdenado.getSort()));
+        }
 
         // #336 (V0.10.0) — filtro de status agora é server-side (era client-side sobre a janela
         // paginada, causa raiz confirmada de "insumo inativado não aparece no filtro de inativados").
@@ -142,9 +166,9 @@ public class InsumoService {
                 insumoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Insumo::getNumero)));
 
         // RN-NOVA-1 (V0.10.0, #442, altera INS-003) — cadastro de insumo NÃO gera mais
-        // MovimentacaoInsumo/LoteCompra automáticos. Custo unitário é calculado e persistido direto
+        // MovimentacaoInsumo/compra automáticos. Custo unitário é calculado e persistido direto
         // a partir do custo e quantidade informados (mesma fórmula/escala de
-        // LoteCompraService#registrarCompraIndividual para o caso trivial de insumo novo, sem estoque
+        // CustoMedioPonderado (ex-LoteCompraService#registrarCompraIndividual) para o caso trivial de insumo novo, sem estoque
         // anterior a ponderar) — estoqueAtual permanece 0 (default da entidade), sem histórico de
         // movimentação. Entrada de estoque real passa a exigir sempre "Registrar compra" ou "Entrada
         // manual", igual a qualquer entrada subsequente.
@@ -169,8 +193,14 @@ public class InsumoService {
         }
 
         UnidadeMedida unidadeMedida = buscarUnidadeMedidaDoUsuario(request.unidadeMedidaId(), usuarioId);
+        RegraPrecoReferencia regraAntes = insumo.getRegraPrecoReferencia();
         insumoMapper.updateEntity(request, insumo, unidadeMedida);
-        return insumoMapper.toResponse(insumoRepository.save(insumo));
+        Insumo salvo = insumoRepository.save(insumo);
+        // #590/RN-NOVA-39 — trocar a regra recalcula o preço de referência de todos os fornecedores.
+        if (salvo.getRegraPrecoReferencia() != regraAntes) {
+            fornecedorInsumoService.recalcularDoInsumo(salvo);
+        }
+        return insumoMapper.toResponse(salvo);
     }
 
     private UnidadeMedida buscarUnidadeMedidaDoUsuario(UUID unidadeMedidaId, UUID usuarioId) {
@@ -355,8 +385,24 @@ public class InsumoService {
                 : orcamentoRepository.findAllById(orcamentoIds).stream()
                         .collect(Collectors.toMap(Orcamento::getId, Orcamento::getNumero));
 
-        return movimentacoes.map(mov -> insumoMapper.toMovimentacaoResponse(
-                mov, resolverReferencia(mov, numeroProducaoPorId, numeroOrcamentoPorId)));
+        // #542/RN-NOVA-7 (V0.15.0) — COM-N e CX-N resolvidos pela mesma técnica de PRD/ORC.
+        Set<UUID> compraIds = referenciaIdsDoTipo(movimentacoes, ReferenciaMovimentacaoTipo.COMPRA);
+        Map<UUID, Integer> numeroCompraPorId = compraIds.isEmpty() ? Map.of()
+                : compraRepository.findAllById(compraIds).stream()
+                        .collect(Collectors.toMap(Compra::getId, Compra::getNumero));
+
+        Set<UUID> vendaIds = referenciaIdsDoTipo(movimentacoes, ReferenciaMovimentacaoTipo.CAIXA);
+        Map<UUID, Integer> numeroVendaPorId = vendaIds.isEmpty() ? Map.of()
+                : vendaCaixaRepository.findAllById(vendaIds).stream()
+                        .collect(Collectors.toMap(VendaCaixa::getId, VendaCaixa::getNumero));
+
+        Map<ReferenciaMovimentacaoTipo, Map<UUID, Integer>> numeros = Map.of(
+                ReferenciaMovimentacaoTipo.PRODUCAO, numeroProducaoPorId,
+                ReferenciaMovimentacaoTipo.ORCAMENTO, numeroOrcamentoPorId,
+                ReferenciaMovimentacaoTipo.COMPRA, numeroCompraPorId,
+                ReferenciaMovimentacaoTipo.CAIXA, numeroVendaPorId);
+
+        return movimentacoes.map(mov -> insumoMapper.toMovimentacaoResponse(mov, resolverReferencia(mov, numeros)));
     }
 
     private Set<UUID> referenciaIdsDoTipo(Page<MovimentacaoInsumo> movimentacoes, ReferenciaMovimentacaoTipo tipo) {
@@ -366,27 +412,24 @@ public class InsumoService {
                 .collect(Collectors.toSet());
     }
 
-    private String resolverReferencia(
-            MovimentacaoInsumo mov, Map<UUID, Integer> numeroProducaoPorId, Map<UUID, Integer> numeroOrcamentoPorId) {
+    /**
+     * #542/RN-NOVA-7 (V0.15.0) — referência legível de toda movimentação: PRD-N, ORC-N, COM-N, CX-N.
+     * Nunca o ID interno. CAIXA passou a existir em movimentacoes_insumo na V0.13.0 (#516, V54) e o
+     * switch antigo lançava IllegalStateException (500 no histórico do insumo) — corrigido aqui.
+     */
+    private String resolverReferencia(MovimentacaoInsumo mov,
+                                      Map<ReferenciaMovimentacaoTipo, Map<UUID, Integer>> numeros) {
         if (mov.getReferenciaTipo() == null) {
             return null;
         }
-        return switch (mov.getReferenciaTipo()) {
-            case LOTE_COMPRA -> "Compra em lote";
-            case PRODUCAO -> {
-                Integer numero = numeroProducaoPorId.get(mov.getReferenciaId());
-                yield numero != null ? IdentificadorFormatter.formatar("PRD", numero) : "PRD-?";
-            }
-            case ORCAMENTO -> {
-                Integer numero = numeroOrcamentoPorId.get(mov.getReferenciaId());
-                yield numero != null ? IdentificadorFormatter.formatar("ORC", numero) : "ORC-?";
-            }
-            // #490 (V0.12.0) — CAIXA é valor novo de ReferenciaMovimentacaoTipo, mas só válido em
-            // movimentacoes_produto (venda de Caixa nunca movimenta Insumo, RN-NOVA-1). Constraint
-            // chk_mov_insumo_referencia_tipo não inclui CAIXA — nenhuma linha real chega aqui.
-            case CAIXA -> throw new IllegalStateException(
-                    "MovimentacaoInsumo não pode ter referência do tipo CAIXA — Caixa só movimenta Produto.");
+        String prefixo = switch (mov.getReferenciaTipo()) {
+            case PRODUCAO -> "PRD";
+            case ORCAMENTO -> "ORC";
+            case COMPRA -> "COM";
+            case CAIXA -> "CX";
         };
+        Integer numero = numeros.get(mov.getReferenciaTipo()).get(mov.getReferenciaId());
+        return numero != null ? IdentificadorFormatter.formatar(prefixo, numero) : prefixo + "-?";
     }
 
     // RN-NOVA-5/DT-NOVA-4 (V0.14.0, #514) — "Edição manual": tipo (ENTRADA/SAIDA) decide a direção

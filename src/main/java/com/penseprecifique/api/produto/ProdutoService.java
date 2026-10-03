@@ -39,6 +39,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +56,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -97,11 +100,25 @@ public class ProdutoService {
      */
     @Transactional(readOnly = true)
     public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Boolean semCatalogo, Boolean ativo, Pageable pageable) {
+        return listar(tipo, busca, semCatalogo, ativo, false, pageable);
+    }
+
+    /**
+     * #616/RN-NOVA-40 (adendo 2) — {@code incluirInativos}: ativos e inativos, ativos primeiro (seletores
+     * mostram o inativo riscado, sem poder escolher); ignora {@code ativo}.
+     */
+    public Page<ProdutoResponse> listar(TipoProduto tipo, String busca, Boolean semCatalogo, Boolean ativo,
+                                        boolean incluirInativos, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
         boolean filtrarSemCatalogo = Boolean.TRUE.equals(semCatalogo);
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_PRODUTO,
                 "nome, numero, precoVenda, precoCusto, estoqueAtual, createdAt");
+        if (incluirInativos) {
+            ativo = null;
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "ativo").and(pageableOrdenado.getSort()));
+        }
         Page<Produto> pagina = temBusca
                 ? produtoRepository.buscarComBusca(usuarioId, tipo, filtrarSemCatalogo, busca, ativo, pageableOrdenado)
                 : produtoRepository.buscar(usuarioId, tipo, filtrarSemCatalogo, ativo, pageableOrdenado);
@@ -229,11 +246,15 @@ public class ProdutoService {
 
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
         BigDecimal margemLucroAntigo = produto.getMargemLucro();
-        boolean overrideAntigo = Boolean.TRUE.equals(produto.getOverride());
         Boolean fracionavelAntigo = produto.getFracionavel();
         boolean fracionavelOverrideAntigo = Boolean.TRUE.equals(produto.getFracionavelOverride());
 
         produtoMapper.updateEntity(request, produto);
+        // #661 — Hibernate 6.6 pode sincronizar a entidade antes do cálculo da ficha técnica.
+        // Sem preço no request, mantenha o valor persistido também durante esse flush intermediário.
+        if (produto.getPrecoVenda() == null) {
+            produto.setPrecoVenda(precoVendaAntigo);
+        }
         if (produto.getMargemLucro() == null) {
             // margemLucro não veio no request: preserva o valor anterior (não tem conceito de override próprio)
             produto.setMargemLucro(margemLucroAntigo);
@@ -247,8 +268,7 @@ public class ProdutoService {
         produto.setPrecoCusto(custoUnitario);
 
         BigDecimal precoSugerido = calcularPrecoSugerido(custoUnitario, produto.getMargemLucro());
-        boolean margemMudou = !valoresIguais(margemLucroAntigo, produto.getMargemLucro());
-        aplicarPrecoVendaEdicao(produto, request.getPrecoVenda(), precoSugerido, precoVendaAntigo, overrideAntigo, margemMudou);
+        aplicarPrecoVendaEdicao(produto, request.getPrecoVenda(), precoSugerido, precoVendaAntigo);
         if (produto.getTipo() == TipoProduto.CUSTOMIZACAO) {
             validarPrecoVendaObrigatorio(produto);
         }
@@ -560,6 +580,32 @@ public class ProdutoService {
     }
 
     /**
+     * #580/RN-NOVA-31 (V0.15.0) — valor-hora novo: recalcula o custo gravado de todos os produtos da
+     * artesã, componentes antes de quem os usa (a ficha técnica lê o custo gravado do produto base).
+     * Nunca toca o preço final (RN-NOVA-30).
+     */
+    public void recalcularCustoDeTodos(UUID usuarioId) {
+        Set<UUID> feitos = new HashSet<>();
+        for (TipoProduto tipo : TipoProduto.values()) {
+            produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo)
+                    .forEach(p -> recalcularEmOrdem(p.getId(), feitos, new HashSet<>()));
+        }
+    }
+
+    private void recalcularEmOrdem(UUID produtoId, Set<UUID> feitos, Set<UUID> caminho) {
+        if (feitos.contains(produtoId) || !caminho.add(produtoId)) {
+            return;
+        }
+        for (FichaTecnicaItem item : fichaTecnicaItemRepository.findByProdutoId(produtoId)) {
+            if (item.getProdutoBase() != null) {
+                recalcularEmOrdem(item.getProdutoBase().getId(), feitos, caminho);
+            }
+        }
+        recalcularPrecoCustoPersistido(produtoId);
+        feitos.add(produtoId);
+    }
+
+    /**
      * #228/#237 — recalcula e persiste {@code produto.precoCusto} a partir da ficha técnica atual, sem
      * tocar {@code precoVenda}/{@code override} (mudança de custo nunca recalcula o preço sozinha —
      * mesma regra de {@link #editar(UUID, ProdutoRequest)}). Usado após substituição/remoção de
@@ -573,6 +619,32 @@ public class ProdutoService {
         BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
         produto.setPrecoCusto(calcularCustoUnitario(custoTotalLote, produto.getRendimento()));
         produtoRepository.save(produto);
+    }
+
+    /**
+     * #543/DT-NOVA-7 (V0.15.0) — custo unitário do produto com custos de componentes substitutos, sem
+     * persistir nada: {@code custoInsumo}/{@code custoProduto} sobrepõem o custo atual do insumo e o
+     * precoCusto persistido do produto-base (quem não está no mapa usa o valor atual). Mesma fórmula
+     * de {@link #recalcularPrecoCustoPersistido}: soma da ficha + mão de obra, ÷ rendimento.
+     */
+    public BigDecimal simularCustoUnitario(Produto produto, Map<UUID, BigDecimal> custoInsumo,
+                                           Map<UUID, BigDecimal> custoProduto, BigDecimal valorHora) {
+        BigDecimal somaComponentes = fichaTecnicaItemRepository.findByProdutoId(produto.getId()).stream()
+                .map(item -> item.getQuantidade().multiply(item.getInsumo() != null
+                        ? custoInsumo.getOrDefault(item.getInsumo().getId(), item.getInsumo().getCustoUnitario())
+                        : custoProduto.getOrDefault(item.getProdutoBase().getId(), item.getProdutoBase().getPrecoCusto())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
+        return calcularCustoUnitario(custoTotalLote, produto.getRendimento());
+    }
+
+    /** #543 — preço sugerido pela fórmula vigente (PDT-004/PDT-005), exposto para o modal de impacto. */
+    public BigDecimal precoSugerido(BigDecimal custoUnitario, BigDecimal margemLucro) {
+        return calcularPrecoSugerido(custoUnitario, margemLucro);
+    }
+
+    public BigDecimal valorHora(UUID usuarioId) {
+        return buscarValorHora(usuarioId);
     }
 
     /**
@@ -693,30 +765,18 @@ public class ProdutoService {
         }
     }
 
+    /**
+     * #579/RN-NOVA-30 (V0.15.0) — o preço final só muda quando a artesã digita um valor diferente do que
+     * está gravado. Mudança de margem, de ficha técnica ou de custo atualiza só o sugerido; override passa
+     * a significar apenas "preço final diferente do sugerido de agora".
+     */
     private void aplicarPrecoVendaEdicao(Produto produto, BigDecimal precoVendaInformado, BigDecimal precoSugerido,
-                                          BigDecimal precoVendaAntigo, boolean overrideAntigo, boolean margemMudou) {
-        if (precoVendaInformado != null && precoVendaInformado.compareTo(precoSugerido) != 0) {
-            // artesã editou o preço manualmente para um valor diferente do sugerido
-            produto.setPrecoVenda(precoVendaInformado);
-            produto.setOverride(true);
-            return;
-        }
-        if (precoVendaInformado != null) {
-            // veio igual ao sugerido: trata como se não fosse override
-            produto.setPrecoVenda(precoSugerido);
-            produto.setOverride(false);
-            return;
-        }
-        // precoVenda não veio no request
-        if (margemMudou && !overrideAntigo) {
-            // sem override: acompanha a nova margem
-            produto.setPrecoVenda(precoSugerido);
-            produto.setOverride(false);
-            return;
-        }
-        // com override, ou mudança apenas de custo (ficha técnica/insumo): preço persistido nunca muda sozinho
-        produto.setPrecoVenda(precoVendaAntigo);
-        produto.setOverride(overrideAntigo);
+                                          BigDecimal precoVendaAntigo) {
+        BigDecimal precoFinal = precoVendaInformado != null && precoVendaInformado.compareTo(precoVendaAntigo) != 0
+                ? precoVendaInformado
+                : precoVendaAntigo;
+        produto.setPrecoVenda(precoFinal);
+        produto.setOverride(precoFinal.compareTo(precoSugerido) != 0);
     }
 
     // ---------------------------------------------------------------
@@ -778,13 +838,6 @@ public class ProdutoService {
             throw new BusinessException(
                     "O produto não possui custo calculado. Complete o cadastro do produto (ficha técnica e rendimento) antes de usá-lo.");
         }
-    }
-
-    private boolean valoresIguais(BigDecimal a, BigDecimal b) {
-        if (a == null || b == null) {
-            return a == b;
-        }
-        return a.compareTo(b) == 0;
     }
 
     private UUID getUsuarioIdAutenticado() {

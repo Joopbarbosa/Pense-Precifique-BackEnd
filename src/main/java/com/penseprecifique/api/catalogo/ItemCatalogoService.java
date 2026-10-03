@@ -82,11 +82,21 @@ public class ItemCatalogoService {
      */
     @Transactional(readOnly = true)
     public Page<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca, Pageable pageable) {
+        return buscarParaOrcamento(catalogoId, busca, false, pageable);
+    }
+
+    /**
+     * #641/RN-NOVA-40 (V0.15.0) — {@code incluirInativos}: traz também os itens indisponíveis
+     * (catálogo inativo ou componente inativo/excluído), depois dos disponíveis, com {@code ativo=false}.
+     */
+    @Transactional(readOnly = true)
+    public Page<ItemCatalogoBuscaResponse> buscarParaOrcamento(UUID catalogoId, String busca, boolean incluirInativos,
+                                                              Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         boolean temBusca = busca != null && !busca.isBlank();
         Page<ItemCatalogo> itens = temBusca
-                ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim(), pageable)
-                : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId, pageable);
+                ? itemCatalogoRepository.buscarDisponiveisParaOrcamentoComBusca(usuarioId, catalogoId, busca.trim(), incluirInativos, pageable)
+                : itemCatalogoRepository.buscarDisponiveisParaOrcamento(usuarioId, catalogoId, incluirInativos, pageable);
         return itens.map(item -> itemCatalogoMapper.toBuscaResponse(item, componenteRepository.findByItemCatalogoId(item.getId())));
     }
 
@@ -145,7 +155,6 @@ public class ItemCatalogoService {
 
         BigDecimal precoVendaAntigo = item.getPrecoVenda();
         BigDecimal margemLucroAntigo = item.getMargemLucro();
-        boolean overrideAntigo = Boolean.TRUE.equals(item.getOverride());
 
         item.setNome(request.getNome());
         item.setTempoProducao(request.getTempoProducao());
@@ -159,10 +168,7 @@ public class ItemCatalogoService {
 
         BigDecimal custoTotal = calcularCustoTotal(componentes, item.getTempoProducao(), usuarioId);
         BigDecimal precoSugerido = calcularPrecoSugerido(custoTotal, item.getMargemLucro());
-        boolean margemMudou = margemLucroAntigo == null
-                ? item.getMargemLucro() != null
-                : margemLucroAntigo.compareTo(item.getMargemLucro()) != 0;
-        aplicarPrecoVendaEdicao(item, request.getPrecoVenda(), precoSugerido, precoVendaAntigo, overrideAntigo, margemMudou);
+        aplicarPrecoVendaEdicao(item, request.getPrecoVenda(), precoSugerido, precoVendaAntigo);
         item = itemCatalogoRepository.save(item);
 
         return montarResponse(item, componentes, custoTotal, precoSugerido);
@@ -271,26 +277,14 @@ public class ItemCatalogoService {
         }
     }
 
-    /** Mesmo modelo calculado+override de Produto (aplicarPrecoVendaEdicao). */
+    /** #579/RN-NOVA-30 — mesma regra de Produto: preço final só muda quando a artesã digita outro valor. */
     private void aplicarPrecoVendaEdicao(ItemCatalogo item, BigDecimal precoVendaInformado, BigDecimal precoSugerido,
-                                          BigDecimal precoVendaAntigo, boolean overrideAntigo, boolean margemMudou) {
-        if (precoVendaInformado != null && precoVendaInformado.compareTo(precoSugerido) != 0) {
-            item.setPrecoVenda(precoVendaInformado);
-            item.setOverride(true);
-            return;
-        }
-        if (precoVendaInformado != null) {
-            item.setPrecoVenda(precoSugerido);
-            item.setOverride(false);
-            return;
-        }
-        if (margemMudou && !overrideAntigo) {
-            item.setPrecoVenda(precoSugerido);
-            item.setOverride(false);
-            return;
-        }
-        item.setPrecoVenda(precoVendaAntigo);
-        item.setOverride(overrideAntigo);
+                                          BigDecimal precoVendaAntigo) {
+        BigDecimal precoFinal = precoVendaInformado != null && precoVendaInformado.compareTo(precoVendaAntigo) != 0
+                ? precoVendaInformado
+                : precoVendaAntigo;
+        item.setPrecoVenda(precoFinal);
+        item.setOverride(precoFinal.compareTo(precoSugerido) != 0);
     }
 
     // ---------------------------------------------------------------
@@ -394,10 +388,8 @@ public class ItemCatalogoService {
 
     /**
      * Usado por ProdutoService após substituir o produto/customização de um componente na resolução
-     * de vínculo (mesmo espírito do antigo substituirProdutoPrincipal/substituirCustomizacaoAnexada):
-     * recalcula o preço sugerido e só atualiza precoVenda quando o item não estiver em override —
-     * diferente de {@code ProdutoService#recalcularPrecoCustoPersistido} (que nunca toca precoVenda),
-     * porque aqui a substituição é uma troca estrutural do componente, não só mudança de custo.
+     * de vínculo: recalcula só o preço sugerido. #579/RN-NOVA-30 (V0.15.0) — o preço final nunca muda
+     * aqui (antes seguia o sugerido quando o item não estava em override, sem a artesã aprovar).
      */
     public void recalcularAposSubstituicaoComponente(UUID itemCatalogoId) {
         ItemCatalogo item = itemCatalogoRepository.findByIdAndDeletedAtIsNull(itemCatalogoId)
@@ -405,9 +397,7 @@ public class ItemCatalogoService {
         List<ItemCatalogoComponente> componentes = componenteRepository.findByItemCatalogoId(item.getId());
         BigDecimal custoTotal = calcularCustoTotal(componentes, item.getTempoProducao(), getUsuarioIdDoItem(item));
         BigDecimal precoSugerido = calcularPrecoSugerido(custoTotal, item.getMargemLucro());
-        if (!Boolean.TRUE.equals(item.getOverride())) {
-            item.setPrecoVenda(precoSugerido);
-        }
+        item.setOverride(item.getPrecoVenda().compareTo(precoSugerido) != 0);
         itemCatalogoRepository.save(item);
     }
 

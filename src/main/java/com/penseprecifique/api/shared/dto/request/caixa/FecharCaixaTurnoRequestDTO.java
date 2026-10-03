@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.caixa;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 
@@ -15,5 +17,6 @@ public record FecharCaixaTurnoRequestDTO(
          * do esperado. Por ser condicional, a regra vive no Service, não como @Size aqui: o
          * fechamento que bate certinho continua em um clique.
          */
+        @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
         String justificativa
 ) {}

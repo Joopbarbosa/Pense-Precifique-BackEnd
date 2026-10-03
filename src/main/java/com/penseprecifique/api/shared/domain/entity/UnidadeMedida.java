@@ -34,6 +34,11 @@ public class UnidadeMedida {
     @Column(nullable = false)
     private String sigla;
 
+    // #605/Alteração de INS-015 (V0.15.0) — unidade do sistema: sem editar nem excluir.
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean padrao = false;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 

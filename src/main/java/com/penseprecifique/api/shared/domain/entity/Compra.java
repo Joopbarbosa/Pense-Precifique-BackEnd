@@ -1,0 +1,124 @@
+package com.penseprecifique.api.shared.domain.entity;
+
+import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
+
+import com.penseprecifique.api.shared.domain.enums.OrigemCompra;
+import com.penseprecifique.api.shared.domain.enums.StatusCompra;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * #541/RN-NOVA-4 (V0.15.0, DT-NOVA-3) — compra de insumos. COM-N (RN-053) nasce no primeiro salvar;
+ * excluir rascunho é soft delete para o número nunca voltar à sequência. Itens em {@link CompraItem}.
+ */
+@Entity
+@Table(name = "compras")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Compra {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "usuario_id", nullable = false)
+    private Usuario usuario;
+
+    @Column(nullable = false)
+    private Integer numero;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private StatusCompra status = StatusCompra.RASCUNHO;
+
+    @Column(name = "data_compra", nullable = false)
+    private LocalDate dataCompra;
+
+    @Column(name = "multiplos_fornecedores", nullable = false)
+    @Builder.Default
+    private Boolean multiplosFornecedores = false;
+
+    /** Fornecedor do cabeçalho (modo fornecedor único, ou default das linhas no modo múltiplo). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "fornecedor_id")
+    private Cliente fornecedor;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean pago = false;
+
+    /** #550/RN-NOVA-23 — obrigatório quando pago (CHECK chk_compra_pagamento). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metodo_pagamento_id")
+    private MetodoPagamentoConfiguravel metodoPagamento;
+
+    @Column(columnDefinition = "TEXT")
+    private String observacoes;
+
+    /** #576/RN-NOVA-28 (V0.15.0) — desconto na nota: como foi digitado e o valor em R$ rateado nas linhas. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "desconto_nota_tipo", length = 20)
+    private TipoDesconto descontoNotaTipo;
+
+    @Column(name = "desconto_nota_informado", precision = 15, scale = 2)
+    private BigDecimal descontoNotaInformado;
+
+    @Column(name = "desconto_nota", nullable = false, precision = 15, scale = 2)
+    @Builder.Default
+    private BigDecimal descontoNota = BigDecimal.ZERO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private OrigemCompra origem = OrigemCompra.MANUAL;
+
+    // #596/RN-NOVA-41 (V0.15.0) — lista de onde a compra foi criada (RN-NOVA-13), para o status da lista.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lista_compra_id")
+    private ListaCompra listaCompra;
+
+    // #597/RN-NOVA-42 (V0.15.0) — só quando paga no cartão de crédito.
+    @Column(name = "parcelas")
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.SMALLINT)
+    private Integer parcelas;
+
+    @Column(name = "confirmada_em")
+    private LocalDateTime confirmadaEm;
+
+    @Column(name = "cancelada_em")
+    private LocalDateTime canceladaEm;
+
+    @Column(name = "observacao_cancelamento", columnDefinition = "TEXT")
+    private String observacaoCancelamento;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    void prePersist() {
+        LocalDateTime now = LocalDateTime.now();
+        if (createdAt == null) createdAt = now;
+        if (updatedAt == null) updatedAt = now;
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}

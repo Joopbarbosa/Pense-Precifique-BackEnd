@@ -1,6 +1,8 @@
 package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoCatalogoPayload;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoCompraPayload;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoListaComprasPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoPdfMultaPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboEstornoPayload;
@@ -20,6 +22,7 @@ public class PdfService {
     private final ReciboPdfPayloadService reciboPdfPayloadService;
     private final ReciboPagamentoPdfPayloadService reciboPagamentoPdfPayloadService;
     private final CatalogoPdfPayloadService catalogoPdfPayloadService;
+    private final ComprasPdfPayloadService comprasPdfPayloadService;
 
     /**
      * Delega ao microsserviço pense-precifique-pdf (fluxo D do PRD). Epic #248 completa (5/5
@@ -116,5 +119,29 @@ public class PdfService {
     public byte[] gerarPdfCatalogo(UUID catalogoId) {
         PdfMicroservicoCatalogoPayload payload = catalogoPdfPayloadService.montarPayloadCatalogo(catalogoId);
         return pdfMicroservicoClient.gerarPdf("catalogo", catalogoId, payload);
+    }
+
+    /** #545/RN-NOVA-11 (V0.15.0) — PDF da compra; mesmo padrão dos demais (#262). */
+    public byte[] gerarPdfCompra(UUID compraId) {
+        PdfMicroservicoCompraPayload payload = comprasPdfPayloadService.montarPayloadCompra(compraId);
+        return pdfMicroservicoClient.gerarPdf("compra", compraId, payload);
+    }
+
+    /** #545 — preview HTML da compra (Fluxo E do PRD). */
+    public String gerarPreviewHtmlCompra(UUID compraId) {
+        PdfMicroservicoCompraPayload payload = comprasPdfPayloadService.montarPayloadCompra(compraId);
+        return pdfMicroservicoClient.gerarHtml("compra", compraId, payload);
+    }
+
+    /** #547/RN-NOVA-14 (V0.15.0) — PDF da lista de compras, do retrato LST-N. */
+    public byte[] gerarPdfListaCompras(UUID listaId) {
+        PdfMicroservicoListaComprasPayload payload = comprasPdfPayloadService.montarPayloadListaCompras(listaId);
+        return pdfMicroservicoClient.gerarPdf("lista-compras", listaId, payload);
+    }
+
+    /** #547 — preview HTML da lista de compras. */
+    public String gerarPreviewHtmlListaCompras(UUID listaId) {
+        PdfMicroservicoListaComprasPayload payload = comprasPdfPayloadService.montarPayloadListaCompras(listaId);
+        return pdfMicroservicoClient.gerarHtml("lista-compras", listaId, payload);
     }
 }

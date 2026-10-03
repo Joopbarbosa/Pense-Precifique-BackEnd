@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,4 +56,8 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
 
     // #298 (CEN-NOVO-9) — bloqueio de exclusão de UnidadeMedida em uso: basta 1 insumo vinculado.
     long countByUnidadeMedidaIdAndDeletedAtIsNull(UUID unidadeMedidaId);
+
+    /** #546 (V0.15.0) — insumos ativos da usuária, base da prévia da lista de compras. */
+    @EntityGraph(attributePaths = "unidadeMedida")
+    List<Insumo> findByUsuarioIdAndAtivoTrueAndDeletedAtIsNull(UUID usuarioId);
 }

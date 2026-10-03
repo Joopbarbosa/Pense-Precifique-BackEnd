@@ -24,6 +24,9 @@ public class PdfMapper {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DecimalFormat MOEDA_FORMATTER =
         new DecimalFormat("#,##0.00", new DecimalFormatSymbols(Locale.of("pt", "BR")));
+    // #545/#547 (V0.15.0) — quantidade com fração: sem zeros inúteis à direita.
+    private static final DecimalFormat QUANTIDADE_FORMATTER =
+        new DecimalFormat("#,##0.####", new DecimalFormatSymbols(Locale.of("pt", "BR")));
 
     public OrcamentoPdfData toOrcamentoPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
             Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
@@ -378,6 +381,10 @@ public class PdfMapper {
         return "—".equals(valorFormatado) ? null : valorFormatado;
     }
 
+    private static BigDecimal nz(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
+    }
+
     private String formatarMoeda(BigDecimal valor) {
         if (valor == null) {
             return "—";
@@ -523,4 +530,160 @@ public class PdfMapper {
             .build();
     }
 
+
+    // ---------------------------------------------------------------------------------------------
+    // V0.15.0 — Compras (#545, #547). Primeiros tipos que não derivam de Orçamento nem de Catálogo.
+    // Vão direto ao payload do microsserviço, sem DTO "achatado" intermediário (*PdfData): o
+    // intermediário existia para o Thymeleaf local (removido na V0.8.1) e não agrega nada aqui.
+    // ---------------------------------------------------------------------------------------------
+
+    /** #545/RN-NOVA-11 — PDF da compra. Valores não informados (rascunho sem preço) viram "—". */
+    public PdfMicroservicoCompraPayload toCompraMicroservicoPayload(Compra compra, List<CompraItem> itens, Empresa empresa) {
+        boolean multiplos = Boolean.TRUE.equals(compra.getMultiplosFornecedores());
+        String fornecedor;
+        if (multiplos) {
+            fornecedor = "Vários fornecedores";
+        } else {
+            fornecedor = compra.getFornecedor() != null ? compra.getFornecedor().getNome() : "—";
+        }
+        BigDecimal total = itens.stream().map(CompraItem::getPrecoTotal).filter(java.util.Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCheio = itens.stream().map(CompraItem::getPrecoCheio).filter(java.util.Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalDescontos = com.penseprecifique.api.shared.mapper.CompraMapper.totalDescontos(itens);
+        BigDecimal descontoNota = compra.getDescontoNota() != null ? compra.getDescontoNota() : BigDecimal.ZERO;
+
+        PdfMicroservicoDocumentoCompraPayload documento = PdfMicroservicoDocumentoCompraPayload.builder()
+            .numeroFormatado(com.penseprecifique.api.util.IdentificadorFormatter.formatar("COM", compra.getNumero()))
+            .status(formatarStatusCompra(compra.getStatus()))
+            .statusCodigo(compra.getStatus().name())
+            .dataCompra(compra.getDataCompra().format(DATE_FORMATTER))
+            .fornecedor(fornecedor)
+            .multiplosFornecedores(multiplos)
+            // #597/RN-NOVA-42 (adendo 2) — crédito parcelado: "Pago — Cartão Crédito · 3x"
+            .pagamento(Boolean.TRUE.equals(compra.getPago()) && compra.getMetodoPagamento() != null
+                ? "Pago — " + com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(compra.getMetodoPagamento())
+                    + (compra.getParcelas() != null ? " · " + compra.getParcelas() + "x" : "")
+                : "Não pago")
+            .total(formatarMoeda(total))
+            .observacoes(compra.getObservacoes())
+            .dataCancelamento(compra.getCanceladaEm() != null ? formatarData(compra.getCanceladaEm()) : null)
+            .observacaoCancelamento(compra.getObservacaoCancelamento())
+            .temDesconto(totalDescontos.signum() > 0)
+            .totalCheio(formatarMoeda(totalCheio))
+            .totalDescontos(formatarMoeda(totalDescontos))
+            .descontoNota(descontoNota.signum() > 0
+                ? (compra.getDescontoNotaTipo() == com.penseprecifique.api.shared.domain.enums.TipoDesconto.PERCENTUAL
+                    ? compra.getDescontoNotaInformado().stripTrailingZeros().toPlainString().replace('.', ',') + "% ("
+                        + formatarMoeda(descontoNota) + ")"
+                    : formatarMoeda(descontoNota))
+                : null)
+            .itens(itens.stream().map(i -> PdfMicroservicoItemCompraPayload.builder()
+                    .insumo(i.getInsumo().getNome())
+                    .fornecedor(i.getFornecedor() != null ? i.getFornecedor().getNome() : null)
+                    .quantidade(formatarQuantidade(i.getQuantidade(),
+                        i.getInsumo().getUnidadeMedida() != null ? i.getInsumo().getUnidadeMedida().getSigla() : null))
+                    .precoTotal(formatarMoeda(i.getPrecoTotal()))
+                    .precoUnitario(formatarMoedaUnitaria(
+                        com.penseprecifique.api.shared.mapper.CompraMapper.precoUnitario(i.getPrecoTotal(), i.getQuantidade())))
+                    .precoCheio(formatarMoeda(i.getPrecoCheio()))
+                    .desconto(formatarMoeda(nz(i.getDescontoLinha()).add(nz(i.getDescontoNota()))))
+                    .build())
+                .toList())
+            .build();
+
+        return PdfMicroservicoCompraPayload.builder()
+            .empresa(toEmpresaDoUsuario(empresa))
+            .documento(documento)
+            .build();
+    }
+
+    /**
+     * #547/RN-NOVA-14 — PDF da lista, sempre do retrato gravado (nomes, unidades, fornecedor e preço
+     * copiados na geração). Grupos por fornecedor em ordem alfabética; "Sem fornecedor" no fim.
+     */
+    public PdfMicroservicoListaComprasPayload toListaComprasMicroservicoPayload(ListaCompra lista, List<ListaCompraItem> itens,
+                                                                               Empresa empresa) {
+        Map<String, List<ListaCompraItem>> porFornecedor = itens.stream()
+            .collect(Collectors.groupingBy(i -> i.getFornecedorNome() != null ? i.getFornecedorNome() : "",
+                java.util.TreeMap::new, Collectors.toList()));
+        List<PdfMicroservicoDocumentoListaComprasPayload.Grupo> grupos = new java.util.ArrayList<>();
+        porFornecedor.forEach((nome, linhas) -> {
+            if (!nome.isEmpty()) {
+                grupos.add(grupoLista(nome, linhas));
+            }
+        });
+        if (porFornecedor.containsKey("")) {
+            grupos.add(grupoLista("Sem fornecedor", porFornecedor.get("")));
+        }
+
+        return PdfMicroservicoListaComprasPayload.builder()
+            .empresa(toEmpresaDoUsuario(empresa))
+            .documento(PdfMicroservicoDocumentoListaComprasPayload.builder()
+                .numeroFormatado(com.penseprecifique.api.util.IdentificadorFormatter.formatar("LST", lista.getNumero()))
+                // #596/RN-NOVA-41 (adendo 2) — status da lista; rascunho não tem geradaEm (usa a data em que foi salvo)
+                .dataGeracao(formatarData(lista.getGeradaEm() != null ? lista.getGeradaEm() : lista.getCreatedAt()))
+                .status(formatarStatusLista(lista.getStatus()))
+                .rascunho(lista.getStatus() == com.penseprecifique.api.shared.domain.enums.StatusListaCompra.RASCUNHO)
+                .quantidadeItens(itens.size())
+                .grupos(grupos)
+                .build())
+            .build();
+    }
+
+    private PdfMicroservicoDocumentoListaComprasPayload.Grupo grupoLista(String fornecedor, List<ListaCompraItem> linhas) {
+        return PdfMicroservicoDocumentoListaComprasPayload.Grupo.builder()
+            .fornecedor(fornecedor)
+            .itens(linhas.stream()
+                .sorted(java.util.Comparator.comparing(ListaCompraItem::getOrdem))
+                .map(i -> PdfMicroservicoDocumentoListaComprasPayload.Item.builder()
+                    .insumo(i.getInsumoNome())
+                    .unidade(i.getUnidade())
+                    .quantidade(i.getQuantidade() != null ? QUANTIDADE_FORMATTER.format(i.getQuantidade()) : "—")
+                    .precoReferencia(i.getPrecoReferencia() != null ? formatarMoedaUnitaria(i.getPrecoReferencia()) : null)
+                    .build())
+                .toList())
+            .build();
+    }
+
+    private PdfMicroservicoEmpresaPayload toEmpresaDoUsuario(Empresa empresa) {
+        return toEmpresaPayload(empresa != null ? empresa.getNome() : "Studio",
+            empresa != null ? empresa.getEmail() : null,
+            empresa != null ? empresa.getWhatsapp() : null,
+            empresa != null ? empresa.getLogoUrl() : null);
+    }
+
+    private static String formatarStatusLista(com.penseprecifique.api.shared.domain.enums.StatusListaCompra status) {
+        return switch (status) {
+            case RASCUNHO -> "Rascunho";
+            case GERADA -> "Gerada";
+            case PARCIALMENTE_COMPRADA -> "Parcialmente comprada";
+            case COMPRADA -> "Comprada";
+            case CANCELADA -> "Cancelada";
+        };
+    }
+
+    private static String formatarStatusCompra(com.penseprecifique.api.shared.domain.enums.StatusCompra status) {
+        return switch (status) {
+            case RASCUNHO -> "Rascunho";
+            case CONFIRMADA -> "Confirmada";
+            case CANCELADA -> "Cancelada";
+        };
+    }
+
+    /**
+     * #603/RN-NOVA-33 (adendo 2) — preço unitário também sai com 2 casas, arredondando a 3ª para cima
+     * a partir de 5 (0,0153 → R$ 0,02). O cálculo continua com 4 casas; só a exibição arredonda.
+     */
+    private String formatarMoedaUnitaria(BigDecimal valor) {
+        return valor == null ? "—" : "R$ " + MOEDA_FORMATTER.format(valor.setScale(2, java.math.RoundingMode.HALF_UP));
+    }
+
+    private String formatarQuantidade(BigDecimal quantidade, String unidade) {
+        if (quantidade == null) {
+            return "—";
+        }
+        String q = QUANTIDADE_FORMATTER.format(quantidade);
+        return unidade != null ? q + " " + unidade : q;
+    }
 }

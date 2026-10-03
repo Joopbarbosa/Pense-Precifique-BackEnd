@@ -85,11 +85,11 @@ class ClienteOrdenacaoIT {
     void campoForaDaAllowlistLancaBusinessException() {
         seed();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "usuario.email"));
-        assertThrows(BusinessException.class, () -> clienteService.listar(null, pageable));
+        assertThrows(BusinessException.class, () -> clienteService.listar(null, null, null, pageable));
     }
 
     private List<UUID> idsNaOrdem(Sort sort) {
-        Page<ClienteResponse> pagina = clienteService.listar(null, PageRequest.of(0, 20, sort));
+        Page<ClienteResponse> pagina = clienteService.listar(null, null, null, PageRequest.of(0, 20, sort));
         return pagina.getContent().stream().map(ClienteResponse::getId).toList();
     }
 }

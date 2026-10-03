@@ -55,6 +55,7 @@ public class UnidadeMedidaService {
         UUID usuarioId = getUsuarioIdAutenticado();
         UnidadeMedida unidade = unidadeMedidaRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Unidade de medida não encontrada"));
+        exigirDaPessoa(unidade);
         validarUnicidade(usuarioId, request.nome(), request.sigla(), id);
 
         unidade.setNome(request.nome());
@@ -68,6 +69,7 @@ public class UnidadeMedidaService {
         UnidadeMedida unidade = unidadeMedidaRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Unidade de medida não encontrada"));
 
+        exigirDaPessoa(unidade);
         // CEN-NOVO-9 — mensagem literal do cenário confirmado (não é template por contagem).
         long emUso = insumoRepository.countByUnidadeMedidaIdAndDeletedAtIsNull(id);
         if (emUso > 0) {
@@ -77,6 +79,30 @@ public class UnidadeMedidaService {
 
         unidade.setDeletedAt(LocalDateTime.now());
         unidadeMedidaRepository.save(unidade);
+    }
+
+    /**
+     * #605/Alteração de INS-015 — as 11 unidades do sistema, criadas no cadastro da conta
+     * (AuthServiceImpl, mesmo padrão de seedMetodosPadrao) e pela migração V66 nas contas existentes.
+     */
+    static final List<String[]> UNIDADES_PADRAO = List.of(
+            new String[]{"Unidade", "un"}, new String[]{"Rolo", "rolo"}, new String[]{"Folha", "folha"},
+            new String[]{"Metro", "m"}, new String[]{"Centímetro", "cm"}, new String[]{"Milímetro", "mm"},
+            new String[]{"Metro quadrado", "m²"}, new String[]{"Quilo", "kg"}, new String[]{"Grama", "g"},
+            new String[]{"Litro", "L"}, new String[]{"Mililitro", "mL"});
+
+    public void seedUnidadesPadrao(Usuario usuario) {
+        UNIDADES_PADRAO.forEach(u -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                .usuario(usuario).nome(u[0]).sigla(u[1]).padrao(true).build()));
+    }
+
+    private static void exigirDaPessoa(UnidadeMedida unidade) {
+        if (Boolean.TRUE.equals(unidade.getPadrao())) {
+            throw BusinessException.explicado("Unidade do sistema",
+                    "A unidade " + unidade.getNome() + " (" + unidade.getSigla() + ") é do sistema e não pode ser alterada nem excluída.",
+                    "As unidades básicas são as mesmas para todos e ficam sempre disponíveis nos insumos.",
+                    "Se precisar de outra, crie uma unidade nova com nome e sigla diferentes.");
+        }
     }
 
     private void validarUnicidade(UUID usuarioId, String nome, String sigla, UUID idAtual) {
@@ -97,7 +123,7 @@ public class UnidadeMedidaService {
     private UnidadeMedidaResponseDTO toResponse(UnidadeMedida unidade) {
         return new UnidadeMedidaResponseDTO(
                 unidade.getId(), unidade.getNome(), unidade.getSigla(),
-                unidade.getCreatedAt(), unidade.getUpdatedAt());
+                unidade.getCreatedAt(), unidade.getUpdatedAt(), Boolean.TRUE.equals(unidade.getPadrao()));
     }
 
     private UUID getUsuarioIdAutenticado() {

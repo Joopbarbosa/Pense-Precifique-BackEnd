@@ -118,6 +118,7 @@ class NumeroSequencialConcorrenciaIT {
         List<Integer> numeros = executarConcorrente(usuario.getEmail(), () -> {
             ClienteRequest req = new ClienteRequest();
             req.setNome("Cliente Concorrente " + contador.incrementAndGet() + "-" + UUID.randomUUID());
+            req.setEhCliente(true);
             return clienteService.cadastrar(req).getNumero();
         });
         assertSemColisao(numeros);

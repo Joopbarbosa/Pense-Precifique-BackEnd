@@ -12,6 +12,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,8 +32,10 @@ public class InsumoController {
     public ResponseEntity<Page<InsumoResponseDTO>> listar(
             @RequestParam(required = false) String busca,
             @RequestParam(required = false) Boolean ativo,
+            // #616 (adendo 2) — seletores: ativos e inativos, ativos primeiro
+            @RequestParam(defaultValue = "false") boolean incluirInativos,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(insumoService.listar(busca, ativo, pageable));
+        return ResponseEntity.ok(insumoService.listar(busca, ativo, incluirInativos, pageable));
     }
 
     @GetMapping("/{id}")

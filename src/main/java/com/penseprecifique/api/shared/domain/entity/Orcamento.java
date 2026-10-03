@@ -78,6 +78,11 @@ public class Orcamento {
     @Column(name = "data_pagamento")
     private LocalDateTime dataPagamento;
 
+    /** #560/RN-NOVA-22 (V0.15.0, DT-NOVA-10) — setado uma única vez na transição para ENTREGUE,
+     * nunca sobrescrito; é a "data da compra" do cliente nos indicadores/gráficos. */
+    @Column(name = "data_entrega")
+    private LocalDateTime dataEntrega;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "metodo_sinal_recebido", length = 20)
     private MetodoPagamento metodoSinalRecebido;

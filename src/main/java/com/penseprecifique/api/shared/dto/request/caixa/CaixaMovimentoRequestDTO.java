@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.caixa;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
 import com.penseprecifique.api.shared.domain.enums.TipoCaixaMovimento;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -19,5 +20,6 @@ public record CaixaMovimentoRequestDTO(
 
         @NotBlank(message = "O motivo é obrigatório")
         @Size(min = 30, message = "O motivo deve ter no mínimo 30 caracteres")
+        @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
         String motivo
 ) {}

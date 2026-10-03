@@ -1,5 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.produto;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
+import jakarta.validation.constraints.Size;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -22,6 +24,7 @@ public class ProdutoRequest {
     @NotNull(message = "O tipo é obrigatório")
     private TipoProduto tipo;
 
+    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String descricao;
 
     @NotNull(message = "O tempo de produção é obrigatório")

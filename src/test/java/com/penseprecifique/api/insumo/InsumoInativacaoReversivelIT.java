@@ -11,8 +11,9 @@ import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
-import com.penseprecifique.api.shared.dto.request.insumo.ItemLoteCompraRequestDTO;
-import com.penseprecifique.api.shared.dto.request.insumo.RegistrarLoteCompraRequestDTO;
+import com.penseprecifique.api.shared.dto.request.compra.CompraItemRequest;
+import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
+import com.penseprecifique.api.compra.CompraService;
 import com.penseprecifique.api.shared.dto.request.produto.FichaTecnicaItemRequest;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
@@ -42,7 +43,7 @@ class InsumoInativacaoReversivelIT {
     @Autowired InsumoService insumoService;
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired FichaTecnicaService fichaTecnicaService;
-    @Autowired LoteCompraService loteCompraService;
+    @Autowired CompraService compraService;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired InsumoRepository insumoRepository;
     @Autowired ProdutoRepository produtoRepository;
@@ -166,16 +167,16 @@ class InsumoInativacaoReversivelIT {
     }
 
     @Test
-    void loteCompraBloqueiaCompraDeInsumoInativo() {
+    void compraBloqueiaInsumoInativo() {
+        // INS-011 — V0.15.0: o modal de compra em lote saiu; a trava vale no registro de compra novo.
         seedUsuario();
         Insumo insumo = novoInsumo("Papelão", 1);
         insumoService.inativar(insumo.getId());
 
-        RegistrarLoteCompraRequestDTO request = new RegistrarLoteCompraRequestDTO(
-                null,
-                List.of(new ItemLoteCompraRequestDTO(insumo.getId(), new BigDecimal("10"), new BigDecimal("50.00"))));
+        CompraRequest request = new CompraRequest(java.time.LocalDate.now(), false, null, false, null, null,
+                List.of(new CompraItemRequest(insumo.getId(), null, new BigDecimal("10"), new BigDecimal("50.00"))));
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> loteCompraService.registrarLote(request));
+        BusinessException ex = assertThrows(BusinessException.class, () -> compraService.criarRascunho(request));
         assertTrue(ex.getMessage().contains("inativo"));
     }
 

@@ -59,8 +59,9 @@ public class OrcamentoController {
     public ResponseEntity<Page<ItemCatalogoBuscaResponse>> buscarItensCatalogo(
             @RequestParam(required = false) UUID catalogoId,
             @RequestParam(required = false) String busca,
+            @RequestParam(defaultValue = "false") boolean incluirInativos,
             @PageableDefault(size = 8) Pageable pageable) {
-        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId, busca, pageable));
+        return ResponseEntity.ok(itemCatalogoService.buscarParaOrcamento(catalogoId, busca, incluirInativos, pageable));
     }
 
     @GetMapping("/{id}")

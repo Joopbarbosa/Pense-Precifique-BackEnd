@@ -5,10 +5,12 @@ import com.penseprecifique.api.shared.dto.request.config.ConfiguracaoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.config.ConfiguracaoResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.produto.ProdutoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -19,6 +21,7 @@ public class ConfiguracaoServiceImpl implements ConfiguracaoService {
 
     private final ConfiguracaoPrecificacaoRepository configuracaoRepository;
     private final UsuarioRepository usuarioRepository;
+    private final ProdutoService produtoService;
 
     @Override
     public ConfiguracaoResponseDTO getConfiguracao() {
@@ -29,16 +32,23 @@ public class ConfiguracaoServiceImpl implements ConfiguracaoService {
     }
 
     @Override
+    @Transactional
     public ConfiguracaoResponseDTO upsertConfiguracao(ConfiguracaoRequestDTO request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         ConfiguracaoPrecificacao configuracao = configuracaoRepository.findByUsuarioId(usuarioId)
                 .orElse(ConfiguracaoPrecificacao.builder().usuarioId(usuarioId).build());
 
+        BigDecimal valorHoraAntigo = configuracao.getValorHora();
         configuracao.setValorHora(request.valorHora());
         configuracao.setMargemPadrao(request.margemPadrao());
 
         try {
-            return toResponse(configuracaoRepository.save(configuracao));
+            ConfiguracaoResponseDTO salvo = toResponse(configuracaoRepository.saveAndFlush(configuracao));
+            // #580/RN-NOVA-31 (V0.15.0) — mão de obra mudou: custo gravado dos produtos acompanha.
+            if (request.valorHora() != null && (valorHoraAntigo == null || valorHoraAntigo.compareTo(request.valorHora()) != 0)) {
+                produtoService.recalcularCustoDeTodos(usuarioId);
+            }
+            return salvo;
         } catch (DataIntegrityViolationException e) {
             // #142 — mesma race condition documentada em EmpresaServiceImpl.upsertEmpresa.
             throw new BusinessException("Este usuário já possui uma configuração de precificação cadastrada.");

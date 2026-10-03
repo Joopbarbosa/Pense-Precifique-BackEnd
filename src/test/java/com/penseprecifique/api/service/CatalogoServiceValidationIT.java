@@ -122,7 +122,8 @@ class CatalogoServiceValidationIT {
                 ItemCatalogoResponse item4 = itemCatalogoService.editar(item3.getId(),
                         itemReq("Kit Bolo", componente(prodMain.getId(), 10), null,
                                 List.of(componente(prodCustom.getId(), 1))));
-                boolean p4 = eq(item4.getPrecoSugerido(), "72.00") && eq(item4.getPrecoVenda(), "70.00") && !item4.isOverride();
+                // #579/RN-NOVA-30 (V0.15.0) — override passa a marcar "preço final ≠ sugerido de agora".
+                boolean p4 = eq(item4.getPrecoSugerido(), "72.00") && eq(item4.getPrecoVenda(), "70.00") && item4.isOverride();
                 check(4, "item + componente de customização (precoCusto2,00 x qtd1) → precoSugerido 72,00, precoVenda congelado em 70,00", p4,
                         "precoSugerido=" + plain(item4.getPrecoSugerido()) + " precoVenda=" + plain(item4.getPrecoVenda()) + " override=" + item4.isOverride());
             } catch (Exception e) {

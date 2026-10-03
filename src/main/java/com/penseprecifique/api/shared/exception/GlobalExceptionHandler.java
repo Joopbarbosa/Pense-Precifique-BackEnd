@@ -9,10 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.math.BigDecimal;
@@ -31,7 +33,11 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
-                null
+                null,
+                ex.getTitulo(),
+                ex.getMotivo(),
+                ex.getComoResolver(),
+                ex.getItens()
         ));
     }
 
@@ -126,6 +132,17 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    /** #660 — parâmetro obrigatório ausente é erro do pedido, inclusive no fuzzing de schema. */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMissingServletRequestParameter(MissingServletRequestParameterException ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Parâmetro obrigatório ausente: '" + ex.getParameterName() + "'.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
     /**
      * #455 — achado residual do gate seguranca-resiliencia ao validar #421 (contagem de 500 caiu
      * de 87/87 para 1/87, este era o 1 restante). Causa raiz confirmada via log real: valor de
@@ -176,6 +193,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponseDTO> handleMissingServletRequestPart(MissingServletRequestPartException ex) {
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(
                 "Arquivo não enviado corretamente. Tente novamente.",
+                HttpStatus.BAD_REQUEST.value(),
+                LocalDateTime.now(),
+                null
+        ));
+    }
+
+    /** #660 — JSON ou outro corpo não multipart em rota de upload é entrada inválida, não falha interna. */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMultipartException(MultipartException ex) {
+        if (!"Current request is not a multipart request".equals(ex.getMessage())) {
+            return handleGenericException(ex);
+        }
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Arquivo não enviado corretamente. Envie o arquivo como formulário multipart.",
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
                 null

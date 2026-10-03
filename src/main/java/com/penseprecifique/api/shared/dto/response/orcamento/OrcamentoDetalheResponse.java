@@ -40,6 +40,7 @@ public class OrcamentoDetalheResponse {
      *  documentado no CLAUDE.md do backend (campo persistido "esquecido" no DTO de resposta). Sem
      *  ele, a condição de exibir o Recibo de Pagamento no Frontend nunca era verdadeira. */
     private LocalDateTime dataPagamento;
+    private LocalDateTime dataEntrega; // #560/RN-NOVA-22 (V0.15.0)
     private MetodoPagamento metodoSinalRecebido;
     private String metodoSinalRecebidoObs;
     private BigDecimal subtotal;

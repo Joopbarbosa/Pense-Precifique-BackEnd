@@ -1,0 +1,155 @@
+package com.penseprecifique.api.compra;
+
+import com.penseprecifique.api.shared.domain.enums.StatusCompra;
+import com.penseprecifique.api.shared.dto.request.compra.CancelarCompraRequest;
+import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
+import com.penseprecifique.api.shared.dto.request.compra.PagamentoCompraRequest;
+import com.penseprecifique.api.shared.dto.response.compra.CompraConfirmacaoResponse;
+import com.penseprecifique.api.shared.dto.response.compra.CompraContagensResponse;
+import com.penseprecifique.api.shared.dto.response.compra.CompraResponse;
+import com.penseprecifique.api.shared.dto.response.compra.SimulacaoCancelamentoResponse;
+import com.penseprecifique.api.shared.dto.response.compra.CompraResumoResponse;
+import com.penseprecifique.api.shared.dto.response.compra.DashboardComprasResponse;
+import com.penseprecifique.api.shared.dto.response.compra.EvolucaoPrecoResponse;
+import com.penseprecifique.api.pdf.PdfService;
+import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
+/** #541/#550 (V0.15.0) — Compras: listagem, rascunho, confirmação e pagamento. */
+@RestController
+@RequestMapping("/compras")
+@RequiredArgsConstructor
+public class CompraController {
+
+    private final CompraService compraService;
+    private final PdfService pdfService;
+    private final DashboardCompraService dashboardCompraService;
+
+    @GetMapping
+    public ResponseEntity<Page<CompraResumoResponse>> listar(
+            // #585 (adendo 2) — status aceita vários valores (?status=RASCUNHO&status=CONFIRMADA)
+            @RequestParam(required = false) List<StatusCompra> status,
+            // #585 — fornecedorId e insumoId também aceitam vários valores (OU entre eles)
+            @RequestParam(required = false) List<UUID> fornecedorId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
+            @RequestParam(required = false) List<UUID> insumoId,
+            @RequestParam(required = false) String busca,
+            @RequestParam(required = false) Boolean pago,
+            @RequestParam(defaultValue = "false") boolean comDesconto,
+            @PageableDefault(size = 20, sort = {"dataCompra", "numero"}, direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(compraService.listarComFiltros(status == null ? List.of() : status,
+                fornecedorId == null ? List.of() : fornecedorId, de, ate, insumoId == null ? List.of() : insumoId,
+                busca, pago, comDesconto, pageable));
+    }
+
+    /** #591/RN-NOVA-44 — contagens dos filtros (total da conta). */
+    @GetMapping("/contagens")
+    public ResponseEntity<CompraContagensResponse> contagens() {
+        return ResponseEntity.ok(compraService.contagens());
+    }
+
+    /** #548/RN-NOVA-15 — cards do dashboard (só CONFIRMADAS). */
+    /** #577/RN-NOVA-29 — sem de/ate: mês atual; comparação com o período anterior. */
+    @GetMapping("/dashboard")
+    public ResponseEntity<DashboardComprasResponse> dashboard(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return ResponseEntity.ok(dashboardCompraService.dashboard(de, ate));
+    }
+
+    /** #548 — evolução do preço pago, até 5 insumos; período default = últimos 3 meses. */
+    @GetMapping("/evolucao-preco")
+    public ResponseEntity<EvolucaoPrecoResponse> evolucaoPreco(
+            @RequestParam(required = false) List<UUID> insumoIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return ResponseEntity.ok(dashboardCompraService.evolucaoPreco(insumoIds, de, ate));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CompraResponse> buscar(@PathVariable UUID id) {
+        return ResponseEntity.ok(compraService.buscar(id));
+    }
+
+    /** "Salvar rascunho" de compra nova — o COM-N nasce aqui. */
+    @PostMapping
+    public ResponseEntity<CompraResponse> criarRascunho(@Valid @RequestBody CompraRequest request) {
+        return ResponseEntity.status(201).body(compraService.criarRascunho(request));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<CompraResponse> atualizarRascunho(@PathVariable UUID id, @Valid @RequestBody CompraRequest request) {
+        return ResponseEntity.ok(compraService.atualizarRascunho(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluirRascunho(@PathVariable UUID id) {
+        compraService.excluirRascunho(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Confirmar compra nova sem rascunho prévio (tudo ou nada: se falhar, nada é criado). */
+    @PostMapping("/confirmar")
+    public ResponseEntity<CompraConfirmacaoResponse> confirmarNova(@Valid @RequestBody CompraRequest request) {
+        return ResponseEntity.status(201).body(compraService.confirmarNova(request));
+    }
+
+    /** Confirmar rascunho; o corpo (opcional) grava as alterações antes, na mesma transação. */
+    @PostMapping("/{id}/confirmar")
+    public ResponseEntity<CompraConfirmacaoResponse> confirmar(@PathVariable UUID id,
+                                                    @Valid @RequestBody(required = false) CompraRequest request) {
+        return ResponseEntity.ok(compraService.confirmar(id, request));
+    }
+
+    /** #544 — prévia do cancelamento: bloqueios (estoque negativo) e avisos (custo mantido). */
+    @PostMapping("/{id}/simular-cancelamento")
+    public ResponseEntity<SimulacaoCancelamentoResponse> simularCancelamento(@PathVariable UUID id) {
+        return ResponseEntity.ok(compraService.simularCancelamento(id));
+    }
+
+    @PostMapping("/{id}/cancelar")
+    public ResponseEntity<CompraConfirmacaoResponse> cancelar(@PathVariable UUID id,
+                                                              @Valid @RequestBody CancelarCompraRequest request) {
+        return ResponseEntity.ok(compraService.cancelar(id, request));
+    }
+
+    @PostMapping("/{id}/duplicar")
+    public ResponseEntity<CompraResponse> duplicar(@PathVariable UUID id,
+                                                   @RequestParam(defaultValue = "true") boolean manterDescontos) {
+        return ResponseEntity.status(201).body(compraService.duplicar(id, manterDescontos));
+    }
+
+    @PatchMapping("/{id}/pagamento")
+    public ResponseEntity<CompraResponse> atualizarPagamento(@PathVariable UUID id,
+                                                             @Valid @RequestBody PagamentoCompraRequest request) {
+        return ResponseEntity.ok(compraService.atualizarPagamento(id, request));
+    }
+
+    /** #545 (V0.15.0) — download do PDF. */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> pdf(@PathVariable UUID id) {
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=compra.pdf")
+                .body(pdfService.gerarPdfCompra(id));
+    }
+
+    /** Preview HTML do mesmo documento (mesma fonte do PDF, sem layout duplicado no frontend). */
+    @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> previewHtml(@PathVariable UUID id) {
+        return ResponseEntity.ok(pdfService.gerarPreviewHtmlCompra(id));
+    }
+}

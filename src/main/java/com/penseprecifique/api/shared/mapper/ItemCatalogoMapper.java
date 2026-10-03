@@ -95,6 +95,9 @@ public class ItemCatalogoMapper {
         response.setComponentes(componentes.stream().map(this::toComponenteResponse).toList());
         response.setAlgumComponenteNaoFracionavel(algumComponenteNaoFracionavel(componentes));
         response.setAlgumComponenteSemEstoque(algumComponenteSemEstoque(componentes));
+        response.setAtivo(Boolean.TRUE.equals(item.getCatalogo().getAtivo()) && componentes.stream().allMatch(c ->
+                (c.getProdutoBase() == null || (Boolean.TRUE.equals(c.getProdutoBase().getAtivo()) && c.getProdutoBase().getDeletedAt() == null))
+                && (c.getInsumo() == null || (Boolean.TRUE.equals(c.getInsumo().getAtivo()) && c.getInsumo().getDeletedAt() == null))));
         return response;
     }
 

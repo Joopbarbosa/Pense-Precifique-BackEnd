@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.insumo;
 
+import com.penseprecifique.api.shared.domain.enums.RegraPrecoReferencia;
 import com.penseprecifique.api.shared.domain.enums.TipoExibicaoQuantidade;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -35,5 +36,16 @@ public record InsumoCreateRequestDTO(
 
         @NotNull(message = "A quantidade comprada inicial é obrigatória")
         @DecimalMin(value = "0.01", message = "A quantidade comprada inicial deve ser maior que zero")
-        BigDecimal quantidadeCompradaInicial
-) {}
+        BigDecimal quantidadeCompradaInicial,
+
+        // #590/RN-NOVA-39 (V0.15.0) — opcional; nulo = MEDIA.
+        RegraPrecoReferencia regraPrecoReferencia
+) {
+    public InsumoCreateRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
+                                  TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
+                                  BigDecimal estoqueMinimo, BigDecimal precoTotalCompraInicial,
+                                  BigDecimal quantidadeCompradaInicial) {
+        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
+                estoqueMinimo, precoTotalCompraInicial, quantidadeCompradaInicial, null);
+    }
+}

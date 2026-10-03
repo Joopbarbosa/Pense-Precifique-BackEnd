@@ -1,5 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.insumo;
 
+import com.penseprecifique.api.shared.validation.LimitesTexto;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import jakarta.validation.constraints.DecimalMin;
@@ -26,5 +27,6 @@ public record BaixaManualInsumoRequestDTO(
 
         @NotBlank(message = "A observação é obrigatória")
         @Size(min = 30, message = "A observação deve ter no mínimo 30 caracteres")
+        @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
         String observacao
 ) {}
