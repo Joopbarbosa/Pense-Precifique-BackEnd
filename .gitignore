@@ -39,3 +39,6 @@ spring-shell.log
 
 # Claude Code (settings.json é compartilhado/commitado; settings.local.json é config pessoal)
 .claude/settings.local.json
+
+# Python (scripts do portão)
+__pycache__/
