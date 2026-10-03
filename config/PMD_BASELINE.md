@@ -6,12 +6,13 @@ supérfluo; `catch` vazio; comparação de objetos por referência.
 
 Em 2026-10-03, a execução `./mvnw -B compile pmd:check` na branch
 `processo/pmd-gate-v11-666`, criada de `staging` (`9e4d491`, V0.15.0
-mesclada), gerou **8 violações**. A linha de base anterior (3 violações, de
+mesclada), gerou **8 violações**; os 6 imports sem uso foram removidos em seguida
+(commit `chore(lint)`), e a linha de base atual tem **2 violações** (`ProducaoService`). A linha de base anterior (3 violações, de
 `staging` `60da00a`) ficou defasada: a V0.15.0 corrigiu a comparação por
 referência de `ProdutoService` e introduziu 6 imports sem uso (`DashboardCompraService`,
 `InsumoController` ×2, `ProdutoController` ×2, `IndicadoresFornecedorResponse`).
-Os 6 imports foram **aceitos na linha de base como dívida** (decisão do Gestor
-pendente: corrigir agora ou manter); nenhum código de produção foi alterado.
+Os 6 imports foram removidos por decisão do Gestor (2026-10-03); só a linha de
+base de `ProducaoService` permanece.
 Contexto anterior, de 2026-09-30: **3 violações**. O inventário por arquivo, regra e mensagem está em
 `pmd-baseline.json`. O relatório bruto fica em `target/pmd.xml`.
 Uma execução sem compilar registrava 8, pois a análise de imports

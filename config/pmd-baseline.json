@@ -1,44 +1,8 @@
 [
   {
-    "file": "src/main/java/com/penseprecifique/api/compra/DashboardCompraService.java",
-    "rule": "UnnecessaryImport",
-    "message": "Unused import 'com.penseprecifique.api.shared.domain.entity.Cliente'",
-    "count": 1
-  },
-  {
-    "file": "src/main/java/com/penseprecifique/api/insumo/InsumoController.java",
-    "rule": "UnnecessaryImport",
-    "message": "Unused import 'org.springframework.data.domain.PageRequest'",
-    "count": 1
-  },
-  {
-    "file": "src/main/java/com/penseprecifique/api/insumo/InsumoController.java",
-    "rule": "UnnecessaryImport",
-    "message": "Unused import 'org.springframework.data.domain.Sort'",
-    "count": 1
-  },
-  {
     "file": "src/main/java/com/penseprecifique/api/producao/ProducaoService.java",
     "rule": "UnusedLocalVariable",
     "message": "Avoid unused local variables such as 'produtosGravados'.",
     "count": 2
-  },
-  {
-    "file": "src/main/java/com/penseprecifique/api/produto/ProdutoController.java",
-    "rule": "UnnecessaryImport",
-    "message": "Unused import 'org.springframework.data.domain.PageRequest'",
-    "count": 1
-  },
-  {
-    "file": "src/main/java/com/penseprecifique/api/produto/ProdutoController.java",
-    "rule": "UnnecessaryImport",
-    "message": "Unused import 'org.springframework.data.domain.Sort'",
-    "count": 1
-  },
-  {
-    "file": "src/main/java/com/penseprecifique/api/shared/dto/response/cliente/IndicadoresFornecedorResponse.java",
-    "rule": "UnnecessaryImport",
-    "message": "Unused import 'java.time.LocalDateTime'",
-    "count": 1
   }
 ]
