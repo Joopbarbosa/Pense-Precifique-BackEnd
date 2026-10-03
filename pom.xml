@@ -205,6 +205,18 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <version>3.28.0</version>
+                <configuration>
+                    <failOnViolation>false</failOnViolation>
+                    <targetJdk>${java.version}</targetJdk>
+                    <rulesets>
+                        <ruleset>config/pmd-rules.xml</ruleset>
+                    </rulesets>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>

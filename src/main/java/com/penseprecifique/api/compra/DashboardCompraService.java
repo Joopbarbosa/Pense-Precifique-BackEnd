@@ -2,7 +2,6 @@ package com.penseprecifique.api.compra;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
-import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.CompraItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;

@@ -1,0 +1,8 @@
+[
+  {
+    "file": "src/main/java/com/penseprecifique/api/producao/ProducaoService.java",
+    "rule": "UnusedLocalVariable",
+    "message": "Avoid unused local variables such as 'produtosGravados'.",
+    "count": 2
+  }
+]
