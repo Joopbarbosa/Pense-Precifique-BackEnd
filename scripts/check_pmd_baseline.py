@@ -10,7 +10,8 @@ from pathlib import Path
 
 
 def findings(report):
-    root = ET.parse(report).getroot()
+    # Entrada confiável: target/pmd.xml é gerado pelo PMD no mesmo job, nunca recebido de fora.
+    root = ET.parse(report).getroot()  # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
     if root.tag.rsplit('}', 1)[-1] != 'pmd':
         raise ValueError('Relatório PMD ilegível: raiz ausente.')
     counts = collections.Counter()
