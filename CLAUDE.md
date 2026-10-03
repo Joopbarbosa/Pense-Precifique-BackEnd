@@ -3,8 +3,11 @@
 > Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`. Projeto pré-produção
 > (primeiro deploy estável com usuários reais = v1). Caminho:
 > `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Última atualização: 02/10/2026 (Retomada V0.15.0) · Branch padrão atual: `feature/V0.15.0`
-> Se este arquivo e o prompt da sessão divergirem, este arquivo vence.
+> Última revisão de padrões: 02/10/2026 (Retomada V0.15.0). Antes de agir,
+> confirmar a branch com `git branch --show-current` e a versão ativa no
+> `POCKET_V[X.Y].md`; não usar uma branch de versão gravada neste arquivo.
+> Se uma instrução técnica deste arquivo e o prompt da sessão divergirem,
+> investigar a diferença antes de prosseguir.
 >
 > Histórico de versões (V0.5 a V0.8.2) migrado para os `regras-*.md`/`decisoes-*.md` de cada
 > módulo em `docs-pense-precifique/` — não vive mais aqui. Ver seção 2.
@@ -300,3 +303,50 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   replicam o mesmo par de passos (`verificarComponentes()` + bloquear-ou-baixar) como código
   copiado em vez de método privado compartilhado — não confundir com decisão deliberada. Ver
   OpenProject antes de decidir se já há tarefa aberta.
+
+---
+
+## 8. Review guidelines
+
+Mapeamento de gravidade entre a escala do Codex e a do pipeline
+(`gravidade.md` do processo — fonte única, não duplicar critério aqui):
+
+| Codex | Pipeline | Efeito no gate/QA |
+|---|---|---|
+| P0 | Urgente | Bloqueia, corrigir sempre |
+| P1 | Alta | Bloqueia, corrigir sempre |
+| P2 | Normal | Gestor decide |
+| P3 | Baixa | Gestor decide |
+
+### AI slop — o que sempre vale achado de qualidade
+
+Cada item abaixo, quando encontrado no diff revisado, é achado de
+qualidade de código com local exato (`arquivo:linha`) e correção
+sugerida em texto — nunca reescrita direta pelo Codex:
+
+- Duplicação de lógica que já existe em outro lugar do módulo/serviço.
+- Over-engineering: abstração, camada ou parâmetro sem uso real no
+  código atual ou previsto na `SPEC`.
+- Comentário óbvio, que só repete o que a linha seguinte já diz.
+- `try/catch` ou checagem de nulo sem efeito (engole exceção sem
+  tratar, ou verifica um valor que o tipo já garante não nulo).
+- Cast para `any`/tipo genérico que descarta a checagem de tipo sem
+  necessidade documentada.
+- Código morto: função, branch ou arquivo sem nenhuma chamada real.
+- Linha sem efeito observável no comportamento nem na legibilidade.
+- Stub ou implementação vazia deixada como se estivesse completa.
+- Lógica de negócio (cálculo, regra, validação de `SPEC`) implementada
+  no Frontend quando deveria estar no Backend — ou o inverso, quando a
+  `SPEC` definir onde a regra vive.
+
+Gravidade de cada item segue `gravidade.md`, linha "Qualidade de código
+(QA)": o item que esconde ou pode esconder um bug real de comportamento
+é Alta; o item sem efeito funcional é Normal ou Baixa.
+
+### Convenções do projeto
+
+As convenções específicas deste repositório (padrões consolidados,
+anti-padrões conhecidos, legado e exceções) vivem no restante deste
+`CLAUDE.md` — a seção "Anti-padrões do projeto" (ou equivalente) é a
+referência que o Codex cita quando o achado é específico deste
+repositório, não um item genérico da lista acima.
