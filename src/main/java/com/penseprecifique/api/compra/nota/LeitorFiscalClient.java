@@ -21,7 +21,9 @@ import org.springframework.web.client.RestClientResponseException;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -72,31 +74,34 @@ public class LeitorFiscalClient {
             log.error("leitor-fiscal.chave-produto não configurada; leitura de nota indisponível.");
             throw falhaGenerica();
         }
-        MultiValueMap<String, Object> corpo = new LinkedMultiValueMap<>();
-        corpo.add("modelo", modelo);
-        if (StringUtils.hasText(qrUrl)) {
-            corpo.add("qrUrl", qrUrl);
-        }
-        if (StringUtils.hasText(chaveAcesso)) {
-            corpo.add("chaveAcesso", chaveAcesso);
-        }
-        corpo.add("confirmouEnvioIa", String.valueOf(confirmouEnvioIa));
-        if (arquivo != null) {
-            corpo.add("arquivo", new ByteArrayResource(arquivo.conteudo()) {
-                @Override
-                public String getFilename() {
-                    return arquivo.nome();
-                }
-            });
-        }
         try {
-            String json = restClient.post().uri("/v1/leituras")
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
+            RestClient.RequestBodySpec pedido = restClient.post().uri("/v1/leituras")
                     .header("Authorization", "Bearer " + chaveProduto)
-                    .header("X-Conta-Id", contaId.toString())
-                    .body(corpo)
-                    .retrieve()
-                    .body(String.class);
+                    .header("X-Conta-Id", contaId.toString());
+            String json;
+            if (arquivo != null) {
+                // contrato (openapi.yaml da #677): arquivo vai em multipart só com modelo, arquivo e confirmouEnvioIa
+                MultiValueMap<String, Object> corpo = new LinkedMultiValueMap<>();
+                corpo.add("modelo", modelo);
+                corpo.add("confirmouEnvioIa", String.valueOf(confirmouEnvioIa));
+                corpo.add("arquivo", new ByteArrayResource(arquivo.conteudo()) {
+                    @Override
+                    public String getFilename() {
+                        return arquivo.nome();
+                    }
+                });
+                json = pedido.contentType(MediaType.MULTIPART_FORM_DATA).body(corpo).retrieve().body(String.class);
+            } else {
+                // qrUrl ou chaveAcesso vão em JSON, exatamente um dos dois
+                Map<String, String> corpo = new LinkedHashMap<>();
+                corpo.put("modelo", modelo);
+                if (StringUtils.hasText(qrUrl)) {
+                    corpo.put("qrUrl", qrUrl);
+                } else {
+                    corpo.put("chaveAcesso", chaveAcesso);
+                }
+                json = pedido.contentType(MediaType.APPLICATION_JSON).body(corpo).retrieve().body(String.class);
+            }
             return objectMapper.readValue(json, NotaLida.class);
         } catch (RestClientResponseException e) {
             throw traduzir(e);
