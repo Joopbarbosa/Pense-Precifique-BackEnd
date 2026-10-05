@@ -24,7 +24,6 @@ import com.penseprecifique.api.shared.dto.request.compra.NotaRascunhoRequest.Aca
 import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse.CompraRef;
 import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse.FornecedorProposta;
-import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse.ItemConciliacao;
 import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse.SituacaoFornecedor;
 import com.penseprecifique.api.shared.dto.response.compra.NotaRascunhoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.NotaRascunhoResponse.AvisoNota;
@@ -47,9 +46,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -59,8 +60,8 @@ import java.util.regex.Pattern;
  * V0.16.0 (#683, DT-NOVA-9, DT-NOVA-10) — registrar compra a partir de uma nota fiscal. Dois passos:
  * {@link #ler} chama o leitor-fiscal, confere nota já registrada e devolve a proposta com assinatura (nada
  * é gravado); {@link #criarRascunho} verifica a assinatura, monta as linhas ({@link MontagemRascunhoNota})
- * e cria a compra RASCUNHO. O serviço de leitura só lê: ligação item→insumo é do produto (esta etapa
- * devolve todos os itens sem ligação; a conciliação automática é da #681).
+ * e cria a compra RASCUNHO. O serviço de leitura só lê: a ligação item→insumo é do produto
+ * ({@link ConciliacaoNotaService}, #681) e os vínculos são gravados ao criar o rascunho.
  */
 @Service
 @RequiredArgsConstructor
@@ -78,6 +79,8 @@ public class NotaCompraService {
     private final ClienteService clienteService;
     private final ValidadorArquivoComprovante validadorComprovante;
     private final R2StorageClient r2StorageClient;
+    private final ConciliacaoNotaService conciliacaoNotaService;
+    private final VinculoItemNotaService vinculoItemNotaService;
 
     // ------------------------------------------------------------------------------------ leitura
 
@@ -121,13 +124,13 @@ public class NotaCompraService {
             if (daUrl != null) {
                 Optional<CompraRef> existente = verificarJaRegistrada(usuario.getId(), daUrl);
                 if (existente.isPresent()) {
-                    return new NotaLeituraResponse(null, null, null, null, existente.get(), List.of());
+                    return new NotaLeituraResponse(existente.get());
                 }
             }
         } else if (chave != null) {
             Optional<CompraRef> existente = verificarJaRegistrada(usuario.getId(), chave);
             if (existente.isPresent()) {
-                return new NotaLeituraResponse(null, null, null, null, existente.get(), List.of());
+                return new NotaLeituraResponse(existente.get());
             }
         }
 
@@ -137,18 +140,13 @@ public class NotaCompraService {
 
         Optional<CompraRef> existente = verificarJaRegistrada(usuario.getId(), nota.chaveAcesso().toUpperCase(Locale.ROOT));
         if (existente.isPresent()) {
-            return new NotaLeituraResponse(null, null, null, null, existente.get(), List.of());
+            return new NotaLeituraResponse(existente.get());
         }
         String assinatura = assinaturaNota.assinar(usuario.getId(), nota, resumoComprovante);
-        List<ItemConciliacao> itens = new ArrayList<>();
-        List<NotaLida.Item> lidos = nota.itensOuVazio();
-        for (int i = 0; i < lidos.size(); i++) {
-            NotaLida.Item item = lidos.get(i);
-            itens.add(new ItemConciliacao(i, item.nome(), item.quantidade(), item.valorFinal(), item.unidade(),
-                    "SEM_LIGACAO", null, null));
-        }
+        ConciliacaoNotaService.Resultado conciliacao = conciliacaoNotaService.conciliar(
+                usuario.getId(), cnpjParaVinculo(nota), nota.itensOuVazio());
         return new NotaLeituraResponse(nota, assinatura, assinaturaNota.expiraEm(assinatura),
-                proporFornecedor(usuario.getId(), nota), null, itens);
+                proporFornecedor(usuario.getId(), nota), null, conciliacao.itens(), conciliacao.avisos());
     }
 
     // ------------------------------------------------------------------------------------ rascunho
@@ -210,10 +208,17 @@ public class NotaCompraService {
                     "A mesma nota não gera duas compras.", "Abra a compra existente na lista de compras.");
         }
         registrarComprovante(compra, usuario, arquivo, conteudo, request.comprovanteLink());
+        vinculoItemNotaService.gravar(usuario, nota, cnpjParaVinculo(nota), request.escolhas(), insumosPorId(insumos));
         return new NotaRascunhoResponse(compraService.responder(compra), previas, resultado.descontoNota(), resultado.acrescimos(), avisos);
     }
 
     // ------------------------------------------------------------------------------------ auxiliares
+
+    private static Map<UUID, Insumo> insumosPorId(List<Insumo> insumos) {
+        Map<UUID, Insumo> porId = new HashMap<>();
+        insumos.forEach(i -> porId.put(i.getId(), i));
+        return porId;
+    }
 
     private CompraRequest montarRequest(NotaLida nota, UUID fornecedorId, MontagemRascunhoNota.Resultado resultado) {
         List<CompraItemRequest> linhas = new ArrayList<>();
@@ -305,6 +310,12 @@ public class NotaCompraService {
 
     private static String documentoDoEmitente(NotaLida nota) {
         return nota.emitente() == null ? null : DocumentoFiscal.normalizar(nota.emitente().cnpj());
+    }
+
+    /** #681 — o vínculo é guardado pelo CNPJ do emitente; documento fora do formato de CNPJ não grava vínculo. */
+    private static String cnpjParaVinculo(NotaLida nota) {
+        String documento = documentoDoEmitente(nota);
+        return documento != null && DocumentoFiscal.cnpjValido(documento) ? documento : null;
     }
 
     /** RN-NOVA-5 — rascunho vivo: abre esse; confirmada ou cancelada: bloqueia com o número da compra. */

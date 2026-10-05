@@ -1,7 +1,6 @@
 package com.penseprecifique.api.compra.nota;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.tomakehurst.wiremock.WireMockServer;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.compra.CompraRepository;
@@ -25,18 +24,14 @@ import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.NotaRascunhoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -53,7 +48,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.notMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -70,31 +64,13 @@ import static org.mockito.Mockito.when;
 /**
  * V0.16.0 (#683) — registrar compra por nota, com o leitor-fiscal simulado. Cobre CEN-NOVO-9 a 13, 33 a 35,
  * 42, 43, 50 (parte de salvar rascunho), 55, 60, 61 e 62, mais a assinatura entre leitura e rascunho e a
- * tradução dos erros do serviço. A conciliação automática e a tela (E2E) são da #681.
+ * tradução dos erros do serviço. A conciliação automática tem testes próprios (#681, ConciliacaoNotaIT).
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-class NotaCompraIT {
+class NotaCompraIT extends NotaServicosSimulados {
 
-    private static final WireMockServer LEITOR = new WireMockServer(wireMockConfig().dynamicPort());
     private static final String CNPJ = "11222333000181";
     private static final String CHAVE = "35261011222333000181650010000000011000000019";
     private static final ObjectMapper JSON = new ObjectMapper();
-
-    static {
-        LEITOR.start();
-    }
-
-    @DynamicPropertySource
-    static void propriedades(DynamicPropertyRegistry registry) {
-        registry.add("leitor-fiscal.base-url", () -> "http://localhost:" + LEITOR.port());
-        registry.add("leitor-fiscal.chave-produto", () -> "chave-de-teste-do-pocket");
-        registry.add("nota.assinatura.segredo", () -> "segredo-de-teste-do-pocket");
-    }
-
-    @AfterAll
-    static void parar() {
-        LEITOR.stop();
-    }
 
     @Autowired NotaCompraService notaCompraService;
     @Autowired UsuarioRepository usuarioRepository;
@@ -102,7 +78,6 @@ class NotaCompraIT {
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired CompraRepository compraRepository;
-    @MockBean R2StorageClient r2StorageClient;
 
     private Usuario usuario;
     private UnidadeMedida un;
@@ -113,6 +88,7 @@ class NotaCompraIT {
     @BeforeEach
     void seed() {
         LEITOR.resetAll();
+        IA.resetAll();
         usuario = usuarioRepository.save(Usuario.builder()
                 .email("nota-compra-" + UUID.randomUUID() + "@test.com").senhaHash("x").ativo(true).build());
         SecurityContextHolder.getContext().setAuthentication(
@@ -175,14 +151,16 @@ class NotaCompraIT {
     // ---------------------------------------------------------------------------------- leitura
 
     @Test
-    void leituraPorQrDevolveNotaAssinaturaEItensSemLigacao() throws Exception {
+    void leituraPorQrDevolveNotaAssinaturaEItensConciliados() throws Exception {
         leitorDevolve(notaPadrao());
         NotaLeituraResponse r = notaCompraService.ler("NFCE", link(CHAVE), null, null, false);
 
         assertEquals(CHAVE, r.nota().chaveAcesso());
         assertNotNull(r.assinatura());
         assertEquals(2, r.itens().size());
-        assertEquals("SEM_LIGACAO", r.itens().get(0).origemLigacao());
+        // #681 — "FITA CETIM 10MM" casa sozinho com o insumo "Fita de cetim" (único candidato).
+        assertEquals(NotaLeituraResponse.OrigemLigacao.CASAMENTO_NOME, r.itens().get(0).origemLigacao());
+        assertEquals(fita.getId(), r.itens().get(0).insumo().id());
         assertEquals(NotaLeituraResponse.SituacaoFornecedor.NAO_CADASTRADO, r.fornecedor().situacao());
         LEITOR.verify(postRequestedFor(urlEqualTo("/v1/leituras"))
                 .withHeader("Authorization", equalTo("Bearer chave-de-teste-do-pocket"))

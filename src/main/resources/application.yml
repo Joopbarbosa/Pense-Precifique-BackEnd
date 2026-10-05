@@ -55,6 +55,17 @@ nota:
     segredo: ${NOTA_ASSINATURA_SEGREDO:}
     validade-minutos: ${NOTA_ASSINATURA_VALIDADE_MINUTOS:120}
 
+# V0.16.0 (#681, DT-NOVA-11) — sugestão de insumo por IA na conciliação da nota (provedor compatível com
+# OpenAI). Desligada por padrão até a política de privacidade (#675). Limite técnico por conta e mês,
+# fora do limite de leituras do leitor-fiscal.
+sugestao-ia:
+  habilitada: ${SUGESTAO_IA_HABILITADA:false}
+  base-url: ${SUGESTAO_IA_BASE_URL:}
+  chave: ${SUGESTAO_IA_CHAVE:}
+  modelo: ${SUGESTAO_IA_MODELO:}
+  timeout-seconds: ${SUGESTAO_IA_TIMEOUT_SECONDS:20}
+  limite-mensal-por-conta: ${SUGESTAO_IA_LIMITE_MENSAL_POR_CONTA:200}
+
 # Cloudflare R2 (compatível S3) — upload de foto do Item de Catálogo, DT-NOVA-4. Credenciais no
 # .env da raiz do projeto, nunca hardcoded.
 r2:

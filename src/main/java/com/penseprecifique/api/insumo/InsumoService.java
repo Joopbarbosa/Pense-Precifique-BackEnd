@@ -5,6 +5,7 @@ import com.penseprecifique.api.compra.FornecedorInsumoService;
 import com.penseprecifique.api.caixa.VendaCaixaRepository;
 import com.penseprecifique.api.compra.CompraItemRepository;
 import com.penseprecifique.api.compra.CompraRepository;
+import com.penseprecifique.api.compra.nota.VinculoItemNotaRepository;
 import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.VendaCaixa;
@@ -99,6 +100,7 @@ public class InsumoService {
     private final UnidadeMedidaRepository unidadeMedidaRepository;
     private final CompraRepository compraRepository;
     private final CompraItemRepository compraItemRepository;
+    private final VinculoItemNotaRepository vinculoItemNotaRepository;
     private final VendaCaixaRepository vendaCaixaRepository;
     private final FornecedorInsumoService fornecedorInsumoService;
 
@@ -313,8 +315,8 @@ public class InsumoService {
 
     /**
      * V0.16.0 (#687, RN-NOVA-18, CEN-NOVO-52/56) — rascunho não tem ficha, catálogo, orçamento nem
-     * estoque: a exclusão só é bloqueada por linha de compra salva (lista as COM-N). A limpeza dos
-     * vínculos salvos da conciliação entra com a tabela de vínculos (#681).
+     * estoque: a exclusão só é bloqueada por linha de compra salva (lista as COM-N); sem bloqueio, os
+     * vínculos salvos da conciliação que apontavam para ele são desfeitos na mesma transação (#681).
      */
     private void excluirRascunho(Insumo insumo, UUID usuarioId) {
         List<String> compras = compraItemRepository
@@ -333,6 +335,8 @@ public class InsumoService {
         }
         insumo.setDeletedAt(LocalDateTime.now());
         insumoRepository.save(insumo);
+        // #681 (CEN-NOVO-52) — os vínculos salvos que apontavam para o rascunho são desfeitos.
+        vinculoItemNotaRepository.deleteByInsumoId(insumo.getId());
     }
 
     /**
