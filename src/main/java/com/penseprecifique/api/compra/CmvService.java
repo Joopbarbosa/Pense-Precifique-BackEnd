@@ -21,11 +21,14 @@ import com.penseprecifique.api.shared.domain.entity.VendaCaixaItemComponente;
 import com.penseprecifique.api.shared.domain.entity.VendaCaixaItemCustomizacao;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa;
+import com.penseprecifique.api.shared.domain.enums.TipoVendaCmv;
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +59,9 @@ public class CmvService {
     private final CustoMaterialService custoMaterialService;
 
     /** Uma venda com o total (faturamento) e o CMV já somado; {@code estimado} = parte do CMV estimada. */
-    public record Venda(LocalDate data, BigDecimal faturamento, BigDecimal cmv, BigDecimal estimado, boolean semCusto) {}
+    public record Venda(UUID id, TipoVendaCmv tipo, String identificador, String cliente, String itens,
+                        LocalDate data, BigDecimal faturamento, BigDecimal cmv, BigDecimal estimado,
+                        boolean semCusto, boolean custoEstimado) {}
 
     public List<Venda> vendas(UUID usuarioId, LocalDate de, LocalDate ate) {
         CustoMaterialService.Calculo calculo = custoMaterialService.novoCalculo();
@@ -97,7 +102,11 @@ public class CmvService {
                             () -> c.getProduto() != null ? calculo.produto(c.getProduto()) : null);
                 }
             }
-            vendas.add(a.venda(o.getDataEntrega().toLocalDate(), o.getTotal()));
+            String resumo = itens.getOrDefault(o.getId(), List.of()).stream()
+                    .map(i -> resumir(BigDecimal.valueOf(i.getQuantidade()), i.getProduto(), i.getItemCatalogo()))
+                    .collect(Collectors.joining("; "));
+            vendas.add(a.venda(o.getId(), TipoVendaCmv.ORCAMENTO, IdentificadorFormatter.formatar("ORC", o.getNumero()),
+                    o.getCliente().getNome(), resumo, o.getDataEntrega().toLocalDate(), o.getTotal()));
         }
         return vendas;
     }
@@ -132,9 +141,19 @@ public class CmvService {
                             () -> c.getProduto() != null ? calculo.produto(c.getProduto()) : null);
                 }
             }
-            vendas.add(a.venda(v.getDataVenda().toLocalDate(), v.getTotal()));
+            String resumo = itens.getOrDefault(v.getId(), List.of()).stream()
+                    .map(i -> resumir(i.getQuantidade(), i.getProduto(), i.getItemCatalogo()))
+                    .collect(Collectors.joining("; "));
+            vendas.add(a.venda(v.getId(), TipoVendaCmv.VENDA_CAIXA, IdentificadorFormatter.formatar("CX", v.getNumero()),
+                    v.getCliente() != null ? v.getCliente().getNome() : null, resumo,
+                    v.getDataVenda().toLocalDate(), v.getTotal()));
         }
         return vendas;
+    }
+
+    private static String resumir(BigDecimal quantidade, Produto produto, ItemCatalogo itemCatalogo) {
+        String nome = itemCatalogo != null ? itemCatalogo.getNome() : produto != null ? produto.getNome() : "Item sem referência";
+        return quantidade.stripTrailingZeros().toPlainString().replace('.', ',') + " × " + nome;
     }
 
     /** Custo de hoje de uma linha sem custo gravado; nulo = sem como calcular. */
@@ -151,6 +170,7 @@ public class CmvService {
         private BigDecimal cmv = BigDecimal.ZERO;
         private BigDecimal estimado = BigDecimal.ZERO;
         private boolean semCusto;
+        private boolean custoEstimado;
 
         void somar(BigDecimal quantidade, BigDecimal gravado, java.util.function.Supplier<BigDecimal> estimativa) {
             if (quantidade == null) {
@@ -165,13 +185,16 @@ public class CmvService {
                 semCusto = true;
                 return;
             }
+            custoEstimado = true;
             BigDecimal parte = quantidade.multiply(hoje);
             cmv = cmv.add(parte);
             estimado = estimado.add(parte);
         }
 
-        Venda venda(LocalDate data, BigDecimal total) {
-            return new Venda(data, total != null ? total : BigDecimal.ZERO, cmv, estimado, semCusto);
+        Venda venda(UUID id, TipoVendaCmv tipo, String identificador, String cliente, String itens,
+                    LocalDate data, BigDecimal total) {
+            return new Venda(id, tipo, identificador, cliente, itens, data, total != null ? total : BigDecimal.ZERO,
+                    cmv.setScale(2, RoundingMode.HALF_UP), estimado, semCusto, custoEstimado);
         }
     }
 }
