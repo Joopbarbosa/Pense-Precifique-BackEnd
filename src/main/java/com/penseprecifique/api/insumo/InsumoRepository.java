@@ -31,9 +31,14 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
     @EntityGraph(attributePaths = "unidadeMedida")
     Optional<Insumo> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
+    @Query("SELECT (COUNT(i) > 0) FROM Insumo i WHERE i.nome = :nome "
+            + "AND COALESCE(i.marca, '') = COALESCE(:marca, '') AND i.usuario.id = :usuarioId AND i.deletedAt IS NULL")
     boolean existsByNomeAndMarcaAndUsuarioIdAndDeletedAtIsNull(
             String nome, String marca, UUID usuarioId);
 
+    @Query("SELECT (COUNT(i) > 0) FROM Insumo i WHERE i.nome = :nome "
+            + "AND COALESCE(i.marca, '') = COALESCE(:marca, '') AND i.usuario.id = :usuarioId "
+            + "AND i.id <> :id AND i.deletedAt IS NULL")
     boolean existsByNomeAndMarcaAndUsuarioIdAndIdNotAndDeletedAtIsNull(
             String nome, String marca, UUID usuarioId, UUID id);
 
