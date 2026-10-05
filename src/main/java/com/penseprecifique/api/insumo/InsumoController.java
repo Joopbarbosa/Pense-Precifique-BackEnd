@@ -2,6 +2,7 @@ package com.penseprecifique.api.insumo;
 
 import com.penseprecifique.api.shared.dto.request.insumo.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
+import com.penseprecifique.api.shared.dto.request.insumo.InsumoRascunhoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.insumo.InsumoContagensResponse;
@@ -32,8 +33,10 @@ public class InsumoController {
             @RequestParam(required = false) Boolean ativo,
             // #616 (adendo 2) — seletores: ativos e inativos, ativos primeiro
             @RequestParam(defaultValue = "false") boolean incluirInativos,
+            // V0.16.0 (#687, DT-NOVA-12) — listagem de Insumos e seletores da compra incluem rascunhos
+            @RequestParam(defaultValue = "false") boolean incluirRascunhos,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(insumoService.listar(busca, ativo, incluirInativos, pageable));
+        return ResponseEntity.ok(insumoService.listar(busca, ativo, incluirInativos, incluirRascunhos, pageable));
     }
 
     @GetMapping("/{id}")
@@ -50,6 +53,15 @@ public class InsumoController {
     @PostMapping
     public ResponseEntity<InsumoResponseDTO> cadastrar(@Valid @RequestBody InsumoCreateRequestDTO request) {
         return ResponseEntity.status(201).body(insumoService.cadastrar(request));
+    }
+
+    /** V0.16.0 (#687, RN-NOVA-18) — insumo em rascunho a partir do item da nota; {@code simular} só propõe. */
+    @PostMapping("/rascunho")
+    public ResponseEntity<InsumoResponseDTO> criarRascunho(
+            @Valid @RequestBody InsumoRascunhoRequestDTO request,
+            @RequestParam(defaultValue = "false") boolean simular) {
+        InsumoResponseDTO resposta = insumoService.criarRascunho(request, simular);
+        return simular ? ResponseEntity.ok(resposta) : ResponseEntity.status(201).body(resposta);
     }
 
     @PutMapping("/{id}")

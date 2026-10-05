@@ -48,8 +48,9 @@ public class Insumo {
     private Boolean qualquerMarca = false;
 
     // #298 (DT-NOVA-2, V0.14.0) — substitui a antiga coluna de texto livre (era String unidadeMedida).
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "unidade_medida_id", nullable = false)
+    // V0.16.0 (#687, RN-NOVA-18) — nula só enquanto o insumo é rascunho (CHECK na V69).
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "unidade_medida_id")
     private UnidadeMedida unidadeMedida;
 
     @Column(name = "custo_unitario", nullable = false, precision = 15, scale = 4)
@@ -85,6 +86,12 @@ public class Insumo {
     @Column(nullable = false)
     @Builder.Default
     private Boolean ativo = true;
+
+    // V0.16.0 (#687, RN-NOVA-18, DT-NOVA-12) — rascunho criado a partir do item da nota: fica ativo,
+    // mas não é utilizável (ficha, catálogo, orçamento, estoque) até ser completado.
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean rascunho = false;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;

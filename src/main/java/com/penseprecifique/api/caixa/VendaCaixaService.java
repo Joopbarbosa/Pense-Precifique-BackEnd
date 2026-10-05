@@ -1,5 +1,6 @@
 package com.penseprecifique.api.caixa;
 
+import com.penseprecifique.api.insumo.InsumoUtilizavel;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.produto.CustoMaterialService;
@@ -492,6 +493,7 @@ public class VendaCaixaService {
         for (ItemCatalogoComponente componente : itemCatalogoComponenteRepository.findByItemCatalogoId(item.getId())) {
             if (componente.getInsumo() != null) {
                 Insumo insumo = componente.getInsumo();
+                InsumoUtilizavel.exigirNaoRascunho(insumo, "vendido no Caixa");
                 if (!Boolean.TRUE.equals(insumo.getAtivo()) || insumo.getDeletedAt() != null) {
                     throw new BusinessException("O insumo '" + insumo.getNome()
                             + "' deste item de catálogo foi inativado. Reative o insumo ou troque o"

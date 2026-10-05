@@ -1,5 +1,6 @@
 package com.penseprecifique.api.compra;
 
+import com.penseprecifique.api.insumo.InsumoUtilizavel;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteService;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
@@ -298,6 +299,7 @@ public class CompraService {
                     "Busque o insumo em \"Adicionar insumo à compra…\", informe quantidade e preço e confirme de novo.");
         }
         validarData(compra.getDataCompra());
+        validarSemInsumoRascunho(itens);
         List<String> problemas = new ArrayList<>();
         for (int i = 0; i < itens.size(); i++) {
             CompraItem item = itens.get(i);
@@ -320,6 +322,28 @@ public class CompraService {
                     "Para confirmar, cada linha precisa de quantidade e preço e de um insumo ativo, porque é com esses dados que o estoque e o custo são atualizados.",
                     "Complete as linhas apontadas (ex.: quantidade 10 e preço cheio 30,00) ou remova a linha, e confirme de novo.")
                     .comItens(problemas);
+        }
+    }
+
+    /**
+     * V0.16.0 (#687, RN-NOVA-19, CEN-NOVO-50) — linha com insumo em rascunho bloqueia a confirmação
+     * (o rascunho da compra continua podendo ser salvo). {@code itens} traz o nome de cada insumo, para
+     * a tela oferecer o atalho "Completar o insumo".
+     */
+    private void validarSemInsumoRascunho(List<CompraItem> itens) {
+        List<String> rascunhos = itens.stream()
+                .map(CompraItem::getInsumo)
+                .filter(InsumoUtilizavel::rascunho)
+                .map(Insumo::getNome)
+                .distinct()
+                .toList();
+        if (!rascunhos.isEmpty()) {
+            throw BusinessException.explicado("Insumo em rascunho na compra",
+                    "Não foi possível confirmar a compra: " + String.join(", ", rascunhos)
+                            + (rascunhos.size() == 1 ? " ainda é um rascunho." : " ainda são rascunhos."),
+                    "Confirmar a compra muda o estoque e o custo; insumo em rascunho ainda não tem unidade e custo revisados.",
+                    "Use \"Completar o insumo\", informe unidade, custo e quantidade e confirme a compra de novo. O rascunho da compra pode ser salvo enquanto isso.")
+                    .comItens(rascunhos);
         }
     }
 

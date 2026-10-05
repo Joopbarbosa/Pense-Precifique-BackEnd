@@ -22,14 +22,15 @@ import java.util.List;
 public class InsumoMapper {
 
     public InsumoResponseDTO toResponse(Insumo insumo) {
+        boolean rascunho = Boolean.TRUE.equals(insumo.getRascunho());
         return new InsumoResponseDTO(
                 insumo.getId(),
                 insumo.getNumero(),
                 IdentificadorFormatter.formatar("INS", insumo.getNumero()),
                 insumo.getNome(),
                 insumo.getMarca(),
-                insumo.getUnidadeMedida().getSigla(),
-                insumo.getUnidadeMedida().getId(),
+                insumo.getUnidadeMedida() != null ? insumo.getUnidadeMedida().getSigla() : null,
+                insumo.getUnidadeMedida() != null ? insumo.getUnidadeMedida().getId() : null,
                 insumo.getFracionavel(),
                 insumo.getTipoExibicaoQuantidade(),
                 insumo.getPermitirEstoqueNegativo(),
@@ -40,7 +41,9 @@ public class InsumoMapper {
                 insumo.getCreatedAt(),
                 insumo.getUpdatedAt(),
                 insumo.getRegraPrecoReferencia(),
-                Boolean.TRUE.equals(insumo.getQualquerMarca())
+                Boolean.TRUE.equals(insumo.getQualquerMarca()),
+                rascunho,
+                rascunho && insumo.getCustoUnitario() != null && insumo.getCustoUnitario().signum() > 0
         );
     }
 
