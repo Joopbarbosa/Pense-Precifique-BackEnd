@@ -152,14 +152,16 @@ public class InsumoService {
     public InsumoResponseDTO cadastrar(InsumoCreateRequestDTO request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
+        String marca = validarMarca(request.marca(), Boolean.TRUE.equals(request.qualquerMarca()));
         if (insumoRepository.existsByNomeAndMarcaAndUsuarioIdAndDeletedAtIsNull(
-                request.nome(), request.marca(), usuarioId)) {
+                request.nome(), marca, usuarioId)) {
             throw new BusinessException("Já existe um insumo com este nome e marca.");
         }
 
         Usuario usuario = getUsuarioAutenticado();
         UnidadeMedida unidadeMedida = buscarUnidadeMedidaDoUsuario(request.unidadeMedidaId(), usuarioId);
         Insumo insumo = insumoMapper.toEntity(request, usuario, unidadeMedida);
+        insumo.setMarca(marca);
         // #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition.
         usuarioRepository.lockPorId(usuarioId);
         insumo.setNumero(NumeroSequencialUtil.proximoNumero(
@@ -187,20 +189,33 @@ public class InsumoService {
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
 
+        boolean qualquerMarca = request.qualquerMarca() != null ? request.qualquerMarca()
+                : Boolean.TRUE.equals(insumo.getQualquerMarca());
+        String marca = validarMarca(request.marca(), qualquerMarca);
         if (insumoRepository.existsByNomeAndMarcaAndUsuarioIdAndIdNotAndDeletedAtIsNull(
-                request.nome(), request.marca(), usuarioId, id)) {
+                request.nome(), marca, usuarioId, id)) {
             throw new BusinessException("Já existe um insumo com este nome e marca.");
         }
 
         UnidadeMedida unidadeMedida = buscarUnidadeMedidaDoUsuario(request.unidadeMedidaId(), usuarioId);
         RegraPrecoReferencia regraAntes = insumo.getRegraPrecoReferencia();
         insumoMapper.updateEntity(request, insumo, unidadeMedida);
+        insumo.setMarca(marca);
         Insumo salvo = insumoRepository.save(insumo);
         // #590/RN-NOVA-39 — trocar a regra recalcula o preço de referência de todos os fornecedores.
         if (salvo.getRegraPrecoReferencia() != regraAntes) {
             fornecedorInsumoService.recalcularDoInsumo(salvo);
         }
         return insumoMapper.toResponse(salvo);
+    }
+
+    private String validarMarca(String marca, boolean qualquerMarca) {
+        if (qualquerMarca && marca != null && !marca.isBlank()) {
+            throw BusinessException.explicado("Confira a marca do insumo", "O insumo não foi salvo.",
+                    "A opção Não validar marca exige que a marca esteja vazia.",
+                    "Confirme a remoção da marca ou desmarque Não validar marca.");
+        }
+        return qualquerMarca || marca == null || marca.isEmpty() ? null : marca;
     }
 
     private UnidadeMedida buscarUnidadeMedidaDoUsuario(UUID unidadeMedidaId, UUID usuarioId) {

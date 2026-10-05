@@ -39,7 +39,8 @@ public class InsumoMapper {
                 insumo.getAtivo(),
                 insumo.getCreatedAt(),
                 insumo.getUpdatedAt(),
-                insumo.getRegraPrecoReferencia()
+                insumo.getRegraPrecoReferencia(),
+                Boolean.TRUE.equals(insumo.getQualquerMarca())
         );
     }
 
@@ -49,6 +50,7 @@ public class InsumoMapper {
                 .usuario(usuario)
                 .nome(request.nome())
                 .marca(request.marca())
+                .qualquerMarca(Boolean.TRUE.equals(request.qualquerMarca()))
                 .unidadeMedida(unidadeMedida)
                 .fracionavel(fracionavel)
                 .tipoExibicaoQuantidade(tipoExibicaoQuantidadeParaSalvar(fracionavel, request.tipoExibicaoQuantidade()))
@@ -65,6 +67,7 @@ public class InsumoMapper {
     public void updateEntity(InsumoRequestDTO request, Insumo insumo, UnidadeMedida unidadeMedida) {
         insumo.setNome(request.nome());
         insumo.setMarca(request.marca());
+        if (request.qualquerMarca() != null) insumo.setQualquerMarca(request.qualquerMarca());
         insumo.setUnidadeMedida(unidadeMedida);
         if (request.fracionavel() != null) {
             insumo.setFracionavel(request.fracionavel());

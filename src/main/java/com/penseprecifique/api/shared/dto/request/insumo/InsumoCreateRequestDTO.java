@@ -39,8 +39,17 @@ public record InsumoCreateRequestDTO(
         BigDecimal quantidadeCompradaInicial,
 
         // #590/RN-NOVA-39 (V0.15.0) — opcional; nulo = MEDIA.
-        RegraPrecoReferencia regraPrecoReferencia
+        RegraPrecoReferencia regraPrecoReferencia,
+
+        Boolean qualquerMarca
 ) {
+    public InsumoCreateRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
+                                  TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
+                                  BigDecimal estoqueMinimo, BigDecimal precoTotalCompraInicial,
+                                  BigDecimal quantidadeCompradaInicial, RegraPrecoReferencia regraPrecoReferencia) {
+        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
+                estoqueMinimo, precoTotalCompraInicial, quantidadeCompradaInicial, regraPrecoReferencia, null);
+    }
     public InsumoCreateRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
                                   TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
                                   BigDecimal estoqueMinimo, BigDecimal precoTotalCompraInicial,
