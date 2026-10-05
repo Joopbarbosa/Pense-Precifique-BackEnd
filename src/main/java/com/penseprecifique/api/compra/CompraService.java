@@ -15,6 +15,7 @@ import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
+import com.penseprecifique.api.shared.domain.enums.OrigemCompra;
 import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
@@ -186,6 +187,23 @@ public class CompraService {
         Usuario usuario = getUsuarioAutenticado();
         Compra compra = novaCompra(usuario);
         aplicarRequest(compra, request, usuario.getId(), List.of());
+        return compraMapper.toResponse(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
+    }
+
+    /**
+     * #683/DT-NOVA-9 (V0.16.0) — rascunho nascido de uma nota lida: igual a {@link #criarRascunho}, mais a
+     * origem e a chave de acesso (RN-NOVA-1 e RN-NOVA-5). Devolve a entidade para o chamador gravar o comprovante.
+     */
+    public Compra criarRascunhoDeNota(CompraRequest request, OrigemCompra origem, String chaveAcesso) {
+        Usuario usuario = getUsuarioAutenticado();
+        Compra compra = novaCompra(usuario);
+        compra.setOrigem(origem);
+        compra.setChaveAcesso(chaveAcesso);
+        aplicarRequest(compra, request, usuario.getId(), List.of());
+        return compra;
+    }
+
+    public CompraResponse responder(Compra compra) {
         return compraMapper.toResponse(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
     }
 
@@ -741,7 +759,7 @@ public class CompraService {
         return IdentificadorFormatter.formatar("COM", compra.getNumero());
     }
 
-    Usuario getUsuarioAutenticado() {
+    public Usuario getUsuarioAutenticado() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return usuarioRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));

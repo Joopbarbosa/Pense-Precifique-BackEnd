@@ -52,7 +52,11 @@ public class CompraMapper {
                 totalDescontos(itens),
                 compra.getParcelas(),
                 compra.getListaCompra() == null ? null : new CompraResponse.ListaCompraRef(compra.getListaCompra().getId(),
-                        IdentificadorFormatter.formatar("LST", compra.getListaCompra().getNumero())));
+                        IdentificadorFormatter.formatar("LST", compra.getListaCompra().getNumero())),
+                compra.getChaveAcesso(),
+                compra.getComprovanteTipo(),
+                compra.getComprovanteNome(),
+                compra.getComprovanteUrl());
     }
 
     /** #576 — soma dos descontos de linha e das partes da nota. */

@@ -43,6 +43,18 @@ pdf:
     base-url: ${PDF_MICROSERVICE_BASE_URL:http://pense-precifique-pdf:3001}
     timeout-seconds: ${PDF_MICROSERVICE_TIMEOUT_SECONDS:30}
 
+# V0.16.0 (#683, DT-NOVA-9) — serviço leitor-fiscal, na rede Docker compartilhada. A chave do produto e o
+# segredo da assinatura da leitura vêm de variável de ambiente; vazios = recurso de nota indisponível.
+leitor-fiscal:
+  base-url: ${LEITOR_FISCAL_BASE_URL:http://leitor-fiscal:3000}
+  chave-produto: ${LEITOR_FISCAL_CHAVE:}
+  timeout-seconds: ${LEITOR_FISCAL_TIMEOUT_SECONDS:70}
+
+nota:
+  assinatura:
+    segredo: ${NOTA_ASSINATURA_SEGREDO:}
+    validade-minutos: ${NOTA_ASSINATURA_VALIDADE_MINUTOS:120}
+
 # Cloudflare R2 (compatível S3) — upload de foto do Item de Catálogo, DT-NOVA-4. Credenciais no
 # .env da raiz do projeto, nunca hardcoded.
 r2:

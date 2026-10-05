@@ -72,6 +72,10 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
                                   @Param("busca") String busca,
                                   Pageable pageable);
 
+    /** #683/RN-NOVA-5 — a compra viva (não excluída) da usuária para a chave de acesso, em qualquer status. */
+    @EntityGraph(attributePaths = {"fornecedor", "metodoPagamento"})
+    Optional<Compra> findByUsuarioIdAndChaveAcessoAndDeletedAtIsNull(UUID usuarioId, String chaveAcesso);
+
     /** #591/RN-NOVA-44 — contagem por status (total da conta, sem filtros). */
     long countByUsuarioIdAndStatusAndDeletedAtIsNull(UUID usuarioId, StatusCompra status);
 
