@@ -21,6 +21,8 @@ import java.util.UUID;
  */
 public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
 
+    java.util.List<Cliente> findByUsuarioIdAndDocumentoIn(UUID usuarioId, java.util.Collection<String> documentos);
+
     // CAST(:busca AS string) obrigatório — mesmo motivo de InsumoRepository#buscarComFiltros
     // (parâmetro nulo inferido como bytea). Busca por nome ou por documento (sem máscara).
     @Query("SELECT c FROM Cliente c WHERE c.usuario.id = :usuarioId " +
