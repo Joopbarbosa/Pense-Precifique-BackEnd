@@ -1,6 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.compra;
 
 import com.penseprecifique.api.shared.dto.leitorfiscal.NotaLida;
+import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse.OrigemLigacao;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -45,8 +46,14 @@ public record NotaRascunhoRequest(
             Integer posicao,
             UUID insumoId,
             BigDecimal fator,
-            Boolean ignorar
+            Boolean ignorar,
+            /** #681 — de onde veio a ligação aceita (só registro no vínculo); nulo ou trocada à mão = MANUAL. */
+            OrigemLigacao origem
     ) {
+        public Escolha(Integer posicao, UUID insumoId, BigDecimal fator, Boolean ignorar) {
+            this(posicao, insumoId, fator, ignorar, null);
+        }
+
         public boolean ignorado() {
             return Boolean.TRUE.equals(ignorar);
         }
