@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,7 +23,7 @@ import java.util.UUID;
  */
 public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
 
-    java.util.List<Cliente> findByUsuarioIdAndDocumentoIn(UUID usuarioId, java.util.Collection<String> documentos);
+    List<Cliente> findByUsuarioIdAndDocumentoIn(UUID usuarioId, Collection<String> documentos);
 
     // CAST(:busca AS string) obrigatório — mesmo motivo de InsumoRepository#buscarComFiltros
     // (parâmetro nulo inferido como bytea). Busca por nome ou por documento (sem máscara).
