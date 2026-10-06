@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public record VinculoNotaResponse(UUID id, String nomeItem, String emitenteCnpj, String emitenteNome,
         UUID fornecedorId, String fornecedorNome, InsumoProposto insumo, BigDecimal fator, boolean ignorar,
-        OrigemVinculoItemNota origem, LocalDateTime createdAt, LocalDateTime updatedAt) {}
+        OrigemVinculoItemNota origem, LocalDateTime createdAt, LocalDateTime updatedAt,
+        UUID compraId, String compraIdentificador) {}

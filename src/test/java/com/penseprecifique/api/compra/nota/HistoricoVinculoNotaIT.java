@@ -158,12 +158,12 @@ class HistoricoVinculoNotaIT extends NotaServicosSimulados {
         assertThrows(ResourceNotFoundException.class, () -> historico.desfazer(v.getId()));
     }
     @Test
-    void destinoInativoOuExcluidoBloqueiaRascunhoAtivoAceitoOrdenacaoInvalidaBloqueia() {
+    void destinoInativoOuExcluidoBloqueiaAtivoAceitoOrdenacaoInvalidaBloqueia() {
         var v = vinculo(ESTRELA, "CANETA GEL AZUL", azul);
         preta.setAtivo(false); insumos.saveAndFlush(preta);
         assertThrows(BusinessException.class, () -> historico.editar(v.getId(), new VinculoNotaRequest(preta.getId(), BigDecimal.ONE)));
-        preta.setAtivo(true); preta.setRascunho(true); preta.setUnidadeMedida(null); preta.setCustoUnitario(BigDecimal.ZERO); insumos.saveAndFlush(preta);
-        assertTrue(historico.editar(v.getId(), new VinculoNotaRequest(preta.getId(), BigDecimal.ONE)).insumo().rascunho());
+        preta.setAtivo(true); insumos.saveAndFlush(preta);
+        assertEquals(preta.getId(), historico.editar(v.getId(), new VinculoNotaRequest(preta.getId(), BigDecimal.ONE)).insumo().id());
         preta.setDeletedAt(java.time.LocalDateTime.now()); insumos.saveAndFlush(preta);
         assertThrows(ResourceNotFoundException.class, () -> historico.editar(v.getId(), new VinculoNotaRequest(preta.getId(), BigDecimal.ONE)));
         assertThrows(BusinessException.class, () -> historico.listar(null, null, null, null, null, PageRequest.of(0, 20, Sort.by("usuario.senhaHash"))));

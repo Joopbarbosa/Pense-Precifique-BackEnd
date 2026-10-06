@@ -1,6 +1,5 @@
 package com.penseprecifique.api.produto;
 
-import com.penseprecifique.api.insumo.InsumoUtilizavel;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
@@ -50,7 +49,6 @@ public class FichaTecnicaService {
                 if (!Boolean.TRUE.equals(insumo.getAtivo())) {
                     throw new BusinessException("Este insumo está inativo e não pode ser adicionado. Reative-o para continuar.");
                 }
-                InsumoUtilizavel.exigirNaoRascunho(insumo, "adicionado à ficha técnica");
                 validarQuantidadeInsumo(insumo, req.getQuantidade());
                 builder.insumo(insumo).produtoBase(null);
             } else {
@@ -91,7 +89,6 @@ public class FichaTecnicaService {
         if (!Boolean.TRUE.equals(novoInsumo.getAtivo())) {
             throw new BusinessException("O insumo substituto está inativo e não pode ser usado. Reative-o para continuar.");
         }
-        InsumoUtilizavel.exigirNaoRascunho(novoInsumo, "usado na ficha técnica");
 
         List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoIdAndInsumoId(produtoId, insumoAntigoId);
         for (FichaTecnicaItem item : itens) {

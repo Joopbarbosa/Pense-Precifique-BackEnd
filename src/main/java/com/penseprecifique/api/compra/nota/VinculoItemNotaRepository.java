@@ -7,7 +7,6 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -32,8 +31,13 @@ public interface VinculoItemNotaRepository extends JpaRepository<VinculoItemNota
     Optional<VinculoItemNota> findByUsuarioIdAndEmitenteCnpjAndNomeItemNormalizado(
             UUID usuarioId, String emitenteCnpj, String nomeNormalizado);
 
-    /** RN-NOVA-18 (CEN-NOVO-52) — excluir insumo em rascunho desfaz os vínculos que apontavam para ele. */
-    @Modifying
-    @Query("DELETE FROM VinculoItemNota v WHERE v.insumo.id = :insumoId")
-    int deleteByInsumoId(@Param("insumoId") UUID insumoId);
+    /**
+     * #718 (RN-NOVA-26) — vínculos de outros fornecedores (CNPJ diferente) com os mesmos nomes de item:
+     * só os não ignorados, com insumo ativo e não excluído. {@code cnpjExcluido} vazio vale para qualquer CNPJ.
+     */
+    @Query("SELECT v FROM VinculoItemNota v JOIN FETCH v.insumo i LEFT JOIN FETCH i.unidadeMedida " +
+            "WHERE v.usuario.id = :usuarioId AND v.nomeItemNormalizado IN :nomes AND v.ignorar = false " +
+            "AND v.emitenteCnpj <> :cnpjExcluido AND i.ativo = true AND i.deletedAt IS NULL ORDER BY v.updatedAt DESC")
+    List<VinculoItemNota> findDeOutrosFornecedores(@Param("usuarioId") UUID usuarioId,
+            @Param("nomes") Collection<String> nomes, @Param("cnpjExcluido") String cnpjExcluido);
 }

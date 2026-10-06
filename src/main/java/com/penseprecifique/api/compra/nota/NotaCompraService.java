@@ -208,7 +208,7 @@ public class NotaCompraService {
                     "A mesma nota não gera duas compras.", "Abra a compra existente na lista de compras.");
         }
         registrarComprovante(compra, usuario, arquivo, conteudo, request.comprovanteLink());
-        vinculoItemNotaService.gravar(usuario, nota, cnpjParaVinculo(nota), request.escolhas(), insumosPorId(insumos));
+        vinculoItemNotaService.gravar(usuario, nota, cnpjParaVinculo(nota), request.escolhas(), insumosPorId(insumos), compra);
         return new NotaRascunhoResponse(compraService.responder(compra), previas, resultado.descontoNota(), resultado.acrescimos(), avisos);
     }
 

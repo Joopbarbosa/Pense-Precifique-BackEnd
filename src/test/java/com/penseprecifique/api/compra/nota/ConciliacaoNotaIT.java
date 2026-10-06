@@ -14,7 +14,6 @@ import com.penseprecifique.api.shared.dto.leitorfiscal.NotaLida;
 import com.penseprecifique.api.shared.dto.request.compra.NotaRascunhoRequest;
 import com.penseprecifique.api.shared.dto.request.compra.NotaRascunhoRequest.AcaoFornecedor;
 import com.penseprecifique.api.shared.dto.request.compra.NotaRascunhoRequest.Escolha;
-import com.penseprecifique.api.shared.dto.request.insumo.InsumoRascunhoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.compra.CompraItemResponse;
 import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse;
 import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse.ItemConciliacao;
@@ -57,6 +56,7 @@ class ConciliacaoNotaIT extends NotaServicosSimulados {
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired VinculoItemNotaRepository vinculoRepository;
     @Autowired CompraService compraService;
+    @Autowired HistoricoVinculoNotaService historico;
 
     private Usuario usuario;
     private UnidadeMedida un;
@@ -130,8 +130,71 @@ class ConciliacaoNotaIT extends NotaServicosSimulados {
         assertEquals(papel.getId(), segunda.insumo().id());
         igual("100", segunda.fator());
 
+        // RN-NOVA-26 (CEN-NOVO-68): o vínculo de outro fornecedor com o mesmo nome de item é proposto antes da IA.
         ItemConciliacao outroEmitente = ler(nota(AURORA, null, item("PAPEL COUCHE 250G A4 C/100", "1", "38.00"))).itens().get(0);
-        assertEquals(OrigemLigacao.SEM_LIGACAO, outroEmitente.origemLigacao(), "vínculo vale por emitente (CEN-NOVO-21)");
+        assertEquals(OrigemLigacao.VINCULO_OUTRO_FORNECEDOR, outroEmitente.origemLigacao());
+        assertEquals(papel.getId(), outroEmitente.insumo().id());
+        igual("100", outroEmitente.fator());
+    }
+
+    @Test
+    void cen68_vinculoDeOutroFornecedorLigaSemIaEGravaOVinculoDoFornecedorDaNota() throws Exception {
+        Insumo papel = insumo("Folha especial", null);
+        confirmar(ler(nota(ESTRELA, null, item("PAPEL COUCHE 250G A4 C/100", "1", "38.00"))), liga(0, papel, "100", null));
+
+        NotaLeituraResponse leitura = ler(nota(AURORA, null, item("PAPEL COUCHE 250G A4 C/100", "2", "76.00")));
+        assertEquals(OrigemLigacao.VINCULO_OUTRO_FORNECEDOR, leitura.itens().get(0).origemLigacao());
+        assertEquals(0, IA.getAllServeEvents().size(), "a IA não é chamada quando o vínculo resolve");
+        confirmar(leitura, liga(0, papel, "100", OrigemLigacao.VINCULO_OUTRO_FORNECEDOR));
+
+        VinculoItemNota gravado = vinculoRepository.findByUsuarioIdAndEmitenteCnpjAndNomeItemNormalizado(
+                usuario.getId(), AURORA, "papel couche 250g a4 c/100").orElseThrow();
+        assertEquals(OrigemVinculoItemNota.OUTRO_FORNECEDOR, gravado.getOrigem());
+        assertEquals(papel.getId(), gravado.getInsumo().getId());
+        assertEquals(OrigemLigacao.VINCULO_SALVO, ler(nota(AURORA, null, item("PAPEL COUCHE 250G A4 C/100", "1", "38.00"))).itens().get(0).origemLigacao());
+    }
+
+    @Test
+    void cen69_nomeVinculadoAInsumosDiferentesNaoLigaSozinhoEMostraOsDoisCandidatos() throws Exception {
+        Insumo a = insumo("Folha especial", null);
+        Insumo b = insumo("Papel grosso", null);
+        confirmar(ler(nota(ESTRELA, null, item("PAPEL COUCHE 250G A4 C/100", "1", "38.00"))), liga(0, a, "100", null));
+        confirmar(ler(nota(AURORA, null, item("PAPEL COUCHE 250G A4 C/100", "1", "38.00"))), liga(0, b, "50", OrigemLigacao.VINCULO_OUTRO_FORNECEDOR));
+
+        ItemConciliacao item = ler(nota("12345678000195", null, item("PAPEL COUCHE 250G A4 C/100", "1", "38.00"))).itens().get(0);
+        assertEquals(OrigemLigacao.SEM_LIGACAO, item.origemLigacao());
+        assertNull(item.insumo());
+        assertEquals(java.util.Set.of(a.getId(), b.getId()),
+                item.candidatos().stream().map(NotaLeituraResponse.InsumoProposto::id).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
+    void cen68_vinculoIgnoradoOuDeInsumoInativoDeOutroFornecedorNaoConta() throws Exception {
+        Insumo caneta = insumo("Caneta gel azul", null);
+        confirmar(ler(nota(ESTRELA, null, item("LANCHE NATURAL", "1", "9.00"), item("MARCADOR PRETO", "1", "3.00"))),
+                ignora(0), liga(1, caneta, "1", null));
+        caneta.setAtivo(false);
+        insumoRepository.save(caneta);
+
+        List<ItemConciliacao> itens = ler(nota(AURORA, null, item("LANCHE NATURAL", "1", "9.00"), item("MARCADOR PRETO", "1", "3.00"))).itens();
+        assertEquals(OrigemLigacao.SEM_LIGACAO, itens.get(0).origemLigacao(), "item ignorado por outro fornecedor não vira proposta");
+        assertEquals(OrigemLigacao.SEM_LIGACAO, itens.get(1).origemLigacao(), "insumo inativo não é proposto");
+    }
+
+    @Test
+    void cen66_vinculoGuardaACompraEOHistoricoDevolveOIdentificador() throws Exception {
+        Insumo caneta = insumo("Caneta gel azul", null);
+        NotaLeituraResponse leitura = ler(nota(ESTRELA, null, item("CANETA GEL AZUL", "3", "12.00")));
+        var compra = notaCompraService.criarRascunho(new NotaRascunhoRequest(leitura.nota(), leitura.assinatura(),
+                List.of(liga(0, caneta, "1", OrigemLigacao.CASAMENTO_NOME)), AcaoFornecedor.SEM_FORNECEDOR, null), null, false).compra();
+
+        var registro = historico.listar(null, null, null, null, null, org.springframework.data.domain.PageRequest.of(0, 20)).getContent().get(0);
+        assertEquals(compra.id(), registro.compraId());
+        assertEquals(compra.identificador(), registro.compraIdentificador());
+
+        compraService.excluirRascunho(compra.id());
+        var depois = historico.listar(null, null, null, null, null, org.springframework.data.domain.PageRequest.of(0, 20)).getContent().get(0);
+        assertNull(depois.compraId(), "compra excluída deixa de ser destino");
     }
 
     @Test
@@ -219,14 +282,14 @@ class ConciliacaoNotaIT extends NotaServicosSimulados {
     }
 
     @Test
-    void cen59_vinculoParaInsumoInativoNaoEAplicadoEMostraCandidatosAtivosERascunho() throws Exception {
+    void cen59_vinculoParaInsumoInativoNaoEAplicadoEMostraCandidatosAtivos() throws Exception {
         Insumo antigo = insumo("Caneta gel azul", null);
         confirmar(ler(nota(ESTRELA, null, item("CANETA GEL AZUL", "1", "4.00"))), liga(0, antigo, "1", OrigemLigacao.CASAMENTO_NOME));
         antigo.setAtivo(false);
         insumoRepository.save(antigo);
         Insumo azul = insumo("Caneta azul", null);
         Insumo gel = insumoRepository.save(Insumo.builder().usuario(usuario).numero(numero++).nome("Caneta gel")
-                .estoqueAtual(BigDecimal.ZERO).custoUnitario(BigDecimal.ZERO).rascunho(true).build());
+                .estoqueAtual(BigDecimal.ZERO).custoUnitario(BigDecimal.ZERO).unidadeMedida(azul.getUnidadeMedida()).build());
         insumo("Caneta preta", null);
 
         ItemConciliacao item = ler(nota(ESTRELA, null, item("CANETA GEL AZUL", "1", "4.00"))).itens().get(0);
@@ -234,25 +297,6 @@ class ConciliacaoNotaIT extends NotaServicosSimulados {
         assertEquals(OrigemLigacao.SEM_LIGACAO, item.origemLigacao());
         assertEquals(ConciliacaoNotaService.AVISO_INSUMO_INATIVO, item.aviso());
         assertEquals(List.of(azul.getId(), gel.getId()), item.candidatos().stream().map(NotaLeituraResponse.InsumoProposto::id).toList());
-        assertTrue(item.candidatos().get(1).rascunho());
-    }
-
-    @Test
-    void cen52_excluirInsumoRascunhoDesfazOVinculo() throws Exception {
-        UUID rascunho = insumoService.criarRascunho(new InsumoRascunhoRequestDTO(
-                "Fita especial", null, "un", v("1"), v("3.00")), false).id();
-        Insumo fita = insumoRepository.findById(rascunho).orElseThrow();
-        NotaLeituraResponse leitura = ler(nota(ESTRELA, null, item("FITA CETIM 10MM", "1", "3.00")));
-        // a compra criada aqui usa o rascunho; é excluída antes de excluir o insumo (CEN-NOVO-56 bloquearia)
-        UUID compraId = notaCompraService.criarRascunho(new NotaRascunhoRequest(leitura.nota(), leitura.assinatura(),
-                List.of(liga(0, fita, "1", null)), AcaoFornecedor.SEM_FORNECEDOR, null), null, false).compra().id();
-        assertTrue(vinculoRepository.findByUsuarioIdAndEmitenteCnpjAndNomeItemNormalizado(usuario.getId(), ESTRELA, "fita cetim 10mm").isPresent());
-
-        compraService.excluirRascunho(compraId);
-        insumoService.excluir(rascunho);
-
-        assertTrue(vinculoRepository.findByUsuarioIdAndEmitenteCnpjAndNomeItemNormalizado(usuario.getId(), ESTRELA, "fita cetim 10mm").isEmpty());
-        assertEquals(OrigemLigacao.SEM_LIGACAO, ler(nota(ESTRELA, null, item("FITA CETIM 10MM", "1", "3.00"))).itens().get(0).origemLigacao());
     }
 
     @Test

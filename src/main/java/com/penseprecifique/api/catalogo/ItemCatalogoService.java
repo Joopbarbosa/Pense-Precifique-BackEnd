@@ -1,6 +1,5 @@
 package com.penseprecifique.api.catalogo;
 
-import com.penseprecifique.api.insumo.InsumoUtilizavel;
 import com.penseprecifique.api.empresa.ConfiguracaoPrecificacaoRepository;
 import com.penseprecifique.api.infra.storage.R2StorageClient;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -309,7 +308,6 @@ public class ItemCatalogoService {
                 if (!Boolean.TRUE.equals(insumo.getAtivo())) {
                     throw new BusinessException("Este insumo está inativo e não pode ser adicionado. Reative-o para continuar.");
                 }
-                InsumoUtilizavel.exigirNaoRascunho(insumo, "usado como componente de item de catálogo");
                 validarQuantidadeInsumo(insumo, req.getQuantidade());
             } else {
                 produtoBase = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(req.getProdutoBaseId(), usuarioId)

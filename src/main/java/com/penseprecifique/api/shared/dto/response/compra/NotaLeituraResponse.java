@@ -40,13 +40,15 @@ public record NotaLeituraResponse(
     /** Origem da ligação proposta para um item (RN-NOVA-14). */
     public enum OrigemLigacao {
         VINCULO_SALVO,
+        /** #718 (RN-NOVA-26) — vínculo de outro fornecedor com o mesmo nome de item. */
+        VINCULO_OUTRO_FORNECEDOR,
         CASAMENTO_NOME,
         SUGESTAO_IA,
         SEM_LIGACAO
     }
 
-    /** Insumo proposto ou candidato; {@code rascunho} participa da conciliação (RN-NOVA-12). */
-    public record InsumoProposto(UUID id, String identificador, String nome, String marca, String unidade, boolean rascunho) {}
+    /** Insumo proposto ou candidato da conciliação (RN-NOVA-12). */
+    public record InsumoProposto(UUID id, String identificador, String nome, String marca, String unidade) {}
 
     /**
      * Item da nota com a proposta: {@code insumo} e {@code fator} quando ligado (vínculo salvo, nome ou

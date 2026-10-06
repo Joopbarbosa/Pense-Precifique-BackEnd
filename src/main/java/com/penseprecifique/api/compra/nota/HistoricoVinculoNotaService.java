@@ -4,6 +4,7 @@ import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.compra.CompraService;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.VinculoItemNota;
 import com.penseprecifique.api.shared.domain.enums.OrigemVinculoItemNota;
@@ -117,7 +118,7 @@ public class HistoricoVinculoNotaService {
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuario)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
         if (!Boolean.TRUE.equals(insumo.getAtivo())) throw BusinessException.explicado("Insumo inativo",
-                "O insumo escolhido está inativo.", "Vínculos futuros precisam de insumo ativo ou em rascunho.", "Reative o insumo ou escolha outro.");
+                "O insumo escolhido está inativo.", "Vínculos futuros precisam de insumo ativo.", "Reative o insumo ou escolha outro.");
         v.setInsumo(insumo); v.setFator(fator); v.setIgnorar(false);
     }
 
@@ -128,11 +129,14 @@ public class HistoricoVinculoNotaService {
 
     private static VinculoNotaResponse resposta(VinculoItemNota v, Cliente cadastro) {
         Insumo i = v.getInsumo();
+        // compra excluída (soft delete) deixa de ser destino (RN-NOVA-24)
+        Compra compra = v.getCompra() != null && v.getCompra().getDeletedAt() == null ? v.getCompra() : null;
         InsumoProposto insumo = i == null ? null : new InsumoProposto(i.getId(), IdentificadorFormatter.formatar("INS", i.getNumero()),
-                i.getNome(), i.getMarca(), i.getUnidadeMedida() == null ? null : i.getUnidadeMedida().getSigla(), Boolean.TRUE.equals(i.getRascunho()));
+                i.getNome(), i.getMarca(), i.getUnidadeMedida() == null ? null : i.getUnidadeMedida().getSigla());
         return new VinculoNotaResponse(v.getId(), v.getNomeItem(), v.getEmitenteCnpj(), v.getEmitenteNome(),
                 cadastro == null ? null : cadastro.getId(), cadastro == null ? v.getEmitenteNome() : cadastro.getNome(),
-                insumo, v.getFator(), Boolean.TRUE.equals(v.getIgnorar()), v.getOrigem(), v.getCreatedAt(), v.getUpdatedAt());
+                insumo, v.getFator(), Boolean.TRUE.equals(v.getIgnorar()), v.getOrigem(), v.getCreatedAt(), v.getUpdatedAt(),
+                compra == null ? null : compra.getId(), compra == null ? null : IdentificadorFormatter.formatar("COM", compra.getNumero()));
     }
 
     private static String padrao(String valor) { return "%" + valor.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"; }
