@@ -449,6 +449,8 @@ class NotaCompraIT extends NotaServicosSimulados {
                         + "\"motivo\":\"Você usou todas as leituras por IA deste mês.\",\"comoResolver\":\"Registre a compra à mão.\",\"itens\":[]}")));
         BusinessException e = assertThrows(BusinessException.class, () -> notaCompraService.ler("NFCE", link(CHAVE), null, null, false));
         assertEquals("Limite de leituras", e.getTitulo());
+        assertEquals(LeitorFiscalClient.MSG_NOTA_NAO_LIDA, e.getMessage());
+        assertEquals("Você usou todas as leituras por IA deste mês.", e.getMotivo());
         assertEquals("Registre a compra à mão.", e.getComoResolver());
     }
 
