@@ -43,18 +43,4 @@ public record InsumoCreateRequestDTO(
 
         Boolean qualquerMarca
 ) {
-    public InsumoCreateRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
-                                  TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
-                                  BigDecimal estoqueMinimo, BigDecimal precoTotalCompraInicial,
-                                  BigDecimal quantidadeCompradaInicial, RegraPrecoReferencia regraPrecoReferencia) {
-        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
-                estoqueMinimo, precoTotalCompraInicial, quantidadeCompradaInicial, regraPrecoReferencia, null);
-    }
-    public InsumoCreateRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
-                                  TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
-                                  BigDecimal estoqueMinimo, BigDecimal precoTotalCompraInicial,
-                                  BigDecimal quantidadeCompradaInicial) {
-        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
-                estoqueMinimo, precoTotalCompraInicial, quantidadeCompradaInicial, null);
-    }
 }

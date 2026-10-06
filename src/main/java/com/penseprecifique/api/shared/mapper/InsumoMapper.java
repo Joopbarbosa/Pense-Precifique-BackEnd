@@ -49,7 +49,6 @@ public class InsumoMapper {
         return Insumo.builder()
                 .usuario(usuario)
                 .nome(request.nome())
-                .marca(request.marca())
                 .qualquerMarca(Boolean.TRUE.equals(request.qualquerMarca()))
                 .unidadeMedida(unidadeMedida)
                 .fracionavel(fracionavel)
@@ -66,7 +65,6 @@ public class InsumoMapper {
 
     public void updateEntity(InsumoRequestDTO request, Insumo insumo, UnidadeMedida unidadeMedida) {
         insumo.setNome(request.nome());
-        insumo.setMarca(request.marca());
         if (request.qualquerMarca() != null) insumo.setQualquerMarca(request.qualquerMarca());
         insumo.setUnidadeMedida(unidadeMedida);
         if (request.fracionavel() != null) {

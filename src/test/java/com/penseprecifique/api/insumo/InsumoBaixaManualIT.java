@@ -54,7 +54,7 @@ class InsumoBaixaManualIT {
     private UUID criarInsumoComEstoque(BigDecimal estoqueInicial, boolean permitirEstoqueNegativo) {
         InsumoResponseDTO criado = insumoService.cadastrar(new InsumoCreateRequestDTO(
                 "Insumo " + UUID.randomUUID(), null, unidadeMedida("kg").getId(), true, null, permitirEstoqueNegativo,
-                BigDecimal.ZERO, new BigDecimal("100.00"), new BigDecimal("10")));
+                BigDecimal.ZERO, new BigDecimal("100.00"), new BigDecimal("10"), null, null));
         Insumo insumo = insumoRepository.findById(criado.id()).orElseThrow();
         insumo.setEstoqueAtual(estoqueInicial);
         insumoRepository.save(insumo);

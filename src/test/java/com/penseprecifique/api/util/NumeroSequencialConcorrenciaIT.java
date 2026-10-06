@@ -148,7 +148,7 @@ class NumeroSequencialConcorrenciaIT {
             InsumoCreateRequestDTO req = new InsumoCreateRequestDTO(
                     "Insumo Concorrente " + contador.incrementAndGet() + "-" + UUID.randomUUID(),
                     "Marca", unidadeMedidaId, true, null, true, null,
-                    new BigDecimal("10.00"), new BigDecimal("1"));
+                    new BigDecimal("10.00"), new BigDecimal("1"), null, null);
             return insumoService.cadastrar(req).numero();
         });
         assertSemColisao(numeros);

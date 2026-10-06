@@ -166,7 +166,7 @@ class Adendo2TesteManualIT {
     }
 
     private InsumoRequestDTO comRegra(Insumo i, RegraPrecoReferencia regra) {
-        return new InsumoRequestDTO(i.getNome(), null, un.getId(), true, null, true, null, null, regra);
+        return new InsumoRequestDTO(i.getNome(), null, un.getId(), true, null, true, null, null, regra, null);
     }
 
     // ------------------------------------------------------------------ #596/#595 — lista

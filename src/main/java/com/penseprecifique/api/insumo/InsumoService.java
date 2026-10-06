@@ -215,7 +215,7 @@ public class InsumoService {
                     "A opção Não validar marca exige que a marca esteja vazia.",
                     "Confirme a remoção da marca ou desmarque Não validar marca.");
         }
-        return qualquerMarca || marca == null || marca.isEmpty() ? null : marca;
+        return qualquerMarca || marca == null || marca.isBlank() ? null : marca.strip();
     }
 
     private UnidadeMedida buscarUnidadeMedidaDoUsuario(UUID unidadeMedidaId, UUID usuarioId) {
