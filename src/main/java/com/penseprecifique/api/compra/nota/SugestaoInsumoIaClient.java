@@ -67,9 +67,11 @@ public class SugestaoInsumoIaClient {
         return habilitada;
     }
 
-    public record ItemPedido(int posicao, String nome, String unidade) {}
+    /** DT-NOVA-11 — só o nome do item vai ao provedor; a posição é a chave técnica para casar a resposta. */
+    public record ItemPedido(int posicao, String nome) {}
 
-    public record Candidato(UUID id, String nome, String marca, String unidade) {}
+    /** Só o nome do insumo (com a marca, que faz parte da identidade dele) vai ao provedor; o id é a chave técnica da resposta. */
+    public record Candidato(UUID id, String nome) {}
 
     public record Sugestao(int posicao, UUID insumoId, BigDecimal fator) {}
 

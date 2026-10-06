@@ -10,6 +10,7 @@ import com.penseprecifique.api.shared.dto.response.compra.NotaLeituraResponse.Or
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -114,10 +115,10 @@ public class ConciliacaoNotaService {
         List<SugestaoInsumoIaClient.Candidato> candidatos = disponiveis.stream()
                 .filter(ins -> pedidos.stream().anyMatch(p -> CasamentoPorNome.temPalavraEmComum(p.nome(), ins.getNome())))
                 .limit(SugestaoInsumoIaClient.MAX_CANDIDATOS)
-                .map(ins -> new SugestaoInsumoIaClient.Candidato(ins.getId(), ins.getNome(), ins.getMarca(), unidade(ins)))
+                .map(ins -> new SugestaoInsumoIaClient.Candidato(ins.getId(), nomeParaIa(ins)))
                 .toList();
         List<SugestaoInsumoIaClient.Sugestao> sugestoes = sugestaoIaClient.sugerir(
-                pedidos.stream().map(p -> new SugestaoInsumoIaClient.ItemPedido(p.posicao(), p.nome(), p.unidade())).toList(),
+                pedidos.stream().map(p -> new SugestaoInsumoIaClient.ItemPedido(p.posicao(), p.nome())).toList(),
                 candidatos);
         Map<UUID, Insumo> porId = disponiveis.stream().collect(Collectors.toMap(Insumo::getId, Function.identity()));
         for (SugestaoInsumoIaClient.Sugestao s : sugestoes) {
@@ -137,6 +138,10 @@ public class ConciliacaoNotaService {
     static InsumoProposto proposto(Insumo insumo) {
         return new InsumoProposto(insumo.getId(), IdentificadorFormatter.formatar("INS", insumo.getNumero()),
                 insumo.getNome(), insumo.getMarca(), unidade(insumo));
+    }
+
+    private static String nomeParaIa(Insumo insumo) {
+        return StringUtils.hasText(insumo.getMarca()) ? insumo.getNome() + " " + insumo.getMarca() : insumo.getNome();
     }
 
     private static String unidade(Insumo insumo) {

@@ -70,6 +70,17 @@ class ConciliacaoNotaIaIT extends NotaServicosSimulados {
                 .unidadeMedida(un).estoqueAtual(BigDecimal.ZERO).custoUnitario(BigDecimal.ONE).build());
     }
 
+    private static List<String> nomesDosCampos(com.fasterxml.jackson.databind.JsonNode no) {
+        List<String> campos = new java.util.ArrayList<>();
+        no.fieldNames().forEachRemaining(campos::add);
+        return campos;
+    }
+
+    private Insumo insumoComMarca(String nome, String marca) {
+        return insumoRepository.save(Insumo.builder().usuario(usuario).numero(numero++).nome(nome).marca(marca)
+                .unidadeMedida(un).estoqueAtual(BigDecimal.ZERO).custoUnitario(BigDecimal.ONE).build());
+    }
+
     private static NotaLida.Item item(String nome) {
         return new NotaLida.Item(nome, BigDecimal.ONE, new BigDecimal("10.00"), null, null, "UN", null, null);
     }
@@ -104,6 +115,25 @@ class ConciliacaoNotaIaIT extends NotaServicosSimulados {
                 .withHeader("Authorization", equalTo("Bearer chave-ia-de-teste"))
                 .withRequestBody(containing("FITA DOURADA 2CM"))
                 .withRequestBody(containing("Fita metalizada")));
+    }
+
+    /** #724 (DT-NOVA-11): ao provedor vão só nomes (a marca vai dentro do nome do insumo), sem unidade nem campo de marca. */
+    @Test
+    void provedorRecebeSoNomesDeItensEDeInsumos() throws Exception {
+        Insumo metalizada = insumoComMarca("Fita metalizada", "Importada");
+        iaResponde(List.of(Map.of("posicao", 0, "insumoId", metalizada.getId().toString(), "fator", 1)));
+
+        ler(item("FITA DOURADA 2CM"));
+
+        String corpo = IA.findAll(postRequestedFor(urlEqualTo("/chat/completions"))).get(0).getBodyAsString();
+        var mensagens = JSON.readTree(corpo).path("messages");
+        var dados = JSON.readTree(mensagens.get(1).path("content").asText());
+        var itemEnviado = dados.path("itens").get(0);
+        var insumoEnviado = dados.path("insumos").get(0);
+        assertEquals(List.of("posicao", "nome"), nomesDosCampos(itemEnviado));
+        assertEquals(List.of("id", "nome"), nomesDosCampos(insumoEnviado));
+        assertEquals("FITA DOURADA 2CM", itemEnviado.path("nome").asText());
+        assertEquals("Fita metalizada Importada", insumoEnviado.path("nome").asText());
     }
 
     @Test
