@@ -38,6 +38,8 @@ import java.util.UUID;
 public class LeitorFiscalClient {
 
     static final String MSG_INDISPONIVEL = "Não foi possível ler a nota agora.";
+    /** "O que aconteceu" do bloqueio vindo do leitor: o motivo dele vai só em "Por quê" (#711). */
+    static final String MSG_NOTA_NAO_LIDA = "Não foi possível ler esta nota.";
     static final String TITULO_FALHA = "Leitura da nota indisponível";
     static final String MOTIVO_FALHA = "O leitor de notas não respondeu ou não conseguiu ler este documento.";
     static final String COMO_RESOLVER_FALHA = "Tente novamente com um novo QR code, uma nova foto ou um novo arquivo, ou registre a compra à mão.";
@@ -124,7 +126,7 @@ public class LeitorFiscalClient {
                 String motivo = texto(erro, "motivo");
                 String comoResolver = texto(erro, "comoResolver");
                 if (titulo != null && motivo != null && comoResolver != null) {
-                    BusinessException negocio = BusinessException.explicado(titulo, motivo, motivo, comoResolver);
+                    BusinessException negocio = BusinessException.explicado(titulo, MSG_NOTA_NAO_LIDA, motivo, comoResolver);
                     List<String> itens = new ArrayList<>();
                     JsonNode listaItens = erro.get("itens");
                     if (listaItens != null && listaItens.isArray()) {
