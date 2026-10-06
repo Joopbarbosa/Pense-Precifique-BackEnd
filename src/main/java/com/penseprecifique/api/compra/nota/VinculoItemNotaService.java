@@ -1,5 +1,6 @@
 package com.penseprecifique.api.compra.nota;
 
+import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.entity.VinculoItemNota;
@@ -28,7 +29,8 @@ public class VinculoItemNotaService {
     private final VinculoItemNotaRepository repository;
 
     @Transactional
-    public void gravar(Usuario usuario, NotaLida nota, String cnpjEmitente, List<Escolha> escolhas, Map<UUID, Insumo> insumos) {
+    public void gravar(Usuario usuario, NotaLida nota, String cnpjEmitente, List<Escolha> escolhas, Map<UUID, Insumo> insumos,
+                       Compra compra) {
         if (cnpjEmitente == null) {
             return;
         }
@@ -52,6 +54,7 @@ public class VinculoItemNotaService {
             vinculo.setInsumo(insumo);
             vinculo.setFator(escolha.ignorado() ? null : escolha.fator());
             vinculo.setOrigem(origem(escolha));
+            vinculo.setCompra(compra);
             repository.save(vinculo);
         }
     }
@@ -71,6 +74,7 @@ public class VinculoItemNotaService {
         return switch (escolha.origem()) {
             case CASAMENTO_NOME -> OrigemVinculoItemNota.CASAMENTO_NOME;
             case SUGESTAO_IA -> OrigemVinculoItemNota.SUGESTAO_IA;
+            case VINCULO_OUTRO_FORNECEDOR -> OrigemVinculoItemNota.OUTRO_FORNECEDOR;
             case VINCULO_SALVO, SEM_LIGACAO -> OrigemVinculoItemNota.MANUAL;
         };
     }

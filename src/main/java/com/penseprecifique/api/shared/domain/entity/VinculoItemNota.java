@@ -46,6 +46,11 @@ public class VinculoItemNota {
     @JoinColumn(name = "insumo_id")
     private Insumo insumo;
 
+    // V0.16.0 (#716, RN-NOVA-24) — compra em que o vínculo foi criado ou trocado pela última vez.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "compra_id")
+    private Compra compra;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean ignorar = false;

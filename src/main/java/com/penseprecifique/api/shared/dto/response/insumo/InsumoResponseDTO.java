@@ -29,8 +29,5 @@ public record InsumoResponseDTO(
         LocalDateTime updatedAt,
         // #590/RN-NOVA-39 (V0.15.0)
         RegraPrecoReferencia regraPrecoReferencia,
-        boolean qualquerMarca,
-        // V0.16.0 (#687, RN-NOVA-18) — rascunho e custo vindo da nota ("proposto, a revisar").
-        boolean rascunho,
-        boolean custoProposto
+        boolean qualquerMarca
 ) {}

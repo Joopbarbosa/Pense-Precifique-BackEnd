@@ -22,7 +22,6 @@ import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.AcaoResolucaoVinculo;
 import com.penseprecifique.api.shared.dto.request.insumo.BaixaManualInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoCreateRequestDTO;
-import com.penseprecifique.api.shared.dto.request.insumo.InsumoRascunhoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.InsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolverVinculosInsumoRequestDTO;
 import com.penseprecifique.api.shared.dto.request.insumo.ResolucaoVinculoCatalogoInsumoRequestDTO;
@@ -109,18 +108,11 @@ public class InsumoService {
         return listar(busca, ativo, false, pageable);
     }
 
-    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, boolean incluirInativos, Pageable pageable) {
-        return listar(busca, ativo, incluirInativos, false, pageable);
-    }
-
     /**
      * #616/RN-NOVA-40 (adendo 2) — {@code incluirInativos}: ativos e inativos, ativos primeiro (seletores
      * mostram o inativo riscado, sem poder escolher); ignora {@code ativo}.
-     * V0.16.0 (#687, DT-NOVA-12) — rascunho fica fora por padrão (seletores de ficha, catálogo e
-     * orçamento); a listagem de Insumos e os seletores da compra pedem {@code incluirRascunhos}.
      */
-    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, boolean incluirInativos,
-                                          boolean incluirRascunhos, Pageable pageable) {
+    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, boolean incluirInativos, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_INSUMO,
                 "nome, numero, custoUnitario, estoqueAtual, createdAt");
@@ -133,7 +125,7 @@ public class InsumoService {
         // #336 (V0.10.0) — filtro de status agora é server-side (era client-side sobre a janela
         // paginada, causa raiz confirmada de "insumo inativado não aparece no filtro de inativados").
         String buscaNormalizada = (busca != null && !busca.isBlank()) ? busca : null;
-        Page<Insumo> pagina = insumoRepository.buscarComFiltros(usuarioId, buscaNormalizada, ativo, incluirRascunhos, pageableOrdenado);
+        Page<Insumo> pagina = insumoRepository.buscarComFiltros(usuarioId, buscaNormalizada, ativo, pageableOrdenado);
 
         Page<InsumoResponseDTO> mapeado = pagina.map(insumoMapper::toResponse);
         return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
@@ -197,46 +189,6 @@ public class InsumoService {
         return insumoMapper.toResponse(insumo);
     }
 
-    /**
-     * V0.16.0 (#687, RN-NOVA-18, UC-NOVO-4) — insumo em RASCUNHO a partir do item da nota: unidade só
-     * quando a sigla da nota coincide com uma unidade cadastrada (sem diferenciar maiúscula), custo
-     * proposto = valor final ÷ quantidade só nesse caso; estoque zero, sem movimentação. Com
-     * {@code simular}, devolve a proposta sem gravar (a modal mostra antes de salvar).
-     */
-    public InsumoResponseDTO criarRascunho(InsumoRascunhoRequestDTO request, boolean simular) {
-        UUID usuarioId = getUsuarioIdAutenticado();
-        String nome = request.nome().trim();
-        String marca = request.marca() != null && !request.marca().isBlank() ? request.marca().trim() : null;
-        if (insumoRepository.existsByNomeAndMarcaAndUsuarioIdAndDeletedAtIsNull(nome, marca, usuarioId)) {
-            throw new BusinessException("Já existe um insumo com este nome e marca.");
-        }
-        UnidadeMedida unidade = request.unidadeNota() == null || request.unidadeNota().isBlank() ? null
-                : unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(
-                        usuarioId, request.unidadeNota().trim()).orElse(null);
-        BigDecimal custo = BigDecimal.ZERO;
-        if (unidade != null && request.quantidadeNota() != null && request.valorFinalNota() != null) {
-            custo = request.valorFinalNota().divide(request.quantidadeNota(), 6, RoundingMode.HALF_UP);
-        }
-        Insumo insumo = Insumo.builder()
-                .usuario(getUsuarioAutenticado())
-                .nome(nome)
-                .marca(marca)
-                .unidadeMedida(unidade)
-                .custoUnitario(custo)
-                .estoqueAtual(BigDecimal.ZERO)
-                .rascunho(true)
-                .ativo(true)
-                .build();
-        if (simular) {
-            insumo.setNumero(0);
-            return insumoMapper.toResponse(insumo);
-        }
-        usuarioRepository.lockPorId(usuarioId);
-        insumo.setNumero(NumeroSequencialUtil.proximoNumero(
-                insumoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Insumo::getNumero)));
-        return insumoMapper.toResponse(insumoRepository.save(insumo));
-    }
-
     public InsumoResponseDTO editar(UUID id, InsumoRequestDTO request) {
         UUID usuarioId = getUsuarioIdAutenticado();
 
@@ -253,12 +205,8 @@ public class InsumoService {
 
         UnidadeMedida unidadeMedida = buscarUnidadeMedidaDoUsuario(request.unidadeMedidaId(), usuarioId);
         RegraPrecoReferencia regraAntes = insumo.getRegraPrecoReferencia();
-        boolean completando = InsumoUtilizavel.rascunho(insumo);
         insumoMapper.updateEntity(request, insumo, unidadeMedida);
         insumo.setMarca(marca);
-        if (completando) {
-            completarRascunho(insumo, request);
-        }
         Insumo salvo = insumoRepository.save(insumo);
         // #590/RN-NOVA-39 — trocar a regra recalcula o preço de referência de todos os fornecedores.
         if (salvo.getRegraPrecoReferencia() != regraAntes) {
@@ -276,23 +224,6 @@ public class InsumoService {
         return qualquerMarca || marca == null || marca.isEmpty() ? null : marca;
     }
 
-    /**
-     * V0.16.0 (#687, RN-NOVA-18, CEN-NOVO-29) — salvar o cadastro completo (INS-003: unidade, custo e
-     * quantidade) tira o insumo do rascunho; o custo vem do preço ÷ quantidade, como no cadastro, e o
-     * estoque continua zero, sem movimentação (RN-NOVA-1 da V0.10.0).
-     */
-    private void completarRascunho(Insumo insumo, InsumoRequestDTO request) {
-        if (request.precoTotalCompraInicial() == null || request.quantidadeCompradaInicial() == null) {
-            throw BusinessException.explicado("Cadastro incompleto",
-                    "Para completar o insumo " + insumo.getNome() + ", informe o preço total e a quantidade da compra.",
-                    "O custo do insumo é calculado pelo preço dividido pela quantidade; sem eles o insumo seguiria sem custo.",
-                    "Informe, por exemplo, preço 12,50 e quantidade 5 e salve de novo.");
-        }
-        insumo.setCustoUnitario(request.precoTotalCompraInicial()
-                .divide(request.quantidadeCompradaInicial(), 6, RoundingMode.HALF_UP));
-        insumo.setRascunho(false);
-    }
-
     private UnidadeMedida buscarUnidadeMedidaDoUsuario(UUID unidadeMedidaId, UUID usuarioId) {
         return unidadeMedidaRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(unidadeMedidaId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Unidade de medida não encontrada"));
@@ -303,40 +234,10 @@ public class InsumoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
-        if (InsumoUtilizavel.rascunho(insumo)) {
-            excluirRascunho(insumo, usuarioId);
-            return;
-        }
         validarSemVinculoFichaTecnica(insumo);
         validarSemVinculoCatalogo(insumo);
         insumo.setDeletedAt(LocalDateTime.now());
         insumoRepository.save(insumo);
-    }
-
-    /**
-     * V0.16.0 (#687, RN-NOVA-18, CEN-NOVO-52/56) — rascunho não tem ficha, catálogo, orçamento nem
-     * estoque: a exclusão só é bloqueada por linha de compra salva (lista as COM-N); sem bloqueio, os
-     * vínculos salvos da conciliação que apontavam para ele são desfeitos na mesma transação (#681).
-     */
-    private void excluirRascunho(Insumo insumo, UUID usuarioId) {
-        List<String> compras = compraItemRepository
-                .findPorInsumosEStatus(usuarioId, List.of(insumo.getId()), StatusCompra.RASCUNHO).stream()
-                .map(item -> item.getCompra())
-                .distinct()
-                .sorted(Comparator.comparing(Compra::getNumero))
-                .map(compra -> IdentificadorFormatter.formatar("COM", compra.getNumero()))
-                .toList();
-        if (!compras.isEmpty()) {
-            throw BusinessException.explicado("Insumo em uso em compra",
-                    "O insumo " + insumo.getNome() + " está em compra salva e não pode ser excluído: " + String.join(", ", compras) + ".",
-                    "Excluir o insumo deixaria a linha da compra sem insumo.",
-                    "Abra a compra, troque o insumo da linha ou exclua a linha, e tente excluir de novo.")
-                    .comItens(compras);
-        }
-        insumo.setDeletedAt(LocalDateTime.now());
-        insumoRepository.save(insumo);
-        // #681 (CEN-NOVO-52) — os vínculos salvos que apontavam para o rascunho são desfeitos.
-        vinculoItemNotaRepository.deleteByInsumoId(insumo.getId());
     }
 
     /**
@@ -350,13 +251,6 @@ public class InsumoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
-        // RN-NOVA-18 — rascunho não pode ser inativado (só completado ou excluído).
-        if (InsumoUtilizavel.rascunho(insumo)) {
-            throw BusinessException.explicado("Insumo em rascunho",
-                    "O insumo " + insumo.getNome() + " ainda é um rascunho e não pode ser inativado.",
-                    "Rascunho não entra em ficha, orçamento nem estoque; inativá-lo não teria efeito.",
-                    "Complete o cadastro do insumo ou exclua o rascunho.");
-        }
         validarSemVinculoFichaTecnica(insumo);
         validarSemVinculoCatalogo(insumo);
         insumo.setAtivo(false);
@@ -478,7 +372,6 @@ public class InsumoService {
             if (!Boolean.TRUE.equals(novoInsumo.getAtivo())) {
                 throw new BusinessException("O insumo substituto está inativo e não pode ser usado. Reative-o para continuar.");
             }
-            InsumoUtilizavel.exigirNaoRascunho(novoInsumo, "usado como componente de item de catálogo");
             componente.setInsumo(novoInsumo);
             itemCatalogoComponenteRepository.save(componente);
             itemCatalogoService.recalcularAposSubstituicaoComponente(componente.getItemCatalogo().getId());
@@ -568,7 +461,6 @@ public class InsumoService {
 
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
-        InsumoUtilizavel.exigirNaoRascunho(insumo, "movimentado no estoque");
 
         BigDecimal estoqueResultante = request.tipo() == TipoMovimentacaoInsumo.ENTRADA
                 ? insumo.getEstoqueAtual().add(request.quantidade())

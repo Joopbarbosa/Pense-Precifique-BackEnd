@@ -4,5 +4,7 @@ package com.penseprecifique.api.shared.domain.enums;
 public enum OrigemVinculoItemNota {
     CASAMENTO_NOME,
     SUGESTAO_IA,
-    MANUAL
+    MANUAL,
+    /** #718 (RN-NOVA-26) — ligação aceita a partir do vínculo de outro fornecedor com o mesmo nome de item. */
+    OUTRO_FORNECEDOR
 }

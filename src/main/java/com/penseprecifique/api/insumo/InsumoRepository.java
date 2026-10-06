@@ -22,10 +22,9 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
     // como bytea e `lower(bytea)` falha em runtime (só reproduz com busca=null, testado no fix).
     @Query("SELECT i FROM Insumo i WHERE i.usuario.id = :usuarioId AND i.deletedAt IS NULL " +
             "AND (:busca IS NULL OR LOWER(i.nome) LIKE LOWER(CONCAT('%', CAST(:busca AS string), '%'))) " +
-            "AND (:ativo IS NULL OR i.ativo = :ativo) " +
-            "AND (:incluirRascunhos = true OR i.rascunho = false)")
+            "AND (:ativo IS NULL OR i.ativo = :ativo) ")
     Page<Insumo> buscarComFiltros(@Param("usuarioId") UUID usuarioId, @Param("busca") String busca,
-            @Param("ativo") Boolean ativo, @Param("incluirRascunhos") boolean incluirRascunhos, Pageable pageable);
+            @Param("ativo") Boolean ativo, Pageable pageable);
 
     // #298 (V0.14.0) — unidadeMedida agora é @ManyToOne LAZY; EntityGraph evita depender de sessão
     // aberta em quem consumir o retorno fora da transação de origem (ex.: toResponse() logo após).

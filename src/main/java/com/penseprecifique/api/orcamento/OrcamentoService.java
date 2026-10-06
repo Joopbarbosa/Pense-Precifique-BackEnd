@@ -1,6 +1,5 @@
 package com.penseprecifique.api.orcamento;
 
-import com.penseprecifique.api.insumo.InsumoUtilizavel;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -823,7 +822,6 @@ public class OrcamentoService {
         for (ItemCatalogoComponente componente : itemCatalogoComponenteRepository.findByItemCatalogoId(item.getId())) {
             if (componente.getInsumo() != null) {
                 Insumo insumo = componente.getInsumo();
-                InsumoUtilizavel.exigirNaoRascunho(insumo, "adicionado ao orçamento");
                 if (!Boolean.TRUE.equals(insumo.getAtivo()) || insumo.getDeletedAt() != null) {
                     throw new BusinessException("O insumo '" + insumo.getNome()
                             + "' deste item de catálogo foi inativado. Reative o insumo ou troque o"
