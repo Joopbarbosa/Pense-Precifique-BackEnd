@@ -7,10 +7,6 @@ import com.penseprecifique.api.shared.domain.entity.CompraItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import com.penseprecifique.api.shared.dto.response.compra.DashboardComprasResponse;
-import com.penseprecifique.api.shared.dto.response.compra.VendaCmvResponse;
-import com.penseprecifique.api.shared.dto.response.compra.VendasCmvResponse;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import com.penseprecifique.api.shared.dto.response.cliente.QuantidadeValorResponse;
 import com.penseprecifique.api.shared.dto.response.compra.EvolucaoPrecoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -69,50 +65,15 @@ public class DashboardCompraService {
      * Período anterior: começando no dia 1, os mesmos N meses de calendário imediatamente antes (mês
      * atual → mês passado inteiro); senão, a mesma quantidade de dias imediatamente antes.
      */
-    public VendasCmvResponse vendasCmv(LocalDate de, LocalDate ate, YearMonth mes, Pageable pageable) {
+    public DashboardComprasResponse dashboard(LocalDate de, LocalDate ate) {
+        UUID usuarioId = usuarioId();
         LocalDate fim = ate != null ? ate : LocalDate.now();
         LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
-        validarPeriodo(inicio, fim);
-        if (pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
-            throw new BusinessException("Use uma página de 1 a 100 vendas.");
-        }
-        if (mes != null) {
-            YearMonth primeiro = YearMonth.from(inicio).isBefore(YearMonth.from(fim).minusMonths(5))
-                    ? YearMonth.from(inicio) : YearMonth.from(fim).minusMonths(5);
-            if (mes.isBefore(primeiro) || mes.isAfter(YearMonth.from(fim))) {
-                throw new BusinessException("Escolha um mês exibido no gráfico.");
-            }
-            inicio = mes.atDay(1);
-            if (mes.atEndOfMonth().isBefore(fim)) fim = mes.atEndOfMonth();
-        }
-        List<CmvService.Venda> vendas = cmvService.vendas(usuarioId(), inicio, fim).stream()
-                .sorted(Comparator.comparing(CmvService.Venda::data).reversed()
-                        .thenComparing(CmvService.Venda::identificador).thenComparing(CmvService.Venda::id))
-                .toList();
-        BigDecimal total = somarCmv(vendas);
-        int inicioPagina = (int) Math.min(pageable.getOffset(), vendas.size());
-        int fimPagina = Math.min(inicioPagina + pageable.getPageSize(), vendas.size());
-        List<VendaCmvResponse> pagina = vendas.subList(inicioPagina, fimPagina).stream()
-                .map(v -> new VendaCmvResponse(v.id(), v.tipo(), v.identificador(), v.data(), v.cliente(), v.itens(),
-                        v.faturamento(), v.cmv(), v.faturamento().signum() == 0 ? BigDecimal.ZERO.setScale(2)
-                                : percentual(v.cmv(), v.faturamento()), v.custoEstimado(), v.semCusto()))
-                .toList();
-        return new VendasCmvResponse(new PageImpl<>(pagina, pageable, vendas.size()), total);
-    }
-
-    private static void validarPeriodo(LocalDate inicio, LocalDate fim) {
         if (inicio.isAfter(fim)) {
             throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
                     "O período vai da data inicial até a data final.",
                     "Troque as datas de lugar (ex.: de 01/09/2026 até 30/09/2026).");
         }
-    }
-
-    public DashboardComprasResponse dashboard(LocalDate de, LocalDate ate) {
-        UUID usuarioId = usuarioId();
-        LocalDate fim = ate != null ? ate : LocalDate.now();
-        LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
-        validarPeriodo(inicio, fim);
         LocalDate fimAnterior = inicio.minusDays(1);
         LocalDate inicioAnterior = inicio.getDayOfMonth() == 1
                 ? inicio.minusMonths(ChronoUnit.MONTHS.between(YearMonth.from(inicio), YearMonth.from(fim)) + 1)

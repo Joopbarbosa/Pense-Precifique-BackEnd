@@ -24,8 +24,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.time.YearMonth;
-import com.penseprecifique.api.shared.dto.response.compra.VendasCmvResponse;
 import java.util.List;
 import java.util.UUID;
 
@@ -70,15 +68,6 @@ public class CompraController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
         return ResponseEntity.ok(dashboardCompraService.dashboard(de, ate));
-    }
-
-    @GetMapping("/dashboard/vendas-cmv")
-    public ResponseEntity<VendasCmvResponse> vendasCmv(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth mes,
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(dashboardCompraService.vendasCmv(de, ate, mes, pageable));
     }
 
     /** #548 — evolução do preço pago, até 5 insumos; período default = últimos 3 meses. */
