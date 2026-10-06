@@ -51,7 +51,7 @@ class InsumoTipoExibicaoQuantidadeIT {
     private InsumoCreateRequestDTO request(Boolean fracionavel, TipoExibicaoQuantidade tipo) {
         return new InsumoCreateRequestDTO(
                 "Insumo " + UUID.randomUUID(), null, unidadeMedida("un").getId(), fracionavel, tipo, true,
-                BigDecimal.ZERO, new BigDecimal("10.00"), new BigDecimal("5"));
+                BigDecimal.ZERO, new BigDecimal("10.00"), new BigDecimal("5"), null, null);
     }
 
     @Test
@@ -88,7 +88,7 @@ class InsumoTipoExibicaoQuantidadeIT {
         InsumoResponseDTO criado = insumoService.cadastrar(request(true, TipoExibicaoQuantidade.FRACAO));
 
         InsumoRequestDTO edicao = new InsumoRequestDTO(
-                criado.nome(), null, unidadeMedida("un").getId(), false, null, true, BigDecimal.ZERO, null);
+                criado.nome(), null, unidadeMedida("un").getId(), false, null, true, BigDecimal.ZERO, null, null, null);
         InsumoResponseDTO editado = insumoService.editar(criado.id(), edicao);
 
         assertNull(editado.tipoExibicaoQuantidade());

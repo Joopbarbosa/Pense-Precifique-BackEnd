@@ -65,8 +65,9 @@ class InsumoQualquerMarcaIT {
         assertEquals(0, salvo.custoUnitario().compareTo(new BigDecimal("5.810000")));
     }
 
+    /** O casamento por nome do CEN-NOVO-15 está em ConciliacaoNotaIT; aqui só se afirma que a flag chega à consulta. */
     @Test
-    void cen15FlagDisponivelParaConciliacaoDaTarefa681() {
+    void flagQualquerMarcaPersisteEChegaNaConsultaDoInsumo() {
         InsumoResponseDTO salvo = service.cadastrar(criar("Caneta gel azul", null, true));
         assertTrue(service.buscarPorId(salvo.id()).qualquerMarca());
         assertEquals("Caneta gel azul", salvo.nome());
@@ -85,6 +86,19 @@ class InsumoQualquerMarcaIT {
         service.cadastrar(criar("Folha A4", null, true));
         assertThrows(BusinessException.class, () -> service.cadastrar(criar("Folha A4", "", false)));
         assertThrows(BusinessException.class, () -> service.cadastrar(criar("Folha A4", null, true)));
+    }
+
+    /** #730 (RN-NOVA-17, CEN-NOVO-48): marca só com espaços vale como vazia — grava nula e duplica a "sem marca". */
+    @Test
+    void cen48MarcaSoComEspacosEquivaleAVazio() {
+        service.cadastrar(criar("Folha A4", null, true));
+        assertThrows(BusinessException.class, () -> service.cadastrar(criar("Folha A4", "   ", false)));
+        InsumoResponseDTO semMarca = service.cadastrar(criar("Folha A5", "  ", false));
+        assertNull(semMarca.marca());
+        assertThrows(BusinessException.class, () -> service.cadastrar(criar("Folha A5", null, false)));
+        InsumoResponseDTO comMarca = service.cadastrar(criar("Folha A6", "  Chamex ", false));
+        assertEquals("Chamex", comMarca.marca());
+        assertNull(service.editar(semMarca.id(), editar(semMarca, "   ", false)).marca());
     }
 
     @Test

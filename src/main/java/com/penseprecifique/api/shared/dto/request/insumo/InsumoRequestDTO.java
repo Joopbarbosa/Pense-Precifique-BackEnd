@@ -36,35 +36,6 @@ public record InsumoRequestDTO(
         // #590/RN-NOVA-39 (V0.15.0) — opcional; nulo mantém a regra atual.
         RegraPrecoReferencia regraPrecoReferencia,
 
-        Boolean qualquerMarca,
-
-        // V0.16.0 (#687, RN-NOVA-18) — só para completar insumo em rascunho (INS-003: custo pelo preço e
-        // quantidade da compra inicial); ignorados na edição de insumo completo.
-        @DecimalMin(value = "0.01", message = "O preço total da compra inicial deve ser maior que zero")
-        BigDecimal precoTotalCompraInicial,
-
-        @DecimalMin(value = "0.01", message = "A quantidade comprada inicial deve ser maior que zero")
-        BigDecimal quantidadeCompradaInicial
+        Boolean qualquerMarca
 ) {
-    public InsumoRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
-                            TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
-                            BigDecimal estoqueAtual, BigDecimal estoqueMinimo) {
-        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
-                estoqueAtual, estoqueMinimo, null);
-    }
-
-    public InsumoRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
-                            TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
-                            BigDecimal estoqueAtual, BigDecimal estoqueMinimo, RegraPrecoReferencia regraPrecoReferencia) {
-        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
-                estoqueAtual, estoqueMinimo, regraPrecoReferencia, null);
-    }
-
-    public InsumoRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
-                            TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
-                            BigDecimal estoqueAtual, BigDecimal estoqueMinimo, RegraPrecoReferencia regraPrecoReferencia,
-                            Boolean qualquerMarca) {
-        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
-                estoqueAtual, estoqueMinimo, regraPrecoReferencia, qualquerMarca, null, null);
-    }
 }

@@ -197,6 +197,18 @@ class ConciliacaoNotaIT extends NotaServicosSimulados {
         assertNull(depois.compraId(), "compra excluída deixa de ser destino");
     }
 
+    /** CEN-NOVO-15 (RN-NOVA-13): insumo "Não validar marca" é candidato único e liga sozinho por nome. */
+    @Test
+    void cen15_insumoSemValidarMarcaLigaPorNomeComUmUnicoCandidato() throws Exception {
+        Insumo caneta = insumoRepository.save(Insumo.builder().usuario(usuario).numero(numero++).nome("Caneta gel azul")
+                .qualquerMarca(true).unidadeMedida(un).estoqueAtual(BigDecimal.ZERO).custoUnitario(BigDecimal.ONE).build());
+
+        NotaLeituraResponse.ItemConciliacao item = ler(nota(ESTRELA, null, item("CANETA GEL AZUL 0.5MM BIC", "1", "4.00"))).itens().get(0);
+
+        assertEquals(OrigemLigacao.CASAMENTO_NOME, item.origemLigacao());
+        assertEquals(caneta.getId(), item.insumo().id());
+    }
+
     @Test
     void cen21_confirmarGravaOVinculoComOrigemEFator() throws Exception {
         Insumo caneta = insumo("Caneta gel azul", null);
