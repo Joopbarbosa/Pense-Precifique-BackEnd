@@ -388,6 +388,19 @@ class NotaCompraIT extends NotaServicosSimulados {
                 pedido(leitura, null, "https://exemplo.interno/admin", liga(0, fita, "1"), liga(1, cola, "1")), null, false));
     }
 
+    /** #723 (DT-NOVA-9): mesmo com a assinatura válida, o backend só guarda link de portal fiscal permitido. */
+    @Test
+    void linkForaDoPortalFiscalNaoEhGuardadoMesmoComAssinaturaValida() throws Exception {
+        cadastro(true, false);
+        leitorDevolve(notaPadrao());
+        String externo = "https://exemplo.interno/qrcode?p=" + CHAVE + "|2|1|1|ABCDEF";
+        NotaLeituraResponse leitura = notaCompraService.ler("NFCE", externo, null, null, false);
+        BusinessException e = assertThrows(BusinessException.class, () -> notaCompraService.criarRascunho(
+                pedido(leitura, null, externo, liga(0, fita, "1"), liga(1, cola, "1")), null, false));
+        assertTrue(e.getMessage().contains("portal fiscal permitido"), e.getMessage());
+        assertTrue(compraRepository.findByUsuarioIdAndChaveAcessoAndDeletedAtIsNull(usuario.getId(), CHAVE).isEmpty());
+    }
+
     @Test
     void xmlGuardaOArquivoOriginalComoComprovante() throws Exception {
         cadastro(true, false);

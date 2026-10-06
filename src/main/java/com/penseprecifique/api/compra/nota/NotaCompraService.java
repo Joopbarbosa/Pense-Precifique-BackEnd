@@ -78,6 +78,7 @@ public class NotaCompraService {
     private final ClienteRepository clienteRepository;
     private final ClienteService clienteService;
     private final ValidadorArquivoComprovante validadorComprovante;
+    private final PortalFiscalPermitido portalFiscalPermitido;
     private final R2StorageClient r2StorageClient;
     private final ConciliacaoNotaService conciliacaoNotaService;
     private final VinculoItemNotaService vinculoItemNotaService;
@@ -160,6 +161,9 @@ public class NotaCompraService {
                 : StringUtils.hasText(request.comprovanteLink()) ? sha256(request.comprovanteLink().getBytes(StandardCharsets.UTF_8))
                 : null;
         assinaturaNota.verificar(request.assinatura(), usuario.getId(), nota, resumo);
+        if (conteudo == null && StringUtils.hasText(request.comprovanteLink())) {
+            portalFiscalPermitido.validar(request.comprovanteLink());
+        }
         validarNotaLida(nota);
 
         String chave = nota.chaveAcesso().toUpperCase(Locale.ROOT);

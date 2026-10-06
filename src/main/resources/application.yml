@@ -51,6 +51,8 @@ leitor-fiscal:
   timeout-seconds: ${LEITOR_FISCAL_TIMEOUT_SECONDS:70}
 
 nota:
+  # #723 — hosts de portal fiscal aceitos no link do comprovante (hoje só São Paulo, como no leitor-fiscal).
+  portais-permitidos: ${NOTA_PORTAIS_PERMITIDOS:www.nfce.fazenda.sp.gov.br}
   assinatura:
     segredo: ${NOTA_ASSINATURA_SEGREDO:}
     validade-minutos: ${NOTA_ASSINATURA_VALIDADE_MINUTOS:120}
