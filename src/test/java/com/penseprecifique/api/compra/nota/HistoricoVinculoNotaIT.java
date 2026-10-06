@@ -15,7 +15,6 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import jakarta.persistence.EntityManager;
-import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +42,6 @@ class HistoricoVinculoNotaIT extends NotaServicosSimulados {
     @Autowired ConciliacaoNotaService conciliacao;
     @Autowired NotaCompraService notas;
     @Autowired CompraService compras;
-    @Autowired Validator validator;
     @Autowired EntityManager em;
     private Usuario usuario;
     private Insumo azul;
@@ -94,6 +92,12 @@ class HistoricoVinculoNotaIT extends NotaServicosSimulados {
         var fornecedor = clientes.save(Cliente.builder().usuario(usuario).numero(1).nome("Estrela cadastrada").documento(ESTRELA).ehFornecedor(true).build());
         var pagina = historico.listar(null, fornecedor.getId(), null, null, null, PageRequest.of(0, 20));
         assertEquals(3, pagina.getTotalElements()); assertTrue(pagina.stream().allMatch(v -> v.fornecedorNome().equals("Estrela cadastrada")));
+        // CEN-NOVO-22: cada linha traz nome do item, fornecedor, insumo, fator, data e origem.
+        var linha = pagina.stream().filter(v -> v.nomeItem().equals("CANETA GEL AZUL")).findFirst().orElseThrow();
+        assertEquals(azul.getId(), linha.insumo().id());
+        assertEquals(0, new BigDecimal("1.1250").compareTo(linha.fator()));
+        assertNotNull(linha.origem());
+        assertNotNull(linha.updatedAt());
         assertEquals(1, historico.listar(null, null, null, preta.getId(), null, PageRequest.of(0, 1)).getNumberOfElements());
         assertEquals(4, historico.listar("caneta gel", null, null, null, null, PageRequest.of(0, 20)).getTotalElements());
         assertEquals(1, historico.listar("FITA", null, null, null, null, PageRequest.of(0, 20)).getTotalElements());
@@ -143,7 +147,10 @@ class HistoricoVinculoNotaIT extends NotaServicosSimulados {
         }
         var normal = historico.ignorar(v.getId(), new IgnorarVinculoNotaRequest(false, preta.getId(), new BigDecimal("0.1250")));
         assertFalse(normal.ignorar()); assertEquals(preta.getId(), normal.insumo().id()); assertEquals(OrigemVinculoItemNota.MANUAL, normal.origem());
-        assertFalse(validator.validate(new VinculoNotaRequest(null, BigDecimal.ZERO)).isEmpty());
+        // #731: insumo e fator ausentes ou inválidos têm uma só validação, com a mensagem explicada.
+        BusinessException invalido = assertThrows(BusinessException.class,
+                () -> historico.editar(v.getId(), new VinculoNotaRequest(null, BigDecimal.ZERO)));
+        assertTrue(invalido.getMessage().contains("fator maior que zero"), invalido.getMessage());
     }
     @Test
     void uuidDeOutraContaNaoPodeSerLidoEditadoIgnoradoOuDesfeito() {

@@ -89,7 +89,8 @@ public class HistoricoVinculoNotaService {
 
     public VinculoNotaResponse editar(UUID id, VinculoNotaRequest request) {
         UUID usuario = compraService.getUsuarioAutenticado().getId();
-        VinculoItemNota v = buscar(id, usuario); definirDestino(v, request.insumoId(), request.fator(), usuario);
+        VinculoItemNota v = buscar(id, usuario);
+        definirDestino(v, request.insumoId(), request.fator(), usuario);
         return salvar(v, usuario);
     }
 
@@ -97,13 +98,24 @@ public class HistoricoVinculoNotaService {
         UUID usuario = compraService.getUsuarioAutenticado().getId();
         VinculoItemNota v = buscar(id, usuario);
         if (request.ignorar() == null) throw new BusinessException("Informe se o item deve ser ignorado.");
-        if (request.ignorar()) { v.setIgnorar(true); v.setInsumo(null); v.setFator(null); }
-        else definirDestino(v, request.insumoId(), request.fator(), usuario);
+        if (request.ignorar()) {
+            v.setIgnorar(true);
+            v.setInsumo(null);
+            v.setFator(null);
+        } else {
+            definirDestino(v, request.insumoId(), request.fator(), usuario);
+        }
         return salvar(v, usuario);
     }
 
+    /**
+     * Exclusão física, por exceção ao soft delete do CLAUDE.md: o vínculo é só memória de conciliação (sem valor de
+     * auditoria) e a SPEC (CEN-NOVO-24) pede que ele "suma"; as compras anteriores não o referenciam além da FK de
+     * origem. Exceção registrada no DECISOES_V0.16.0 (2026-10-06, #731).
+     */
     public void desfazer(UUID id) {
-        UUID usuario = compraService.getUsuarioAutenticado().getId(); repository.delete(buscar(id, usuario));
+        UUID usuario = compraService.getUsuarioAutenticado().getId();
+        repository.delete(buscar(id, usuario));
     }
 
     private VinculoItemNota buscar(UUID id, UUID usuario) {
@@ -119,11 +131,14 @@ public class HistoricoVinculoNotaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
         if (!Boolean.TRUE.equals(insumo.getAtivo())) throw BusinessException.explicado("Insumo inativo",
                 "O insumo escolhido está inativo.", "Vínculos futuros precisam de insumo ativo.", "Reative o insumo ou escolha outro.");
-        v.setInsumo(insumo); v.setFator(fator); v.setIgnorar(false);
+        v.setInsumo(insumo);
+        v.setFator(fator);
+        v.setIgnorar(false);
     }
 
     private VinculoNotaResponse salvar(VinculoItemNota v, UUID usuario) {
-        v.setOrigem(OrigemVinculoItemNota.MANUAL); repository.saveAndFlush(v);
+        v.setOrigem(OrigemVinculoItemNota.MANUAL);
+        repository.saveAndFlush(v);
         return resposta(v, clienteRepository.findByUsuarioIdAndDocumento(usuario, v.getEmitenteCnpj()).orElse(null));
     }
 
@@ -139,5 +154,7 @@ public class HistoricoVinculoNotaService {
                 compra == null ? null : compra.getId(), compra == null ? null : IdentificadorFormatter.formatar("COM", compra.getNumero()));
     }
 
-    private static String padrao(String valor) { return "%" + valor.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"; }
+    private static String padrao(String valor) {
+        return "%" + valor.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+    }
 }

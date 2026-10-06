@@ -1,10 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.compra;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-public record VinculoNotaRequest(@NotNull UUID insumoId,
-        @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 11, fraction = 4) BigDecimal fator) {}
+/** Insumo e fator são validados num só lugar, em HistoricoVinculoNotaService, com a mensagem explicada (#731). */
+public record VinculoNotaRequest(UUID insumoId, BigDecimal fator) {}
