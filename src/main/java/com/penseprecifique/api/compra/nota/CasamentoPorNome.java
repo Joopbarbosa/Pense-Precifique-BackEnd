@@ -1,10 +1,9 @@
 package com.penseprecifique.api.compra.nota;
 
-import java.text.Normalizer;
+import com.penseprecifique.api.shared.texto.TextoNormalizado;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -32,7 +31,7 @@ public final class CasamentoPorNome {
         if (texto == null) {
             return "";
         }
-        return semAcento(texto).toLowerCase(Locale.ROOT).trim().replaceAll("\\s+", " ");
+        return TextoNormalizado.semAcentoMinusculoEspacoUnico(texto);
     }
 
     /** Palavras para comparação: sem acento, sem maiúscula, pontuação vira separador. */
@@ -40,7 +39,7 @@ public final class CasamentoPorNome {
         if (texto == null || texto.isBlank()) {
             return Set.of();
         }
-        String limpo = semAcento(texto).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
+        String limpo = TextoNormalizado.semAcentoMinusculo(texto).replaceAll("[^a-z0-9]+", " ").trim();
         if (limpo.isEmpty()) {
             return Set.of();
         }
@@ -70,9 +69,5 @@ public final class CasamentoPorNome {
         doInsumo.removeAll(LIGACAO);
         Set<String> doItem = palavras(nomeItem);
         return doInsumo.stream().anyMatch(doItem::contains);
-    }
-
-    private static String semAcento(String texto) {
-        return Normalizer.normalize(texto, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 }
