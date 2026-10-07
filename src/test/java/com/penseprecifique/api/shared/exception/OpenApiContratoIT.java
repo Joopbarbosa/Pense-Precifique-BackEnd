@@ -189,6 +189,19 @@ class OpenApiContratoIT {
         }
     }
 
+    /** #812 e #813 — itens nulos de lista de entrada e precisão decimal declarados no contrato. */
+    @Test
+    void contratoDeclaraItensNulosEPrecisaoDecimal() throws Exception {
+        JsonNode schemas = docs().get("components").get("schemas");
+        JsonNode itens = schemas.get("ProdutoRequest").get("properties").get("fichaTecnica").get("items");
+        assertTrue(itens.toString().contains("\"null\""), "fichaTecnica.items: " + itens);
+        JsonNode linha = schemas.get("Linha");
+        assertTrue(linha != null && linha.get("properties").get("quantidade").toString().contains("\"multipleOf\":1.0E-4"),
+                "Linha.quantidade: " + (linha == null ? null : linha.get("properties").get("quantidade")));
+        assertTrue(schemas.get("CompraItemRequest").get("properties").get("precoTotal").toString().contains("\"multipleOf\":0.01"),
+                "CompraItemRequest.precoTotal: " + schemas.get("CompraItemRequest").get("properties").get("precoTotal"));
+    }
+
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
         String texto = propriedade.toString();
         assertTrue(texto.contains("\"null\"") || texto.contains("\"nullable\":true"), nome + " não aceita nulo: " + texto);

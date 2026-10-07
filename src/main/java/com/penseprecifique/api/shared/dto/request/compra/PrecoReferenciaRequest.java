@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 /** #540 (V0.15.0) — editar o preço de referência de um vínculo; nulo limpa o preço. */
 public record PrecoReferenciaRequest(
         @Positive(message = "O preço de referência deve ser maior que zero")
+        @io.swagger.v3.oas.annotations.media.Schema(multipleOf = 0.0001)
         @Digits(integer = 11, fraction = 4, message = "Preço de referência com no máximo 4 casas decimais")
         BigDecimal precoReferencia
 ) {}
