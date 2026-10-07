@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -61,5 +62,21 @@ class UploadNaoMultipartIT {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Parâmetro obrigatório ausente: 'produtoId'."));
+    }
+
+    /** #762 — método e Content-Type fora do contrato respondem 405 e 415, não 500. */
+    @Test
+    void metodoEContentTypeForaDoContratoNaoViram500() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("metodo-ct-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(put("/usuarios/me").header("Authorization", token))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405));
+        mockMvc.perform(post("/auth/login").contentType(MediaType.TEXT_PLAIN).content("x"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.status").value(415));
     }
 }
