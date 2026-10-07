@@ -59,6 +59,7 @@ final class MontagemRascunhoNota {
             somaMantidos = somaMantidos.add(valorFinal);
             exigirLigacao(escolha, i);
             BigDecimal quantidade = nz(item.quantidade()).multiply(escolha.fator()).setScale(4, RoundingMode.HALF_UP);
+            exigirQuantidadeNoLimite(quantidade, i);
             boolean comDesconto = item.desconto() != null && item.desconto().signum() > 0 && item.valorBruto() != null;
             BigDecimal cheio = comDesconto ? item.valorBruto() : valorFinal;
             BigDecimal descontoLinha = comDesconto ? item.desconto() : BigDecimal.ZERO;
@@ -135,6 +136,28 @@ final class MontagemRascunhoNota {
             throw BusinessException.explicado("Fator de conversão inválido", "O fator de conversão do item " + (posicao + 1) + " precisa ser maior que zero.",
                     "A quantidade da compra é a quantidade da nota vezes o fator; sem ele o custo ficaria errado.",
                     "Informe quantas unidades do insumo vêm em uma unidade da nota (ex.: pacote com 100 folhas, fator 100).");
+        }
+        exigirFatorNoLimite(escolha.fator(), posicao);
+    }
+
+    /** #773 — limites do fator e da quantidade resultante (a coluna é DECIMAL(15,4) com CHECK > 0). */
+    static final BigDecimal FATOR_MINIMO = new BigDecimal("0.0001");
+    static final BigDecimal FATOR_MAXIMO = new BigDecimal("1000000");
+    static final BigDecimal QUANTIDADE_MAXIMA = new BigDecimal("100000000");
+
+    private static void exigirFatorNoLimite(BigDecimal fator, int posicao) {
+        if (fator.compareTo(FATOR_MINIMO) < 0 || fator.compareTo(FATOR_MAXIMO) > 0) {
+            throw BusinessException.explicado("Fator de conversão fora do limite", "O fator de conversão do item " + (posicao + 1) + " precisa estar entre 0,0001 e 1.000.000.",
+                    "Fatores fora dessa faixa geram quantidades que o estoque não comporta.",
+                    "Informe quantas unidades do insumo vêm em uma unidade da nota (ex.: pacote com 100 folhas, fator 100).");
+        }
+    }
+
+    private static void exigirQuantidadeNoLimite(BigDecimal quantidade, int posicao) {
+        if (quantidade.signum() <= 0 || quantidade.compareTo(QUANTIDADE_MAXIMA) > 0) {
+            throw BusinessException.explicado("Quantidade fora do limite", "A quantidade do item " + (posicao + 1) + " na compra precisa ser maior que zero e até 100.000.000.",
+                    "A quantidade da compra é a quantidade da nota vezes o fator de conversão.",
+                    "Confira o fator de conversão do item.");
         }
     }
 
