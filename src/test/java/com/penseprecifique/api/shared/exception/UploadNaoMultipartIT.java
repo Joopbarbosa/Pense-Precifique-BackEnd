@@ -181,5 +181,33 @@ class UploadNaoMultipartIT {
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
     }
+
+    /** #807, #808 e #809 — UUID em branco no caminho é 400; OPTIONS e método não mapeado seguem o caminho mais específico. */
+    @Test
+    void caminhoEmBrancoOptionsEMetodoEmCaminhoParcialmenteLiteral() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("caminho-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+        String id = UUID.randomUUID().toString();
+
+        for (String rota : new String[] {"/orcamentos/{id}", "/orcamentos/{id}/pdf-multa/preview-html"}) {
+            mockMvc.perform(get(rota, " ").header("Authorization", token))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+        mockMvc.perform(put("/catalogos/" + id + "/itens/preview-preco").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", org.hamcrest.Matchers.containsString("POST")));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options("/compras/confirmar")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", "OPTIONS,POST"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options("/clientes/contagens")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", "GET,HEAD,OPTIONS"));
+    }
 }
 

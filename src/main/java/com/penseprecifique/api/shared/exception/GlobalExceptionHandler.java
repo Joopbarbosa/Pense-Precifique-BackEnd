@@ -178,22 +178,22 @@ public class GlobalExceptionHandler {
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping mapeamento;
+    private com.penseprecifique.api.infra.config.MapeamentoDeMetodos mapeamentoDeMetodos;
 
     private java.util.Set<String> metodosDoCaminhoLiteral(jakarta.servlet.http.HttpServletRequest request) {
-        java.util.Set<String> metodos = new java.util.TreeSet<>();
-        if (mapeamento == null) {
-            return metodos;
-        }
-        var caminho = org.springframework.http.server.PathContainer.parsePath(request.getRequestURI());
-        mapeamento.getHandlerMethods().keySet().forEach(info -> {
-            var condicao = info.getPathPatternsCondition();
-            if (condicao != null && condicao.getPatterns().stream()
-                    .anyMatch(p -> !p.getPatternString().contains("{") && p.matches(caminho))) {
-                info.getMethodsCondition().getMethods().forEach(m -> metodos.add(m.name()));
-            }
-        });
-        return metodos;
+        return mapeamentoDeMetodos == null ? java.util.Set.of()
+                : mapeamentoDeMetodos.metodosDoCaminhoMaisEspecifico(request.getRequestURI());
+    }
+
+    /**
+     * #807 — variável de caminho em branco (ex.: "%20") não converte para UUID e o Spring a trata como ausente
+     * ({@code MissingPathVariableException}); é entrada inválida do cliente (400), não falha interna.
+     */
+    @ExceptionHandler(org.springframework.web.bind.MissingPathVariableException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMissingPathVariable(org.springframework.web.bind.MissingPathVariableException ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Valor inválido para o parâmetro '" + ex.getVariableName() + "'.",
+                HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), null));
     }
 
     /** #660 — parâmetro obrigatório ausente é erro do pedido, inclusive no fuzzing de schema. */
