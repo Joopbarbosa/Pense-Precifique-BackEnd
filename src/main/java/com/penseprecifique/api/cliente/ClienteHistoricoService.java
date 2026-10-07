@@ -31,6 +31,7 @@ import com.penseprecifique.api.shared.dto.response.cliente.RegistroCadastroRespo
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.CompraMapper;
+import com.penseprecifique.api.shared.texto.TextoNormalizado;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -43,7 +44,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -54,7 +54,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -282,10 +281,7 @@ public class ClienteHistoricoService {
     }
 
     private static String normalizar(String texto) {
-        if (texto == null) {
-            return "";
-        }
-        return Normalizer.normalize(texto.trim(), Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
+        return TextoNormalizado.semAcentoMinusculo(texto);
     }
 
     /**
