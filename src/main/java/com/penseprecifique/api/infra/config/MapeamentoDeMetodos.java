@@ -1,5 +1,6 @@
 package com.penseprecifique.api.infra.config;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.server.PathContainer;
 import org.springframework.stereotype.Component;
@@ -22,18 +23,23 @@ import java.util.TreeSet;
 @Component
 public class MapeamentoDeMetodos {
 
-    private final RequestMappingHandlerMapping mapeamento;
+    private final ObjectProvider<RequestMappingHandlerMapping> mapeamento;
 
+    // ObjectProvider: contextos de teste sem camada web não têm o mapeamento de requisições.
     @Autowired
-    public MapeamentoDeMetodos(RequestMappingHandlerMapping mapeamento) {
+    public MapeamentoDeMetodos(ObjectProvider<RequestMappingHandlerMapping> mapeamento) {
         this.mapeamento = mapeamento;
     }
 
     /** Métodos do padrão mais específico que casa com o caminho; vazio se nenhum padrão casa. */
     public Set<String> metodosDoCaminhoMaisEspecifico(String uri) {
+        RequestMappingHandlerMapping handlerMapping = mapeamento.getIfAvailable();
+        if (handlerMapping == null) {
+            return Set.of();
+        }
         PathContainer caminho = PathContainer.parsePath(uri);
         List<Map.Entry<PathPattern, Set<String>>> casados = new ArrayList<>();
-        mapeamento.getHandlerMethods().keySet().forEach(info -> {
+        handlerMapping.getHandlerMethods().keySet().forEach(info -> {
             var condicao = info.getPathPatternsCondition();
             if (condicao == null) {
                 return;
