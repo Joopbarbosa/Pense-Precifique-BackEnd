@@ -4,6 +4,7 @@ import com.penseprecifique.api.shared.validation.LimitesTexto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -16,6 +17,7 @@ public class CancelarProducaoRequest {
     @NotBlank(message = "A justificativa é obrigatória")
     @Size(min = 30, message = "Justificativa deve ter no mínimo 30 caracteres")
     @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
+    @Schema(minLength = 30, maxLength = LimitesTexto.DESCRICAO_MAX, description = "Mínimo de 30 caracteres (RN-072)")
     private String justificativa;
 
     // RN-072 — só relevante para EM_ANDAMENTO/TRAVADA. Nullable — se null (ou item ausente),

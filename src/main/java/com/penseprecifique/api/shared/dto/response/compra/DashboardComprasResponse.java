@@ -2,6 +2,8 @@ package com.penseprecifique.api.shared.dto.response.compra;
 
 import com.penseprecifique.api.shared.dto.response.cliente.QuantidadeValorResponse;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -26,32 +28,32 @@ public record DashboardComprasResponse(
         Economia economia,
         Cmv cmv,
         QuantidadeValorResponse naoPagas,
-        InsumoVariacao maiorAumento,
+        @Schema(nullable = true) InsumoVariacao maiorAumento,
         List<Mes> meses,
         List<InsumoVariacao> insumosQueMaisSubiram,
         List<FornecedorGasto> fornecedoresPorGasto,
         List<FornecedorDesconto> fornecedoresPorDescontoPercentual,
         List<FornecedorDesconto> fornecedoresPorDescontoValor
 ) {
-    public record Numero(BigDecimal valor, BigDecimal anterior, BigDecimal variacaoPercentual) {}
+    public record Numero(@Schema(nullable = true) BigDecimal valor, @Schema(nullable = true) BigDecimal anterior, @Schema(nullable = true) BigDecimal variacaoPercentual) {}
 
     /** Descontos (linha + parte da nota) e % sobre a soma dos preços cheios. */
-    public record Economia(BigDecimal valor, BigDecimal totalCheio, BigDecimal percentual,
-                           BigDecimal anterior, BigDecimal variacaoPercentual) {}
+    public record Economia(BigDecimal valor, BigDecimal totalCheio, @Schema(nullable = true) BigDecimal percentual,
+                           @Schema(nullable = true) BigDecimal anterior, @Schema(nullable = true) BigDecimal variacaoPercentual) {}
 
     /**
      * RN-NOVA-27 — CMV (R$) e CMV % sobre o faturamento; {@code estimado} = parte do CMV calculada com o
      * custo de hoje; {@code vendasSemCusto} = vendas com alguma linha fora do cálculo.
      */
-    public record Cmv(BigDecimal valor, BigDecimal faturamento, BigDecimal percentual, BigDecimal estimado,
-                      long vendasSemCusto, BigDecimal anterior, BigDecimal percentualAnterior,
-                      BigDecimal variacaoPercentual) {}
+    public record Cmv(BigDecimal valor, BigDecimal faturamento, @Schema(nullable = true) BigDecimal percentual, BigDecimal estimado,
+                      long vendasSemCusto, @Schema(nullable = true) BigDecimal anterior, @Schema(nullable = true) BigDecimal percentualAnterior,
+                      @Schema(nullable = true) BigDecimal variacaoPercentual) {}
 
     /** {@code mes} = 1º dia do mês. CMV % nulo sem faturamento. */
-    public record Mes(LocalDate mes, BigDecimal gasto, BigDecimal cmv, BigDecimal faturamento, BigDecimal cmvPercentual) {}
+    public record Mes(LocalDate mes, BigDecimal gasto, BigDecimal cmv, BigDecimal faturamento, @Schema(nullable = true) BigDecimal cmvPercentual) {}
 
     public record InsumoVariacao(InsumoRefResponse insumo, BigDecimal precoInicial, LocalDate dataInicial,
-                                 BigDecimal precoFinal, LocalDate dataFinal, BigDecimal variacaoPercentual) {}
+                                 BigDecimal precoFinal, LocalDate dataFinal, @Schema(nullable = true) BigDecimal variacaoPercentual) {}
 
     public record FornecedorGasto(CadastroRefResponse fornecedor, BigDecimal valor, long quantidadeCompras) {}
 
