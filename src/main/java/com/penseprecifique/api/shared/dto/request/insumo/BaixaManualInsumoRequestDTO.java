@@ -26,6 +26,7 @@ public record BaixaManualInsumoRequestDTO(
         MotivoMovimentacaoInsumo motivo,
 
         @NotBlank(message = "A observação é obrigatória")
+        @io.swagger.v3.oas.annotations.media.Schema(minLength = 30)
         @Size(min = 30, message = "A observação deve ter no mínimo 30 caracteres")
         @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
         String observacao

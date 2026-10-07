@@ -138,4 +138,48 @@ class UploadNaoMultipartIT {
                     .andExpect(jsonPath("$.message").value("Não autorizado"));
         }
     }
+
+    @Autowired tools.jackson.databind.json.JsonMapper jsonMapper;
+
+    /** #801 — elemento nulo numa lista do corpo é descartado e vira erro de negócio (400), não NullPointerException (500). */
+    @Test
+    void listaComElementoNuloNoCorpoNaoVira500() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("lista-nula-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(post("/listas-compra").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itens\":[null]}"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    /** #806 — nulo em campo primitivo do corpo vira o valor padrão (o contrato diz que campo opcional aceita nulo). */
+    @Test
+    void nuloEmCampoPrimitivoNaoRecusaOCorpo() throws Exception {
+        var pedido = jsonMapper.readValue("{\"inicioAssimQueAprovado\":null}",
+                com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest.class);
+        org.junit.jupiter.api.Assertions.assertNotNull(pedido);
+    }
+
+    /** #802 — método sem mapeamento num caminho literal que também casa com "{id}" é 405 com Allow, não 400. */
+    @Test
+    void metodoNaoMapeadoEmCaminhoLiteralRetorna405() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("literal-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(put("/compras/confirmar").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().exists("Allow"));
+        mockMvc.perform(put("/compras/" + UUID.randomUUID()).header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().is4xxClientError());
+        mockMvc.perform(put("/compras/nao-e-uuid").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+    }
 }
+

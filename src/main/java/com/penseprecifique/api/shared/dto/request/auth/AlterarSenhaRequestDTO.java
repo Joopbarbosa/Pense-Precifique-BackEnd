@@ -9,6 +9,7 @@ public record AlterarSenhaRequestDTO(
         String senhaAtual,
 
         @NotBlank(message = "Nova senha é obrigatória")
+        @io.swagger.v3.oas.annotations.media.Schema(minLength = 8)
         @Size(min = 8, message = "A nova senha deve ter no mínimo 8 caracteres")
         String novaSenha,
 
