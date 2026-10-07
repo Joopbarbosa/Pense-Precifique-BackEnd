@@ -43,7 +43,10 @@ public class ConciliacaoNotaService {
     public record Resultado(List<ItemConciliacao> itens, List<String> avisos) {}
 
     public Resultado conciliar(UUID usuarioId, String cnpjEmitente, List<NotaLida.Item> lidos) {
-        List<Insumo> disponiveis = insumoRepository.findByUsuarioIdAndAtivoTrueAndDeletedAtIsNull(usuarioId);
+        // #778 — sem ORDER BY o banco devolve na ordem que quiser; candidatos empatados saem por nome (e id), sempre iguais.
+        List<Insumo> disponiveis = new ArrayList<>(insumoRepository.findByUsuarioIdAndAtivoTrueAndDeletedAtIsNull(usuarioId));
+        disponiveis.sort(java.util.Comparator.comparing((Insumo i) -> i.getNome().toLowerCase(java.util.Locale.ROOT))
+                .thenComparing(Insumo::getId));
         Map<String, VinculoItemNota> vinculos = cnpjEmitente == null ? Map.of()
                 : vinculoRepository.findByUsuarioIdAndEmitenteCnpjAndNomeItemNormalizadoIn(usuarioId, cnpjEmitente,
                         lidos.stream().map(i -> CasamentoPorNome.normalizarChave(i.nome())).collect(Collectors.toSet()))
