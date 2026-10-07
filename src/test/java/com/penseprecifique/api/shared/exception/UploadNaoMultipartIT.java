@@ -121,5 +121,22 @@ class UploadNaoMultipartIT {
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", "PUT"));
     }
+
+    /** #781 — 401 da camada de segurança sai em JSON (formato do ErrorResponseDTO), não vazio e sem Content-Type. */
+    @Test
+    void semTokenOuComTokenInvalidoRetorna401EmJson() throws Exception {
+        for (String cabecalho : new String[] {null, "Bearer token-invalido"}) {
+            var requisicao = get("/orcamentos");
+            if (cabecalho != null) {
+                requisicao = requisicao.header("Authorization", cabecalho);
+            }
+            mockMvc.perform(requisicao)
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                            .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.status").value(401))
+                    .andExpect(jsonPath("$.message").value("Não autorizado"));
+        }
+    }
 }
 

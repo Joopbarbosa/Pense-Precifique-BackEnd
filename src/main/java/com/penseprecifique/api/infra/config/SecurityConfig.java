@@ -43,10 +43,24 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, e) ->
-                                res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Não autorizado")))
+                                escreverErro(res, HttpServletResponse.SC_UNAUTHORIZED, "Não autorizado"))
+                        .accessDeniedHandler((req, res, e) ->
+                                escreverErro(res, HttpServletResponse.SC_FORBIDDEN, "Sem permissão para este recurso")))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * #781 — 401 e 403 da camada de segurança saem no mesmo formato JSON de {@code ErrorResponseDTO} que o OpenAPI
+     * declara (antes: corpo vazio, sem Content-Type). A mensagem é fixa: nenhum detalhe interno vai ao cliente.
+     */
+    private static void escreverErro(HttpServletResponse res, int status, String mensagem) throws java.io.IOException {
+        res.setStatus(status);
+        res.setContentType("application/json;charset=UTF-8");
+        res.getWriter().write("{\"message\":\"" + mensagem + "\",\"status\":" + status + ",\"timestamp\":\""
+                + java.time.LocalDateTime.now() + "\",\"fieldErrors\":null,\"titulo\":null,\"motivo\":null,"
+                + "\"comoResolver\":null,\"itens\":null}");
     }
 
     @Bean

@@ -97,6 +97,33 @@ class OpenApiContratoIT {
         assertEquals("local-date-time", datas.get("updatedAt").get("format").asString());
     }
 
+    /** #780 e #782 — consulta documentada como a API a trata: page/size reais, sem mínimos falsos; data vazia aceita. */
+    @Test
+    void parametrosDeConsultaSaoOsReaisEAceitamValorVazioNasDatas() throws Exception {
+        JsonNode docs = docs();
+        JsonNode lista = docs.get("paths").get("/orcamentos").get("get").get("parameters");
+        List<String> nomes = new java.util.ArrayList<>();
+        lista.forEach(p -> nomes.add(p.get("name").asString()));
+        assertTrue(nomes.containsAll(List.of("page", "size", "sort")) && !nomes.contains("pageable"), nomes.toString());
+        for (JsonNode p : lista) {
+            if ("page".equals(p.get("name").asString()) || "size".equals(p.get("name").asString())) {
+                assertTrue(!p.get("schema").has("minimum"), p.toString());
+                assertTrue(!p.path("required").asBoolean(false), p.toString());
+            }
+        }
+        for (JsonNode p : docs.get("paths").get("/compras/dashboard").get("get").get("parameters")) {
+            assertTrue(p.get("allowEmptyValue").asBoolean(false), p.toString());
+        }
+        boolean achou = false;
+        for (JsonNode p : docs.get("paths").get("/clientes/{id}/registros").get("get").get("parameters")) {
+            if ("ate".equals(p.get("name").asString())) {
+                assertTrue(p.get("description").asString().contains("anterior a 'de'"), p.toString());
+                achou = true;
+            }
+        }
+        assertTrue(achou);
+    }
+
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
         String texto = propriedade.toString();
         assertTrue(texto.contains("\"null\"") || texto.contains("\"nullable\":true"), nome + " não aceita nulo: " + texto);

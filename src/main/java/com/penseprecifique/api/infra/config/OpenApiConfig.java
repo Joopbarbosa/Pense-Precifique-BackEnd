@@ -6,6 +6,7 @@ import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.springdoc.core.customizers.OpenApiCustomizer;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.Configuration;
 import java.lang.reflect.ParameterizedType;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -80,8 +82,49 @@ public class OpenApiConfig {
                 return;
             }
             Schema<?> referencia = new Schema<>().$ref("#/components/schemas/ErrorResponseDTO");
-            openApi.getPaths().values().forEach(item -> item.readOperations().forEach(op -> adicionar(op, referencia)));
+            openApi.getPaths().values().forEach(item -> item.readOperations().forEach(op -> {
+                adicionar(op, referencia);
+                ajustarParametros(op);
+            }));
         };
+    }
+
+    /**
+     * #780 e #782 — o contrato descreve o que a API faz de fato com a consulta:
+     * (a) {@code Pageable} saía como um parâmetro-objeto obrigatório chamado "pageable" (que não existe na URL) com
+     * mínimos que a API não aplica; os parâmetros reais são {@code page}, {@code size} e {@code sort}, e valores
+     * inválidos (page negativo, size menor que 1) usam o padrão em vez de dar erro;
+     * (b) data vazia ({@code de=}) é o mesmo que ausente; (c) {@code ate} anterior a {@code de} é recusado (400).
+     */
+    private static void ajustarParametros(Operation operacao) {
+        if (operacao.getParameters() == null) {
+            return;
+        }
+        List<Parameter> ajustados = new ArrayList<>();
+        boolean temDe = operacao.getParameters().stream().anyMatch(p -> "de".equals(p.getName()));
+        for (Parameter parametro : operacao.getParameters()) {
+            if ("pageable".equals(parametro.getName())) {
+                ajustados.add(new Parameter().name("page").in("query").required(false)
+                        .description("Página, a partir de 0. Valor inválido (negativo) usa a página 0.")
+                        .schema(new Schema<Integer>().type("integer")));
+                ajustados.add(new Parameter().name("size").in("query").required(false)
+                        .description("Itens por página. Valor menor que 1 usa o padrão do endereço.")
+                        .schema(new Schema<Integer>().type("integer")));
+                ajustados.add(new Parameter().name("sort").in("query").required(false)
+                        .description("Ordenação: campo,asc ou campo,desc. Campo desconhecido é recusado (400).")
+                        .schema(new Schema<String>().type("array").items(new Schema<String>().type("string"))));
+                continue;
+            }
+            Schema<?> esquema = parametro.getSchema();
+            if (esquema != null && "date".equals(esquema.getFormat())) {
+                parametro.setAllowEmptyValue(true);
+                if (temDe && "ate".equals(parametro.getName())) {
+                    parametro.setDescription("Data final. Não pode ser anterior a 'de' (400, 'Período inválido' ou parâmetros inválidos).");
+                }
+            }
+            ajustados.add(parametro);
+        }
+        operacao.setParameters(ajustados);
     }
 
     private static void adicionar(Operation operacao, Schema<?> referencia) {
