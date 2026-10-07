@@ -12,7 +12,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * #765 (V0.16.0, triagem do Schemathesis) — declara no OpenAPI as respostas de erro que a API sempre pode devolver,
@@ -41,6 +44,8 @@ public class OpenApiConfig {
             Map<String, Schema> schemas = ModelConverters.getInstance().readAll(ErrorResponseDTO.class);
             if (openApi.getComponents() != null) {
                 schemas.forEach((nome, schema) -> openApi.getComponents().addSchemas(nome, schema));
+                ajustarErroPadrao(openApi.getComponents().getSchemas().get("ErrorResponseDTO"));
+                ajustarMaiorAumento(openApi.getComponents().getSchemas().get("DashboardComprasResponse"));
             }
             if (openApi.getPaths() == null) {
                 return;
@@ -58,5 +63,49 @@ public class OpenApiConfig {
             operacao.getResponses().addApiResponse(codigo, new ApiResponse().description(descricao)
                     .content(new Content().addMediaType("application/json", new MediaType().schema(referencia))));
         });
+    }
+
+    /**
+     * #771 — o JSON real do erro tem {@code timestamp} sem fuso (LocalDateTime) e deixa {@code null} os campos da modal
+     * que não se aplicam; o schema dizia {@code date-time} (exige fuso) e campos sempre preenchidos.
+     */
+    private static void ajustarErroPadrao(Schema<?> erro) {
+        if (erro == null || erro.getProperties() == null) {
+            return;
+        }
+        Schema<?> timestamp = (Schema<?>) erro.getProperties().get("timestamp");
+        if (timestamp != null) {
+            timestamp.setFormat("local-date-time");
+        }
+        for (String campo : List.of("fieldErrors", "titulo", "motivo", "comoResolver", "itens")) {
+            Schema<?> propriedade = (Schema<?>) erro.getProperties().get(campo);
+            if (propriedade != null) {
+                aceitarNulo(propriedade);
+            }
+        }
+    }
+
+    /** #772 — {@code maiorAumento} é nulo sem variação no período; $ref + type null não vale em OpenAPI 3.1: usa anyOf. */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void ajustarMaiorAumento(Schema<?> dashboard) {
+        if (dashboard == null || dashboard.getProperties() == null) {
+            return;
+        }
+        Map<String, Schema> propriedades = (Map<String, Schema>) (Map) dashboard.getProperties();
+        propriedades.put("maiorAumento", new Schema<>().anyOf(List.of(
+                new Schema<>().$ref("#/components/schemas/InsumoVariacao"),
+                new Schema<>().types(Set.of("null")))));
+    }
+
+    private static void aceitarNulo(Schema<?> propriedade) {
+        Set<String> tipos = new LinkedHashSet<>();
+        if (propriedade.getTypes() != null) {
+            tipos.addAll(propriedade.getTypes());
+        } else if (propriedade.getType() != null) {
+            tipos.add(propriedade.getType());
+        }
+        tipos.add("null");
+        propriedade.setType(null);
+        propriedade.setTypes(tipos);
     }
 }
