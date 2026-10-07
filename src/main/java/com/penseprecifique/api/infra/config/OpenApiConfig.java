@@ -7,10 +7,16 @@ import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.responses.ApiResponse;
+import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springdoc.core.customizers.OperationCustomizer;
+import org.springdoc.core.utils.SpringDocUtils;
+import org.springframework.http.ResponseEntity;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.lang.reflect.ParameterizedType;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,6 +35,9 @@ public class OpenApiConfig {
     private static final Map<String, String> ERROS = new LinkedHashMap<>();
 
     static {
+        // #775 — a API serializa LocalDateTime sem fuso (ex.: 2026-10-07T16:05:59); "date-time" do OpenAPI exige fuso.
+        SpringDocUtils.getConfig().replaceWithSchema(LocalDateTime.class,
+                new Schema<String>().type("string").format("local-date-time").example("2026-10-07T16:05:59"));
         ERROS.put("400", "Entrada inválida (BLOQUEIO) ou requisição malformada");
         ERROS.put("401", "Sem autenticação ou token inválido");
         ERROS.put("403", "Sem permissão para este recurso");
@@ -36,6 +45,26 @@ public class OpenApiConfig {
         ERROS.put("405", "Método HTTP fora do contrato deste endereço");
         ERROS.put("415", "Tipo de conteúdo não aceito por este endereço");
         ERROS.put("500", "Erro interno não tratado");
+    }
+
+    /**
+     * #775 — {@code ResponseEntity<Void>} é "204 sem conteúdo" nesta API ({@code noContent()}); sem isto o contrato dizia 200.
+     * Quem responde 200 com corpo vazio declara o 200 com {@code @ApiResponse} no método.
+     */
+    @Bean
+    public OperationCustomizer semConteudoComoRespostaPadrao() {
+        return (operacao, metodo) -> {
+            if (metodo.getMethod().getGenericReturnType() instanceof ParameterizedType tipo
+                    && tipo.getRawType() == ResponseEntity.class
+                    && tipo.getActualTypeArguments()[0] == Void.class
+                    && !metodo.hasMethodAnnotation(io.swagger.v3.oas.annotations.responses.ApiResponse.class)) {
+                ApiResponses respostas = operacao.getResponses() != null ? operacao.getResponses() : new ApiResponses();
+                respostas.remove("200");
+                respostas.addApiResponse("204", new ApiResponse().description("Sem conteúdo"));
+                operacao.setResponses(respostas);
+            }
+            return operacao;
+        };
     }
 
     @Bean

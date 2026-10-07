@@ -18,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
@@ -62,6 +63,22 @@ public class GlobalExceptionHandler {
                 LocalDateTime.now(),
                 fieldErrors
         ));
+    }
+
+    /**
+     * #774 — no Spring Framework 7, {@code @Valid} num parâmetro que não é um objeto simples (lista no corpo, por
+     * exemplo) lança esta exceção em vez de {@link MethodArgumentNotValidException}; sem tratamento caía no 500.
+     */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponseDTO> handleHandlerMethodValidation(HandlerMethodValidationException ex) {
+        Map<String, String> fieldErrors = new java.util.LinkedHashMap<>();
+        ex.getParameterValidationResults().forEach(resultado -> resultado.getResolvableErrors().forEach(erro -> {
+            String campo = erro instanceof org.springframework.validation.FieldError fe ? fe.getField()
+                    : resultado.getMethodParameter().getParameterName();
+            fieldErrors.putIfAbsent(campo != null ? campo : "corpo", erro.getDefaultMessage() != null ? erro.getDefaultMessage() : "Inválido");
+        }));
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Erro de validação", HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), fieldErrors));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -234,7 +251,7 @@ public class GlobalExceptionHandler {
     /** #762 — método HTTP fora do contrato do endereço é 405, não 500. */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponseDTO> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(new ErrorResponseDTO(
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(ex.getHeaders()).body(new ErrorResponseDTO(
                 "Esta operação não é permitida para este endereço.", HttpStatus.METHOD_NOT_ALLOWED.value(),
                 LocalDateTime.now(), null));
     }

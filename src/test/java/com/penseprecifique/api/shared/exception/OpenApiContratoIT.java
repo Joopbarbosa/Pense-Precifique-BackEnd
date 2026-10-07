@@ -84,6 +84,19 @@ class OpenApiContratoIT {
         assertAceitaNulo(m.get("anyOf").get(1), "maiorAumento");
     }
 
+    /** #775 — o contrato diz o que a API faz: DELETE sem conteúdo é 204, datas locais não têm fuso, senha responde 200. */
+    @Test
+    void contratoDescreveOs204EAsDatasLocais() throws Exception {
+        JsonNode docs = docs();
+        JsonNode apagar = docs.get("paths").get("/unidades-medida/{id}").get("delete").get("responses");
+        assertTrue(apagar.has("204") && !apagar.has("200"), "DELETE /unidades-medida/{id}: " + apagar.propertyNames());
+        JsonNode senha = docs.get("paths").get("/usuarios/me/senha").get("put").get("responses");
+        assertTrue(senha.has("200") && !senha.has("204"), "PUT /usuarios/me/senha: " + senha.propertyNames());
+        JsonNode datas = docs.get("components").get("schemas").get("UnidadeMedidaResponseDTO").get("properties");
+        assertEquals("local-date-time", datas.get("createdAt").get("format").asString());
+        assertEquals("local-date-time", datas.get("updatedAt").get("format").asString());
+    }
+
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
         String texto = propriedade.toString();
         assertTrue(texto.contains("\"null\"") || texto.contains("\"nullable\":true"), nome + " não aceita nulo: " + texto);

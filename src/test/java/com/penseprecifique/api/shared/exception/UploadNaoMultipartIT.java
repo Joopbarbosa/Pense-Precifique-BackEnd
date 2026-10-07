@@ -83,4 +83,43 @@ class UploadNaoMultipartIT {
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.status").value(415));
     }
+
+    /** #774 — lista inválida no corpo dos simuladores é 400 (era NullPointerException e HandlerMethodValidationException: 500). */
+    @Test
+    void simuladoresDeAlertaRecusamCorpoInvalidoComo400() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("simuladores-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        for (String corpo : new String[] {"[{\"a\":{\"b\":false}}]", "[{}]", "[1,2]", "{}"}) {
+            mockMvc.perform(post("/orcamentos/simular-alertas").header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+        for (String corpo : new String[] {
+                "[{\"produtoId\":\"9d54b643-0e9c-34aa-a802-8648b1ffee65\"},{\"produtoId\":\"923867b7-3d23-45c3-bea2-b9dd6010c663\"}]",
+                "[{}]", "[1]"}) {
+            mockMvc.perform(post("/producoes/simular-alertas").header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+    }
+
+    /** #775 — todo 405 diz no cabeçalho Allow quais métodos o endereço aceita. */
+    @Test
+    void metodoNaoPermitidoTrazOCabecalhoAllow() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("allow-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(post("/usuarios/me/senha").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", "PUT"));
+    }
 }
+
