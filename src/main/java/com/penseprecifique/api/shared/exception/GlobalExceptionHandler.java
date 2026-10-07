@@ -160,7 +160,14 @@ public class GlobalExceptionHandler {
      * genérica — não expõe o tipo Java esperado ao cliente.
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ErrorResponseDTO> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException ex) {
+    public ResponseEntity<ErrorResponseDTO> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                                             jakarta.servlet.http.HttpServletRequest request) {
+        // #802 — "PUT /compras/confirmar" casa com "PUT /compras/{id}" (id = "confirmar"). Se existe um caminho literal
+        // igual com outros métodos, o pedido é de método não permitido neste endereço (405), não de id inválido.
+        java.util.Set<String> permitidos = metodosDoCaminhoLiteral(request);
+        if (!permitidos.isEmpty() && !permitidos.contains(request.getMethod())) {
+            return handleMethodNotSupported(new HttpRequestMethodNotSupportedException(request.getMethod(), permitidos));
+        }
         log.warn("Parâmetro de path/query com tipo inválido: {}", ex.getName());
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(
                 "Valor inválido para o parâmetro '" + ex.getName() + "'.",
@@ -168,6 +175,25 @@ public class GlobalExceptionHandler {
                 LocalDateTime.now(),
                 null
         ));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping mapeamento;
+
+    private java.util.Set<String> metodosDoCaminhoLiteral(jakarta.servlet.http.HttpServletRequest request) {
+        java.util.Set<String> metodos = new java.util.TreeSet<>();
+        if (mapeamento == null) {
+            return metodos;
+        }
+        var caminho = org.springframework.http.server.PathContainer.parsePath(request.getRequestURI());
+        mapeamento.getHandlerMethods().keySet().forEach(info -> {
+            var condicao = info.getPathPatternsCondition();
+            if (condicao != null && condicao.getPatterns().stream()
+                    .anyMatch(p -> !p.getPatternString().contains("{") && p.matches(caminho))) {
+                info.getMethodsCondition().getMethods().forEach(m -> metodos.add(m.name()));
+            }
+        });
+        return metodos;
     }
 
     /** #660 — parâmetro obrigatório ausente é erro do pedido, inclusive no fuzzing de schema. */

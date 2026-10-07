@@ -78,6 +78,8 @@ public class OpenApiConfig {
                 ajustarErroPadrao(openApi.getComponents().getSchemas().get("ErrorResponseDTO"));
                 ajustarMaiorAumento(openApi.getComponents().getSchemas().get("DashboardComprasResponse"));
                 openApi.getComponents().getSchemas().forEach(OpenApiConfig::aceitarNulosOpcionais);
+                openApi.getComponents().getSchemas().forEach(OpenApiConfig::exigirTextoObrigatorioNaoVazio);
+                politicaGeral(openApi);
             }
             if (openApi.getPaths() == null) {
                 return;
@@ -227,5 +229,37 @@ public class OpenApiConfig {
             return true;
         }
         return p.getAnyOf() != null && p.getAnyOf().stream().anyMatch(a -> a.getTypes() != null && a.getTypes().contains("null"));
+    }
+
+    /** #803 — campo de texto obrigatório (@NotBlank) não aceita texto vazio; o contrato diz isso. */
+    private static void exigirTextoObrigatorioNaoVazio(String nome, Schema<?> esquema) {
+        if (esquema.getProperties() == null || esquema.getRequired() == null) {
+            return;
+        }
+        for (String obrigatorio : esquema.getRequired()) {
+            Schema<?> p = (Schema<?>) esquema.getProperties().get(obrigatorio);
+            if (p != null && p.getTypes() != null && p.getTypes().contains("string") && (p.getMinLength() == null || p.getMinLength() == 0)
+                    && p.getFormat() == null && p.getEnum() == null) {
+                p.setMinLength(1);
+            }
+        }
+    }
+
+    /**
+     * #803 — política geral de entrada JSON, declarada uma vez em vez de campo a campo: o serviço converte entre
+     * texto e número nos campos escalares (ex.: 0 em campo de texto, "10" em campo numérico), ignora propriedades
+     * desconhecidas, trata texto vazio em campo numérico como ausente e descarta elementos nulos de lista.
+     */
+    private static void politicaGeral(io.swagger.v3.oas.models.OpenAPI openApi) {
+        String politica = "Política de entrada JSON: os campos escalares aceitam o valor convertido (texto numérico em campo "
+                + "numérico e número em campo de texto); propriedades desconhecidas são ignoradas; texto vazio em campo "
+                + "numérico equivale a ausente; elementos nulos de lista são descartados; nulo em campo primitivo vira o valor padrão.";
+        if (openApi.getInfo() == null) {
+            openApi.setInfo(new io.swagger.v3.oas.models.info.Info().title("Pense & Precifique API").version("0.16.0"));
+        }
+        String atual = openApi.getInfo().getDescription();
+        if (atual == null || !atual.contains("Política de entrada JSON")) {
+            openApi.getInfo().setDescription((atual == null || atual.isBlank() ? "" : atual + "\n\n") + politica);
+        }
     }
 }

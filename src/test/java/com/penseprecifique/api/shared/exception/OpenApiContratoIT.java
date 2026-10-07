@@ -164,6 +164,28 @@ class OpenApiContratoIT {
         }
     }
 
+    /** #803, #804 e #805 — mínimos de texto e política geral de entrada no contrato. */
+    @Test
+    void contratoDeclaraMinimosDeTextoEAPoliticaGeralDeEntrada() throws Exception {
+        JsonNode docs = docs();
+        JsonNode schemas = docs.get("components").get("schemas");
+        for (String nome : List.of("TravarProducaoRequest", "AgruparProducoesRequest", "CancelarCompraRequest",
+                "CancelarVendaCaixaRequestDTO", "BaixaManualInsumoRequestDTO", "BaixaManualProdutoRequest", "CaixaMovimentoRequestDTO")) {
+            boolean tem30 = false;
+            for (var p : schemas.get(nome).get("properties").properties()) {
+                JsonNode min = p.getValue().get("minLength");
+                tem30 |= min != null && min.asInt() == 30;
+            }
+            assertTrue(tem30, nome + " sem minLength 30");
+        }
+        JsonNode descricao = docs.get("info").get("description");
+        assertTrue(descricao != null && descricao.asString().contains("Política de entrada JSON"), "info.description: " + descricao);
+        JsonNode unidade = schemas.get("UnidadeMedidaRequestDTO");
+        if (unidade != null && unidade.has("required") && unidade.get("properties").has("nome")) {
+            assertEquals(1, unidade.get("properties").get("nome").get("minLength").asInt());
+        }
+    }
+
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
         String texto = propriedade.toString();
         assertTrue(texto.contains("\"null\"") || texto.contains("\"nullable\":true"), nome + " não aceita nulo: " + texto);

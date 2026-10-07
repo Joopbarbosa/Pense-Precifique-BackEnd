@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Size;
  */
 public record CancelarCompraRequest(
         @NotBlank(message = "A observação é obrigatória")
+        @io.swagger.v3.oas.annotations.media.Schema(minLength = 30)
         @Size(min = 30, message = "A observação precisa ter pelo menos 30 caracteres")
         @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM)
         @Pattern(regexp = LimitesTexto.SEM_CARACTERE_NULO, message = LimitesTexto.SEM_CARACTERE_NULO_MENSAGEM)

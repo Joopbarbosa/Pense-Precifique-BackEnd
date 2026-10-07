@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Size;
  */
 public record CancelarVendaCaixaRequestDTO(
         @NotBlank(message = "O motivo do cancelamento é obrigatório")
+        @io.swagger.v3.oas.annotations.media.Schema(minLength = 30)
         @Size(min = 30, message = "O motivo do cancelamento deve ter pelo menos 30 caracteres")
         @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
         String cancelamentoMotivo,
