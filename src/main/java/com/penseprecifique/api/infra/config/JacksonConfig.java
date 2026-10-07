@@ -13,7 +13,8 @@ import java.util.Set;
 
 /**
  * #801 e #806 — política geral de entrada JSON, no lugar de tratar campo a campo:
- * (a) elemento {@code null} dentro de lista é descartado (antes: NullPointerException e 500 nos serviços);
+ * (a) elemento {@code null} dentro de lista é recusado com 400 (antes: NullPointerException e 500 nos serviços; #815 trocou
+ * o descarte silencioso por recusa, que o contrato representa sem ambiguidade);
  * (b) {@code null} num campo primitivo vira o valor padrão (false, 0) em vez de recusar o corpo (o contrato
  * já diz que campo opcional aceita nulo).
  */
@@ -25,7 +26,7 @@ public class JacksonConfig {
         return builder -> {
             builder.disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES);
             for (Class<?> tipo : new Class<?>[] {List.class, Set.class, Collection.class}) {
-                builder.withConfigOverride(tipo, o -> o.setNullHandling(JsonSetter.Value.forContentNulls(Nulls.SKIP)));
+                builder.withConfigOverride(tipo, o -> o.setNullHandling(JsonSetter.Value.forContentNulls(Nulls.FAIL)));
             }
         };
     }

@@ -46,7 +46,6 @@ public record CompraRequest(
         TipoDesconto descontoNotaTipo,
 
         @Positive(message = "O desconto da nota deve ser maior que zero")
-        @io.swagger.v3.oas.annotations.media.Schema(multipleOf = 0.01)
         @Digits(integer = 13, fraction = 2, message = "Desconto da nota com no máximo 2 casas decimais")
         BigDecimal descontoNotaValor,
 
