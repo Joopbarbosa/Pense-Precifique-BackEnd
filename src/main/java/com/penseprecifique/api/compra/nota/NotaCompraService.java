@@ -208,6 +208,9 @@ public class NotaCompraService {
             compra = compraService.criarRascunhoDeNota(compraRequest, origemDe(nota), chave);
             compraRepository.flush(); // a unicidade da chave (RN-NOVA-5) é conferida aqui, não só no commit
         } catch (DataIntegrityViolationException e) {
+            if (!violaUnicidadeDaChave(e)) {
+                throw e; // #773: só a chave repetida é "nota já registrada"; outra violação não se disfarça de duplicidade
+            }
             throw BusinessException.explicado("Nota já registrada", "Esta nota já foi registrada numa compra.",
                     "A mesma nota não gera duas compras.", "Abra a compra existente na lista de compras.");
         }
@@ -401,5 +404,14 @@ public class NotaCompraService {
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private static boolean violaUnicidadeDaChave(DataIntegrityViolationException e) {
+        for (Throwable causa = e; causa != null; causa = causa.getCause()) {
+            if (causa.getMessage() != null && causa.getMessage().contains("uq_compra_usuario_chave_acesso")) {
+                return true;
+            }
+        }
+        return false;
     }
 }

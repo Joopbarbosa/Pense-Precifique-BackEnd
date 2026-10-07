@@ -86,6 +86,26 @@ class MontagemRascunhoNotaTest {
         igual("200", r.linhas().get(0).quantidade());
     }
 
+    /** #773 — fator absurdo estourava a coluna (e a mensagem dizia "nota já registrada"); fator minúsculo zerava a quantidade. */
+    @Test
+    void fatorForaDosLimitesEQuantidadeZeroOuGigantescaBloqueiam() {
+        NotaLida n = nota("10.00", null, null, item("A", "2", "10.00", null, null));
+        for (String fator : new String[]{"1e30", "1000001", "0.00001", "0.0000001"}) {
+            BusinessException e = assertThrows(BusinessException.class, () -> MontagemRascunhoNota.montar(n, List.of(liga(0, FITA, fator))));
+            assertTrue(e.getMessage().contains("fator de conversão"), fator + ": " + e.getMessage());
+        }
+        NotaLida grande = nota("10.00", null, null, item("A", "1000", "10.00", null, null));
+        BusinessException g = assertThrows(BusinessException.class, () -> MontagemRascunhoNota.montar(grande, List.of(liga(0, FITA, "1000000"))));
+        assertTrue(g.getMessage().contains("A quantidade do item 1"), g.getMessage());
+        NotaLida pouco = nota("10.00", null, null, item("A", "0.001", "10.00", null, null));
+        BusinessException z = assertThrows(BusinessException.class, () -> MontagemRascunhoNota.montar(pouco, List.of(liga(0, FITA, "0.0001"))));
+        assertTrue(z.getMessage().contains("A quantidade do item 1"), z.getMessage());
+        igual("1000000", MontagemRascunhoNota.montar(nota("10.00", null, null, item("A", "1", "10.00", null, null)),
+                List.of(liga(0, FITA, "1000000"))).linhas().get(0).quantidade());
+        igual("0.0001", MontagemRascunhoNota.montar(nota("10.00", null, null, item("A", "1", "10.00", null, null)),
+                List.of(liga(0, FITA, "0.0001"))).linhas().get(0).quantidade());
+    }
+
     @Test
     void cen61_itemIgnoradoReduzOdescontoGeralNaMesmaProporcao() {
         var r = MontagemRascunhoNota.montar(nota("80.00", "20.00", null,
