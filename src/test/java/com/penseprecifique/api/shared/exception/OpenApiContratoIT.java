@@ -67,6 +67,23 @@ class OpenApiContratoIT {
         assertEquals(500, j.get("maxLength").asInt());
     }
 
+    @Test
+    void erroPadraoDescreveOTimestampSemFusoEOsCamposOpcionais() throws Exception {
+        JsonNode erro = docs().get("components").get("schemas").get("ErrorResponseDTO").get("properties");
+        assertEquals("local-date-time", erro.get("timestamp").get("format").asString());
+        for (String campo : List.of("fieldErrors", "titulo", "motivo", "comoResolver", "itens")) {
+            assertAceitaNulo(erro.get(campo), "ErrorResponseDTO." + campo);
+        }
+    }
+
+    @Test
+    void maiorAumentoDoDashboardNaoMisturaRefComTipoNulo() throws Exception {
+        JsonNode m = docs().get("components").get("schemas").get("DashboardComprasResponse").get("properties").get("maiorAumento");
+        assertTrue(!m.has("$ref") && !m.has("type"), "ref e type na mesma propriedade: " + m);
+        assertEquals(2, m.get("anyOf").size());
+        assertAceitaNulo(m.get("anyOf").get(1), "maiorAumento");
+    }
+
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
         String texto = propriedade.toString();
         assertTrue(texto.contains("\"null\"") || texto.contains("\"nullable\":true"), nome + " não aceita nulo: " + texto);
