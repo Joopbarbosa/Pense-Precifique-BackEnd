@@ -75,6 +75,10 @@ class UploadNaoMultipartIT {
         mockMvc.perform(put("/usuarios/me").header("Authorization", token))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.status").value(405));
+        // #767 — caminho inexistente com usuário autenticado é 404, não 500
+        mockMvc.perform(get("/rota-que-nao-existe").header("Authorization", token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
         mockMvc.perform(post("/auth/login").contentType(MediaType.TEXT_PLAIN).content("x"))
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.status").value(415));

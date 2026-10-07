@@ -11,6 +11,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.apache.tomcat.util.http.InvalidParameterException;
 import org.apache.tomcat.util.http.fileupload.FileUploadException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -243,6 +245,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(new ErrorResponseDTO(
                 "O tipo de conteúdo enviado não é aceito por este endereço.", HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(),
                 LocalDateTime.now(), null));
+    }
+
+    /**
+     * #767 (V0.16.0) — caminho que não existe, com usuário autenticado, é 404 (antes caía no catch-all: 500 e stack
+     * trace no log a cada varredura de caminhos). Sem token continua 401, antes de chegar aqui.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ErrorResponseDTO> handleCaminhoInexistente(Exception ex) {
+        log.debug("Caminho inexistente: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponseDTO(
+                "Endereço não encontrado.", HttpStatus.NOT_FOUND.value(), LocalDateTime.now(), null));
     }
 
     @ExceptionHandler(Exception.class)
