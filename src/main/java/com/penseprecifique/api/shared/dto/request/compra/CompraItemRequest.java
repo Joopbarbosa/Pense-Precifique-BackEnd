@@ -20,16 +20,19 @@ public record CompraItemRequest(
         UUID fornecedorId,
 
         @Positive(message = "A quantidade deve ser maior que zero")
+        @io.swagger.v3.oas.annotations.media.Schema(multipleOf = 0.0001)
         @Digits(integer = 11, fraction = 4, message = "Quantidade com no máximo 4 casas decimais")
         BigDecimal quantidade,
 
         /** Legado (antes do #576): preço pago da linha. Sem {@code precoCheio}, vale como preço cheio. */
         @Positive(message = "O preço total deve ser maior que zero")
+        @io.swagger.v3.oas.annotations.media.Schema(multipleOf = 0.01)
         @Digits(integer = 13, fraction = 2, message = "Preço total com no máximo 2 casas decimais")
         BigDecimal precoTotal,
 
         /** #576/RN-NOVA-28 — preço cheio da linha, antes do desconto. */
         @Positive(message = "O preço cheio deve ser maior que zero")
+        @io.swagger.v3.oas.annotations.media.Schema(multipleOf = 0.01)
         @Digits(integer = 13, fraction = 2, message = "Preço cheio com no máximo 2 casas decimais")
         BigDecimal precoCheio,
 
@@ -37,6 +40,7 @@ public record CompraItemRequest(
         TipoDesconto descontoTipo,
 
         @Positive(message = "O desconto deve ser maior que zero")
+        @io.swagger.v3.oas.annotations.media.Schema(multipleOf = 0.01)
         @Digits(integer = 13, fraction = 2, message = "Desconto com no máximo 2 casas decimais")
         BigDecimal descontoValor
 ) {

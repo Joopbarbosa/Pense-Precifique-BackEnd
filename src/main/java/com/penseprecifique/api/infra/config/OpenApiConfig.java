@@ -200,6 +200,11 @@ public class OpenApiConfig {
         Map<String, Schema> propriedades = (Map<String, Schema>) (Map) esquema.getProperties();
         for (Map.Entry<String, Schema> par : new ArrayList<>(propriedades.entrySet())) {
             Schema<?> p = par.getValue();
+            // #812 — elemento nulo de lista de entrada é descartado (JacksonConfig): o contrato o aceita.
+            if (entrada && p.getTypes() != null && p.getTypes().contains("array") && p.getItems() != null
+                    && !jaAceitaNulo(p.getItems())) {
+                ((Schema) p).setItems(new Schema<>().anyOf(List.of(p.getItems(), new Schema<>().types(Set.of("null")))));
+            }
             if (obrigatorios.contains(par.getKey()) || jaAceitaNulo(p)) {
                 continue;
             }
