@@ -79,7 +79,7 @@ public class ProducaoController {
 
     @PostMapping("/simular-alertas")
     public ResponseEntity<List<AlertaInsumoResponse>> simularAlertas(
-            @Valid @RequestBody List<ProducaoProdutoRequest> produtos) {
+            @RequestBody List<@jakarta.validation.constraints.NotNull @Valid ProducaoProdutoRequest> produtos) {
         return ResponseEntity.ok(producaoService.simularAlertas(produtos));
     }
 

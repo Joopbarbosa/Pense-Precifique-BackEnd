@@ -63,4 +63,19 @@ class FiltrosDeEntradaTest {
 
         verify(cadeia).doFilter(requisicao, resposta);
     }
+
+    /** #810 — chamada direta a "/error" é 404 sem anunciar métodos, em qualquer método. */
+    @Test
+    void chamadaDiretaAoErroRetorna404SemAllow() throws Exception {
+        for (String metodo : new String[] {"GET", "OPTIONS", "TRACE", "PATCH"}) {
+            FilterChain cadeia = mock(FilterChain.class);
+            MockHttpServletResponse resposta = new MockHttpServletResponse();
+            new MetodoForaDoContratoFilter().doFilter(new MockHttpServletRequest(metodo, "/error"), resposta, cadeia);
+
+            assertEquals(404, resposta.getStatus(), metodo);
+            assertEquals(null, resposta.getHeader("Allow"), metodo);
+            verify(cadeia, never()).doFilter(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }
+    }
 }
+
