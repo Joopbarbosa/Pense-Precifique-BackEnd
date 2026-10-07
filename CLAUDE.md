@@ -99,6 +99,13 @@ com/penseprecifique/api/
 │   (`compra/`, V0.15.0: Compra COM-N, Lista de compras LST-N, vínculo fornecedor↔insumo, impacto,
 │   dashboard e CMV — substituiu `lotes_compra`; fornecedor é um `Cliente` com papel FORNECEDOR,
 │   não entidade própria)
+│   (`compra/nota/`, V0.16.0: compra por nota fiscal — `NotaCompraController`/`NotaCompraService` (leitura da
+│   nota e rascunho de compra), `LeitorFiscalClient` (chama o serviço `leitor-fiscal`),
+│   `AssinaturaNota` (assina a nota lida; o rascunho só aceita nota com a assinatura devolvida na leitura),
+│   `PortalFiscalPermitido` (hosts do link do comprovante, #723), `CasamentoPorNome` (casamento do item com
+│   o insumo, sem IA), `ConciliacaoNotaService`, `SugestaoInsumoIaClient`/`SugestaoIaUso` (sugestão por IA,
+│   só nomes, DT-NOVA-11), `VinculoItemNotaService`/`VinculoItemNotaRepository` (memória item↔insumo por
+│   emitente) e `HistoricoVinculoNotaController`/`Service` (Histórico de Nota Fiscal))
 ├── pdf/               # PdfService, PdfMapper (ver seção própria)
 ├── shared/
 │   ├── domain/{entity,enums,converter}/   # entidades JPA, enums, converters
@@ -107,6 +114,8 @@ com/penseprecifique/api/
 │   │                                       # estoque negativo compartilhados Orçamento/Produção)
 │   ├── dto/pdf/       # DTOs achatados de payload de PDF (OrcamentoPdfData, ReciboPdfData, etc.)
 │   ├── mapper/        # @Component manual — apesar do nome do pacote, NÃO é MapStruct
+│   ├── texto/         # TextoNormalizado (V0.16.0/#750) — sem acento e minúsculo, única implementação
+│   │                  # para histórico de clientes e vínculo de nota; nunca recriar `Normalizer` local
 │   ├── validation/    # ValidadorArquivoImagem (V0.14.0, DT-NOVA-5) — validação única de upload
 │   │                  # de imagem (JPG/PNG, máx. 5MB) para Catálogo, Produto e Empresa
 │   └── exception/     # GlobalExceptionHandler, ResourceNotFoundException, BusinessException
@@ -273,6 +282,18 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   em código novo de Produção.
 - **Pacote flat antigo** (`controller/`/`service/`/`repository/` soltos na raiz de `api/`) foi
   extinto no refactor V0.5 — não replicar, seguir a estrutura por módulo da seção 2.
+- **Par de migrações V69/V71 é histórico, não erro** (V0.16.0, #687 → #714): `V69__insumo_rascunho` cria o
+  insumo em rascunho e `V71__remove_insumo_rascunho` o remove, porque o Flyway não aceita reescrever
+  migração já aplicada. Não tentar "limpar" os dois nem reintroduzir insumo em rascunho.
+- **Configuração da nota fiscal (V0.16.0):** `LEITOR_FISCAL_BASE_URL`, `LEITOR_FISCAL_CHAVE` e
+  `NOTA_ASSINATURA_SEGREDO` (vazios = recurso de nota indisponível), `NOTA_PORTAIS_PERMITIDOS` (hoje só o
+  portal de SP). Limites de IA do leitor ficam no `leitor-fiscal` (`LIMITE_IA_MENSAL_POR_CONTA`/`_POR_CHAVE`),
+  não aqui.
+- **Sugestão de insumo por IA na conciliação (V0.16.0, #681, DT-NOVA-11), bloco `sugestao-ia` do
+  `application.yml`:** `SUGESTAO_IA_HABILITADA` (padrão `false`, desligada até a política de privacidade,
+  #675), `SUGESTAO_IA_BASE_URL` (provedor compatível com OpenAI), `SUGESTAO_IA_CHAVE`, `SUGESTAO_IA_MODELO`,
+  `SUGESTAO_IA_TIMEOUT_SECONDS` (padrão 20) e `SUGESTAO_IA_LIMITE_MENSAL_POR_CONTA` (padrão 200, limite técnico
+  por conta e mês, separado dos limites do leitor). Só nomes de itens e de insumos vão ao provedor (#724).
 - **`docker-compose.yml` fixa `TZ=America/Sao_Paulo` nos serviços `db`/`backend`** (V0.12.0,
   achado do teste manual — container rodava em UTC puro por padrão, todo `LocalDateTime.now()` do
   projeto ficava 3h à frente do horário real). Não remover essa env var nem assumir fuso do
