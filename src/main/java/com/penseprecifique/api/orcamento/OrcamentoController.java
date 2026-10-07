@@ -94,7 +94,7 @@ public class OrcamentoController {
 
     @PostMapping("/simular-alertas")
     public ResponseEntity<List<SimulacaoEstoqueProdutoResponse>> simularAlertas(
-            @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {
+            @Valid @RequestBody List<SimularAlertasOrcamentoItemRequest> itens) {
         return ResponseEntity.ok(orcamentoService.simularAlertas(itens));
     }
 

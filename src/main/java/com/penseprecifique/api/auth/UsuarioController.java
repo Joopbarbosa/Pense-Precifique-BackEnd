@@ -27,6 +27,7 @@ public class UsuarioController {
 
     @PutMapping("/me/senha")
     @Operation(summary = "Altera a senha do usuário autenticado")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Senha alterada")
     public ResponseEntity<Void> alterarSenha(@Valid @RequestBody AlterarSenhaRequestDTO request) {
         usuarioService.alterarSenha(request);
         return ResponseEntity.ok().build();

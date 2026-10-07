@@ -48,6 +48,15 @@ class RequisicaoMalformadaTest {
     }
 
     @Test
+    void metodoNaoSuportadoListaOsPermitidosNoCabecalhoAllow() {
+        var resposta = handler.handleMethodNotSupported(
+                new HttpRequestMethodNotSupportedException("POST", java.util.List.of("GET", "PUT")));
+
+        assertEquals(405, resposta.getStatusCode().value());
+        assertEquals("GET,PUT", String.join(",", resposta.getHeaders().getAllow().stream().map(Object::toString).toList()));
+    }
+
+    @Test
     void contentTypeNaoSuportadoRetorna415() {
         var resposta = handler.handleMediaTypeNotSupported(new HttpMediaTypeNotSupportedException("text/plain"));
 
