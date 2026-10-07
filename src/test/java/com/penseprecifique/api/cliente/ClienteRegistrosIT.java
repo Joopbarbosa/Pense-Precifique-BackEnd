@@ -164,6 +164,24 @@ class ClienteRegistrosIT {
         assertNull(orc1.pago());
     }
 
+    /** #763 — itens da venda do Caixa saem na ordem em que foram lançados (antes dependia da ordem do PostgreSQL). */
+    @Test
+    void resumoDosItensDaVendaDoCaixaSegueAOrdemDeLancamento() {
+        Produto cartao = produto(3, "Cartão");
+        Produto caixa = produto(4, "Caixa grande");
+        VendaCaixa cx3 = venda(StatusVendaCaixa.CONCLUIDA, "60.00", LocalDateTime.of(2026, 5, 22, 10, 0));
+        for (Object[] item : new Object[][] {{cartao, 2}, {laco, 3}, {caixa, 1}}) {
+            vendaCaixaItemRepository.save(VendaCaixaItem.builder().vendaCaixa(cx3).produto((Produto) item[0])
+                    .quantidade(BigDecimal.valueOf((int) item[1])).precoUnitario(BigDecimal.TEN)
+                    .subtotal(BigDecimal.TEN).build());
+        }
+        for (int repeticao = 0; repeticao < 3; repeticao++) {
+            RegistroCadastroResponse r = cliente(null, null, false, null, null, null, PageRequest.of(0, 20)).stream()
+                    .filter(x -> x.identificador().equals("CX-" + cx3.getNumero())).findFirst().orElseThrow();
+            assertEquals("Cartão ×2, Laço ×3, Caixa grande ×1", r.resumoItens());
+        }
+    }
+
     @Test
     void somenteComprasEPeriodoDoMesDoGrafico() {
         // Clique na barra de maio no gráfico: só o que conta como compra, dentro do mês.
