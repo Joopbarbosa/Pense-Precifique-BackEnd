@@ -30,6 +30,7 @@ public class FornecedorInsumoController {
         return ResponseEntity.ok(fornecedorInsumoService.listar(fornecedorId, insumoId));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<FornecedorInsumoResponse> criar(@Valid @RequestBody FornecedorInsumoRequest request) {
         return ResponseEntity.status(201).body(fornecedorInsumoService.criar(request));

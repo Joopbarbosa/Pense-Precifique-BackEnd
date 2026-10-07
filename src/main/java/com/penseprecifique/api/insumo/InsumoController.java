@@ -47,6 +47,7 @@ public class InsumoController {
         return ResponseEntity.ok(insumoService.contagens());
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<InsumoResponseDTO> cadastrar(@Valid @RequestBody InsumoCreateRequestDTO request) {
         return ResponseEntity.status(201).body(insumoService.cadastrar(request));
@@ -84,6 +85,7 @@ public class InsumoController {
         return ResponseEntity.ok(insumoService.listarMovimentacoes(id, pageable));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/baixa-manual")
     public ResponseEntity<MovimentacaoInsumoResponseDTO> baixaManual(
             @PathVariable UUID id,

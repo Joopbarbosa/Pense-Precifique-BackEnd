@@ -34,6 +34,7 @@ public class CatalogoController {
         return ResponseEntity.ok(catalogoService.buscarPorId(id));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<CatalogoResponse> cadastrar(@Valid @RequestBody CatalogoRequest request) {
         return ResponseEntity.status(201).body(catalogoService.cadastrar(request));
@@ -56,6 +57,7 @@ public class CatalogoController {
         return ResponseEntity.ok(catalogoService.reativar(id));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/duplicar")
     public ResponseEntity<CatalogoResponse> duplicar(
             @PathVariable UUID id,

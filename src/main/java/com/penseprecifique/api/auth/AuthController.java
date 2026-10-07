@@ -19,6 +19,7 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/register")
     @Operation(summary = "Cadastrar novo usuário")
     public ResponseEntity<AuthResponseDTO> register(@Valid @RequestBody CadastroRequestDTO request) {

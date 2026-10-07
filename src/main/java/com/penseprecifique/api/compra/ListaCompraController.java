@@ -38,12 +38,14 @@ public class ListaCompraController {
         return ResponseEntity.ok(listaCompraService.previa(abaixoMinimo, estoqueNegativo, fornecedorId, insumoIds));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<ListaCompraResponse> gerar(@Valid @RequestBody GerarListaCompraRequest request) {
         return ResponseEntity.status(201).body(listaCompraService.gerar(request));
     }
 
     /** #596/RN-NOVA-41 — "Salvar rascunho" (LST-N em RASCUNHO; quantidade pode ficar vazia). */
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/rascunho")
     public ResponseEntity<ListaCompraResponse> salvarRascunho(@Valid @RequestBody GerarListaCompraRequest request) {
         return ResponseEntity.status(201).body(listaCompraService.salvarRascunho(request));
@@ -80,6 +82,7 @@ public class ListaCompraController {
         return ResponseEntity.ok(listaCompraService.buscar(id));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/criar-compra")
     public ResponseEntity<CompraResponse> criarCompra(@PathVariable UUID id) {
         return ResponseEntity.status(201).body(listaCompraService.criarCompra(id));

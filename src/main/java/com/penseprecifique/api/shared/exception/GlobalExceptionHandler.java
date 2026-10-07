@@ -81,6 +81,21 @@ public class GlobalExceptionHandler {
                 "Erro de validação", HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), fieldErrors));
     }
 
+    /**
+     * #784 — NUL (0x00) em texto de corpo JSON chega ao PostgreSQL e volta como erro de acesso a dados; é entrada
+     * inválida (400), não falha interna. Outros erros de acesso a dados continuam sendo tratados como antes (500).
+     */
+    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    public ResponseEntity<ErrorResponseDTO> handleDataAccess(org.springframework.dao.DataAccessException ex) {
+        for (Throwable causa = ex; causa != null; causa = causa.getCause()) {
+            if (causa.getMessage() != null && causa.getMessage().contains("0x00")) {
+                return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                        "O texto enviado contém caracteres inválidos.", HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), null));
+            }
+        }
+        return handleGenericException(ex);
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponseDTO> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
         String mensagem = "Corpo da requisição inválido.";

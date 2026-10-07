@@ -27,6 +27,7 @@ public class AvancaStatusRequest {
     private boolean estornarSinal;
     private LocalDateTime dataEstornoSinal;
 
+    @io.swagger.v3.oas.annotations.media.Schema(minLength = 30, maxLength = LimitesTexto.DESCRICAO_MAX) // #788: mínimo no contrato
     @Size(min = 30, message = "A justificativa deve ter no mínimo 30 caracteres")
     @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String justificativa;
