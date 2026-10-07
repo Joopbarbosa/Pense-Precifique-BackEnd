@@ -3,7 +3,7 @@ package com.penseprecifique.api.compra.nota;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.penseprecifique.api.infra.storage.R2StorageClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -29,7 +29,7 @@ abstract class NotaServicosSimulados {
         }));
     }
 
-    @MockBean R2StorageClient r2StorageClient;
+    @MockitoBean R2StorageClient r2StorageClient;
 
     @DynamicPropertySource
     static void propriedades(DynamicPropertyRegistry registry) {

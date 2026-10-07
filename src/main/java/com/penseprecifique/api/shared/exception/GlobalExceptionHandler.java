@@ -1,7 +1,7 @@
 package com.penseprecifique.api.shared.exception;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.InvalidFormatException;
 import com.penseprecifique.api.shared.dto.response.ErrorResponseDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
 
         if (ex.getCause() instanceof InvalidFormatException invalidFormatException) {
             String campo = invalidFormatException.getPath().stream()
-                    .map(JsonMappingException.Reference::getFieldName)
+                    .map(JacksonException.Reference::getPropertyName)
                     .filter(Objects::nonNull)
                     .reduce((primeiro, ultimo) -> ultimo)
                     .orElse(null);

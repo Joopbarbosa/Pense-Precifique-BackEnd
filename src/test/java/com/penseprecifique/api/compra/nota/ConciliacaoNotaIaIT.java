@@ -1,6 +1,6 @@
 package com.penseprecifique.api.compra.nota;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -70,9 +70,9 @@ class ConciliacaoNotaIaIT extends NotaServicosSimulados {
                 .unidadeMedida(un).estoqueAtual(BigDecimal.ZERO).custoUnitario(BigDecimal.ONE).build());
     }
 
-    private static List<String> nomesDosCampos(com.fasterxml.jackson.databind.JsonNode no) {
+    private static List<String> nomesDosCampos(tools.jackson.databind.JsonNode no) {
         List<String> campos = new java.util.ArrayList<>();
-        no.fieldNames().forEachRemaining(campos::add);
+        campos.addAll(no.propertyNames());
         return campos;
     }
 

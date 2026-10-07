@@ -1,6 +1,6 @@
 package com.penseprecifique.api.compra.nota;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.compra.CompraService;
@@ -79,7 +79,7 @@ class HistoricoVinculoNotaIT extends NotaServicosSimulados {
     private UUID rascunho() throws Exception {
         NotaLida nota = nota();
         LEITOR.stubFor(post(urlEqualTo("/v1/leituras")).willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
-                .withBody(new ObjectMapper().findAndRegisterModules().writeValueAsString(nota))));
+                .withBody(JsonMapper.builder().build().writeValueAsString(nota))));
         var leitura = notas.ler("NFCE", null, nota.chaveAcesso(), null, false);
         return notas.criarRascunho(new NotaRascunhoRequest(leitura.nota(), leitura.assinatura(),
                 List.of(new NotaRascunhoRequest.Escolha(0, azul.getId(), BigDecimal.ONE, false)),

@@ -1,6 +1,6 @@
 package com.penseprecifique.api.insumo;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;

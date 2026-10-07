@@ -1,6 +1,6 @@
 package com.penseprecifique.api.producao;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
@@ -17,7 +17,7 @@ import com.penseprecifique.api.shared.dto.response.producao.ProducaoDetalheRespo
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoProdutoResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
