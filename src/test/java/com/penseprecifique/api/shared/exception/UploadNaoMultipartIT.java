@@ -92,7 +92,7 @@ class UploadNaoMultipartIT {
                 .senhaHash("x").ativo(true).build());
         String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
 
-        for (String corpo : new String[] {"[{\"a\":{\"b\":false}}]", "[{}]", "[1,2]", "{}"}) {
+        for (String corpo : new String[] {"[{\"a\":{\"b\":false}}]", "[{}]", "[1,2]", "{}", "[null]"}) {
             mockMvc.perform(post("/orcamentos/simular-alertas").header("Authorization", token)
                             .contentType(MediaType.APPLICATION_JSON).content(corpo))
                     .andExpect(status().isBadRequest())
@@ -100,7 +100,7 @@ class UploadNaoMultipartIT {
         }
         for (String corpo : new String[] {
                 "[{\"produtoId\":\"9d54b643-0e9c-34aa-a802-8648b1ffee65\"},{\"produtoId\":\"923867b7-3d23-45c3-bea2-b9dd6010c663\"}]",
-                "[{}]", "[1]"}) {
+                "[{}]", "[1]", "[null]"}) {
             mockMvc.perform(post("/producoes/simular-alertas").header("Authorization", token)
                             .contentType(MediaType.APPLICATION_JSON).content(corpo))
                     .andExpect(status().isBadRequest())
