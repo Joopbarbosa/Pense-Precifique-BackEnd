@@ -50,7 +50,11 @@ public class ProdutoRequest {
      */
     private Boolean fracionavel;
 
-    @NotNull
     @Valid
     private List<FichaTecnicaItemRequest> fichaTecnica = new ArrayList<>();
+
+    /** #811 — ausente ou nulo equivale a ficha técnica vazia (o contrato declara o campo opcional). */
+    public void setFichaTecnica(List<FichaTecnicaItemRequest> fichaTecnica) {
+        this.fichaTecnica = fichaTecnica == null ? new ArrayList<>() : fichaTecnica;
+    }
 }
