@@ -19,7 +19,6 @@ public record GerarListaCompraRequest(
             @NotNull(message = "Escolha o insumo")
             UUID insumoId,
 
-            @io.swagger.v3.oas.annotations.media.Schema(multipleOf = 0.0001)
             @Digits(integer = 11, fraction = 4, message = "Quantidade com no máximo 4 casas decimais")
             BigDecimal quantidade,
 

@@ -12,6 +12,8 @@ import lombok.Setter;
  * #483 (V0.15.0) — todo campo de texto tem {@code @Size} alinhado à coluna e recusa caractere nulo:
  * sem isso, o payload do fuzzing chegava ao Postgres e voltava 500 (ANALYSIS #483).
  */
+@io.swagger.v3.oas.annotations.media.Schema(description = "Regra CLI-002: pelo menos um dos papéis, ehCliente ou ehFornecedor, precisa ser verdadeiro; "
+        + "os dois falsos são recusados (400). A regra relaciona dois campos e não cabe nas restrições do schema.")
 @Getter
 @Setter
 public class ClienteRequest {

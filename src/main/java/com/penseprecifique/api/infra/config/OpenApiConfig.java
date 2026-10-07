@@ -200,11 +200,6 @@ public class OpenApiConfig {
         Map<String, Schema> propriedades = (Map<String, Schema>) (Map) esquema.getProperties();
         for (Map.Entry<String, Schema> par : new ArrayList<>(propriedades.entrySet())) {
             Schema<?> p = par.getValue();
-            // #812 — elemento nulo de lista de entrada é descartado (JacksonConfig): o contrato o aceita.
-            if (entrada && p.getTypes() != null && p.getTypes().contains("array") && p.getItems() != null
-                    && !jaAceitaNulo(p.getItems())) {
-                ((Schema) p).setItems(new Schema<>().anyOf(List.of(p.getItems(), new Schema<>().types(Set.of("null")))));
-            }
             if (obrigatorios.contains(par.getKey()) || jaAceitaNulo(p)) {
                 continue;
             }
@@ -258,7 +253,7 @@ public class OpenApiConfig {
     private static void politicaGeral(io.swagger.v3.oas.models.OpenAPI openApi) {
         String politica = "Política de entrada JSON: os campos escalares aceitam o valor convertido (texto numérico em campo "
                 + "numérico e número em campo de texto); propriedades desconhecidas são ignoradas; texto vazio em campo "
-                + "numérico equivale a ausente; elementos nulos de lista são descartados; nulo em campo primitivo vira o valor padrão.";
+                + "numérico equivale a ausente; elementos nulos de lista são recusados (400); nulo em campo primitivo vira o valor padrão.";
         if (openApi.getInfo() == null) {
             openApi.setInfo(new io.swagger.v3.oas.models.info.Info().title("Pense & Precifique API").version("0.16.0"));
         }

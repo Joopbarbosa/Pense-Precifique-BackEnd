@@ -189,17 +189,24 @@ class OpenApiContratoIT {
         }
     }
 
-    /** #812 e #813 — itens nulos de lista de entrada e precisão decimal declarados no contrato. */
+    /** #812, #813, #815, #816, #817 e #818 — listas sem itens nulos, restrições numéricas e regra de papéis no contrato. */
     @Test
-    void contratoDeclaraItensNulosEPrecisaoDecimal() throws Exception {
+    void contratoDeclaraRestricoesNumericasListasERegraDePapeis() throws Exception {
         JsonNode schemas = docs().get("components").get("schemas");
         JsonNode itens = schemas.get("ProdutoRequest").get("properties").get("fichaTecnica").get("items");
-        assertTrue(itens.toString().contains("\"null\""), "fichaTecnica.items: " + itens);
-        JsonNode linha = schemas.get("Linha");
-        assertTrue(linha != null && linha.get("properties").get("quantidade").toString().contains("\"multipleOf\":1.0E-4"),
-                "Linha.quantidade: " + (linha == null ? null : linha.get("properties").get("quantidade")));
-        assertTrue(schemas.get("CompraItemRequest").get("properties").get("precoTotal").toString().contains("\"multipleOf\":0.01"),
-                "CompraItemRequest.precoTotal: " + schemas.get("CompraItemRequest").get("properties").get("precoTotal"));
+        assertTrue(!itens.toString().contains("\"null\""), "fichaTecnica.items não aceita nulo: " + itens);
+        JsonNode quantidade = schemas.get("Linha").get("properties").get("quantidade").toString().contains("anyOf")
+                ? schemas.get("Linha").get("properties").get("quantidade").get("anyOf").get(0)
+                : schemas.get("Linha").get("properties").get("quantidade");
+        assertEquals(1.0E-4, quantidade.get("multipleOf").asDouble(), 1e-12);
+        assertEquals(99999999999.9999, quantidade.get("maximum").asDouble(), 1e-3);
+        JsonNode preco = schemas.get("CompraItemRequest").get("properties").get("precoTotal");
+        JsonNode precoNumero = preco.has("anyOf") ? preco.get("anyOf").get(0) : preco;
+        assertEquals(0.01, precoNumero.get("multipleOf").asDouble(), 1e-12);
+        JsonNode consumo = schemas.get("ConsumoRealRequest").get("properties").get("quantidadeConsumida");
+        JsonNode consumoNumero = consumo.has("anyOf") ? consumo.get("anyOf").get(0) : consumo;
+        assertEquals(0, consumoNumero.get("minimum").asInt(), consumo.toString());
+        assertTrue(schemas.get("ClienteRequest").get("description").asString().contains("CLI-002"));
     }
 
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
