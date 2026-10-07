@@ -150,6 +150,9 @@ class OpenApiContratoIT {
                 "margemLucro deve aceitar texto vazio: " + schemas.get("ProdutoRequest").get("properties").get("margemLucro"));
         JsonNode j = schemas.get("AvancaStatusRequest").get("properties").get("justificativa");
         assertEquals(30, j.get("minLength").asInt());
+        // #811 — ficha técnica é opcional no contrato, como a API aceita (ausente ou nula = vazia)
+        JsonNode obrigatorios = schemas.get("ProdutoRequest").get("required");
+        assertTrue(obrigatorios == null || !obrigatorios.toString().contains("fichaTecnica"), "required: " + obrigatorios);
         JsonNode criar = docs.get("paths").get("/produtos").get("post").get("responses");
         assertTrue(criar.has("201") && !criar.has("200"), criar.propertyNames().toString());
         for (var par : List.of(List.of("/insumos", "incluirInativos"), List.of("/compras", "insumoId"), List.of("/listas-compra/previa", "insumoIds"))) {
