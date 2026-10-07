@@ -77,6 +77,7 @@ public class OpenApiConfig {
                 schemas.forEach((nome, schema) -> openApi.getComponents().addSchemas(nome, schema));
                 ajustarErroPadrao(openApi.getComponents().getSchemas().get("ErrorResponseDTO"));
                 ajustarMaiorAumento(openApi.getComponents().getSchemas().get("DashboardComprasResponse"));
+                openApi.getComponents().getSchemas().forEach(OpenApiConfig::aceitarNulosOpcionais);
             }
             if (openApi.getPaths() == null) {
                 return;
@@ -106,21 +107,22 @@ public class OpenApiConfig {
             if ("pageable".equals(parametro.getName())) {
                 ajustados.add(new Parameter().name("page").in("query").required(false)
                         .description("Página, a partir de 0. Valor inválido (negativo) usa a página 0.")
-                        .schema(new Schema<Integer>().type("integer")));
+                        .schema(new Schema<Integer>().types(Set.of("integer"))));
                 ajustados.add(new Parameter().name("size").in("query").required(false)
                         .description("Itens por página. Valor menor que 1 usa o padrão do endereço.")
-                        .schema(new Schema<Integer>().type("integer")));
+                        .schema(new Schema<Integer>().types(Set.of("integer"))));
                 ajustados.add(new Parameter().name("sort").in("query").required(false)
                         .description("Ordenação: campo,asc ou campo,desc. Campo desconhecido é recusado (400).")
-                        .schema(new Schema<String>().type("array").items(new Schema<String>().type("string"))));
+                        .schema(new Schema<String>().types(Set.of("array")).items(new Schema<String>().types(Set.of("string")))));
                 continue;
             }
-            Schema<?> esquema = parametro.getSchema();
-            if (esquema != null && "date".equals(esquema.getFormat())) {
+            // #787: o Spring converte valor vazio de parâmetro opcional (boolean, UUID, lista, data, enum) em "ausente".
+            if ("query".equals(parametro.getIn()) && !Boolean.TRUE.equals(parametro.getRequired())) {
                 parametro.setAllowEmptyValue(true);
-                if (temDe && "ate".equals(parametro.getName())) {
-                    parametro.setDescription("Data final. Não pode ser anterior a 'de' (400, 'Período inválido' ou parâmetros inválidos).");
-                }
+            }
+            Schema<?> esquema = parametro.getSchema();
+            if (esquema != null && "date".equals(esquema.getFormat()) && temDe && "ate".equals(parametro.getName())) {
+                parametro.setDescription("Data final. Não pode ser anterior a 'de' (400, 'Período inválido' ou parâmetros inválidos).");
             }
             ajustados.add(parametro);
         }
@@ -179,5 +181,51 @@ public class OpenApiConfig {
         tipos.add("null");
         propriedade.setType(null);
         propriedade.setTypes(tipos);
+    }
+
+    /**
+     * #786 e #789 — o Jackson devolve {@code null} em todo campo não preenchido e aceita {@code null} (e, em número,
+     * texto vazio) em todo campo de entrada que não é obrigatório. Campo obrigatório é o que a anotação
+     * {@code @NotNull}/{@code @NotBlank} marca em {@code required}; os demais aceitam nulo no contrato.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void aceitarNulosOpcionais(String nome, Schema<?> esquema) {
+        if (esquema.getProperties() == null) {
+            return;
+        }
+        List<String> obrigatorios = esquema.getRequired() != null ? esquema.getRequired() : List.of();
+        boolean entrada = nome.contains("Request");
+        Map<String, Schema> propriedades = (Map<String, Schema>) (Map) esquema.getProperties();
+        for (Map.Entry<String, Schema> par : new ArrayList<>(propriedades.entrySet())) {
+            Schema<?> p = par.getValue();
+            if (obrigatorios.contains(par.getKey()) || jaAceitaNulo(p)) {
+                continue;
+            }
+            boolean numero = p.getTypes() != null && (p.getTypes().contains("number") || p.getTypes().contains("integer"));
+            if (p.get$ref() != null || p.getAnyOf() != null || p.getOneOf() != null || p.getAllOf() != null
+                    || (entrada && numero)) {
+                List<Schema> alternativas = new ArrayList<>();
+                alternativas.add(p);
+                if (entrada && numero) {
+                    alternativas.add(new Schema<String>().types(Set.of("string")).maxLength(0)); // "" vira nulo no Jackson
+                }
+                alternativas.add(new Schema<>().types(Set.of("null")));
+                propriedades.put(par.getKey(), new Schema<>().anyOf(alternativas));
+            } else {
+                aceitarNulo(p);
+                if (p.getEnum() != null && !p.getEnum().contains(null)) {
+                    List<Object> valores = new ArrayList<>(p.getEnum());
+                    valores.add(null);
+                    ((Schema) p).setEnum(valores);
+                }
+            }
+        }
+    }
+
+    private static boolean jaAceitaNulo(Schema<?> p) {
+        if (p.getTypes() != null && p.getTypes().contains("null")) {
+            return true;
+        }
+        return p.getAnyOf() != null && p.getAnyOf().stream().anyMatch(a -> a.getTypes() != null && a.getTypes().contains("null"));
     }
 }

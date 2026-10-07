@@ -124,6 +124,46 @@ class OpenApiContratoIT {
         assertTrue(achou);
     }
 
+    /** #783, #786, #787, #788 e #789 — tipos de paginação, nulos opcionais, vazios, justificativa e 201 no contrato. */
+    @Test
+    void contratoDescreveTiposNulosVaziosJustificativaE201() throws Exception {
+        JsonNode docs = docs();
+        for (JsonNode p : docs.get("paths").get("/orcamentos").get("get").get("parameters")) {
+            String nome = p.get("name").asString();
+            if (nome.equals("page") || nome.equals("size")) {
+                assertEquals("integer", p.get("schema").get("type").asString(), p.toString());
+            }
+            if (nome.equals("sort")) {
+                assertEquals("array", p.get("schema").get("type").asString(), p.toString());
+                assertEquals("string", p.get("schema").get("items").get("type").asString(), p.toString());
+            }
+        }
+        JsonNode schemas = docs.get("components").get("schemas");
+        for (String campo : List.of("custoTotalLote", "estoqueMinimo", "precoSugerido", "rendimento", "fotoUrl")) {
+            assertAceitaNulo(schemas.get("ProdutoResponse").get("properties").get(campo), "ProdutoResponse." + campo);
+        }
+        for (String campo : List.of("estoqueMinimo", "rendimento", "descricao", "fotoUrl")) {
+            assertAceitaNulo(schemas.get("ProdutoDetalheResponse").get("properties").get(campo), "ProdutoDetalheResponse." + campo);
+        }
+        assertAceitaNulo(schemas.get("ProdutoRequest").get("properties").get("estoqueMinimo"), "ProdutoRequest.estoqueMinimo");
+        assertTrue(schemas.get("ProdutoRequest").get("properties").get("margemLucro").toString().contains("\"maxLength\":0"),
+                "margemLucro deve aceitar texto vazio: " + schemas.get("ProdutoRequest").get("properties").get("margemLucro"));
+        JsonNode j = schemas.get("AvancaStatusRequest").get("properties").get("justificativa");
+        assertEquals(30, j.get("minLength").asInt());
+        JsonNode criar = docs.get("paths").get("/produtos").get("post").get("responses");
+        assertTrue(criar.has("201") && !criar.has("200"), criar.propertyNames().toString());
+        for (var par : List.of(List.of("/insumos", "incluirInativos"), List.of("/compras", "insumoId"), List.of("/listas-compra/previa", "insumoIds"))) {
+            boolean achou = false;
+            for (JsonNode p : docs.get("paths").get(par.get(0)).get("get").get("parameters")) {
+                if (par.get(1).equals(p.get("name").asString())) {
+                    assertTrue(p.get("allowEmptyValue").asBoolean(false), par + " " + p);
+                    achou = true;
+                }
+            }
+            assertTrue(achou, par.toString());
+        }
+    }
+
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
         String texto = propriedade.toString();
         assertTrue(texto.contains("\"null\"") || texto.contains("\"nullable\":true"), nome + " não aceita nulo: " + texto);

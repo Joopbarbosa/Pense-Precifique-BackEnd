@@ -74,6 +74,7 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.itensSemEstoque(id));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<OrcamentoDetalheResponse> criar(
             @Valid @RequestBody OrcamentoRequest request) {
@@ -87,6 +88,7 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.editar(id, request));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/duplicar")
     public ResponseEntity<OrcamentoDetalheResponse> duplicar(@PathVariable UUID id) {
         return ResponseEntity.status(201).body(orcamentoService.duplicar(id));
@@ -98,6 +100,7 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.simularAlertas(itens));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/vincular-producao")
     public ResponseEntity<List<OrcamentoProducaoResponse>> vincularProducao(
             @PathVariable UUID id,
@@ -134,6 +137,7 @@ public class OrcamentoController {
         return ResponseEntity.noContent().build();
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/criar-producao-vinculada")
     public ResponseEntity<List<OrcamentoProducaoResponse>> criarProducaoVinculada(
             @PathVariable UUID id,

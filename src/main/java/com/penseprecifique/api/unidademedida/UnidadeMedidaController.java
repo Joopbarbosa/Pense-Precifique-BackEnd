@@ -22,6 +22,7 @@ public class UnidadeMedidaController {
         return ResponseEntity.ok(unidadeMedidaService.listar());
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<UnidadeMedidaResponseDTO> cadastrar(@Valid @RequestBody UnidadeMedidaRequestDTO request) {
         return ResponseEntity.status(201).body(unidadeMedidaService.cadastrar(request));

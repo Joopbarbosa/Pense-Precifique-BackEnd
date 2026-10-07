@@ -51,6 +51,7 @@ public class ProdutoController {
         return ResponseEntity.ok(produtoService.buscarPorId(id));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<ProdutoDetalheResponse> cadastrar(@Valid @RequestBody ProdutoRequest request) {
         return ResponseEntity.status(201).body(produtoService.cadastrar(request));
@@ -106,6 +107,7 @@ public class ProdutoController {
         return ResponseEntity.ok(produtoService.listarMovimentacoes(id, pageable));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/baixa-manual")
     public ResponseEntity<MovimentacaoProdutoResponse> baixaManual(
             @PathVariable UUID id,
