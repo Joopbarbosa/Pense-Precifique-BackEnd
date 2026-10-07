@@ -12,8 +12,8 @@
 > Histórico de versões (V0.5 a V0.8.2) migrado para os `regras-*.md`/`decisoes-*.md` de cada
 > módulo em `docs-pense-precifique/` — não vive mais aqui. Ver seção 2.
 
-**Stack:** Java 21 · Spring Boot 3.5.16 (migrado de 3.3.5 na V0.15.0/#661; overrides de
-Tomcat/Jackson/Spring documentados no `pom.xml`) · PostgreSQL 16 (Docker) · JWT stateless (HS512) ·
+**Stack:** Java 21 · Spring Boot 4.0.8 / Spring Framework 7.0.9 (migrado de 3.5.16 na V0.16.0/#760; Jackson 3 em
+`tools.jackson.*`, JUnit 6, `@MockitoBean`, starters modulares; sem overrides de versão no `pom.xml`) · PostgreSQL 16 (Docker) · JWT stateless (HS512) ·
 Flyway (`resources/db/migration/`, número mais alto sempre via `ls`, não copiar aqui) · Maven
 (`./mvnw`) · Springdoc/Swagger só em `dev`.
 

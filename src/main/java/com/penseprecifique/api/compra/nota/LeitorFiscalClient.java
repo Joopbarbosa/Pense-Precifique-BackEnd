@@ -1,7 +1,7 @@
 package com.penseprecifique.api.compra.nota;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.shared.dto.leitorfiscal.NotaLida;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;

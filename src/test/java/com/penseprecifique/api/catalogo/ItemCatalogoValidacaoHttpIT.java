@@ -1,6 +1,6 @@
 package com.penseprecifique.api.catalogo;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.infra.security.JwtTokenProvider;
@@ -10,7 +10,7 @@ import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
