@@ -8,6 +8,9 @@ import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.apache.tomcat.util.http.InvalidParameterException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -199,18 +202,43 @@ public class GlobalExceptionHandler {
         ));
     }
 
-    /** #660 — JSON ou outro corpo não multipart em rota de upload é entrada inválida, não falha interna. */
+    /**
+     * #660 — JSON ou outro corpo não multipart em rota de upload é entrada inválida, não falha interna.
+     * #762 (achado Schemathesis da V0.16.0) — multipart malformado (ex.: sem boundary) também é 400; antes só a
+     * mensagem exata "Current request is not a multipart request" escapava do 500.
+     */
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ErrorResponseDTO> handleMultipartException(MultipartException ex) {
-        if (!"Current request is not a multipart request".equals(ex.getMessage())) {
-            return handleGenericException(ex);
-        }
+        String mensagem = "Current request is not a multipart request".equals(ex.getMessage())
+                ? "Arquivo não enviado corretamente. Envie o arquivo como formulário multipart."
+                : "Arquivo não enviado corretamente. Tente novamente.";
+        log.warn("Multipart inválido: {}", ex.getMessage());
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(
-                "Arquivo não enviado corretamente. Envie o arquivo como formulário multipart.",
-                HttpStatus.BAD_REQUEST.value(),
-                LocalDateTime.now(),
-                null
-        ));
+                mensagem, HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), null));
+    }
+
+    /** #762 — parâmetro de consulta com nome vazio (ex.: {@code ?=1}): o Tomcat recusa; é entrada inválida (400). */
+    @ExceptionHandler(InvalidParameterException.class)
+    public ResponseEntity<ErrorResponseDTO> handleInvalidParameter(InvalidParameterException ex) {
+        log.warn("Parâmetro de consulta inválido: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                "Os parâmetros da consulta são inválidos.", HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), null));
+    }
+
+    /** #762 — método HTTP fora do contrato do endereço é 405, não 500. */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(new ErrorResponseDTO(
+                "Esta operação não é permitida para este endereço.", HttpStatus.METHOD_NOT_ALLOWED.value(),
+                LocalDateTime.now(), null));
+    }
+
+    /** #762 — Content-Type que o endpoint não aceita é 415, não 500. */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(new ErrorResponseDTO(
+                "O tipo de conteúdo enviado não é aceito por este endereço.", HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(),
+                LocalDateTime.now(), null));
     }
 
     @ExceptionHandler(Exception.class)
