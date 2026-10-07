@@ -31,6 +31,8 @@ public class ErroDoServidorEmJson {
 
     public static class RelatorioDeErroJson extends ErrorReportValve {
 
+        private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(RelatorioDeErroJson.class);
+
         @Override
         protected void report(Request request, Response response, Throwable throwable) {
             int status = response.getStatus();
@@ -54,8 +56,9 @@ public class ErroDoServidorEmJson {
                         + LocalDateTime.now() + "\",\"fieldErrors\":null,\"titulo\":null,\"motivo\":null,"
                         + "\"comoResolver\":null,\"itens\":null}");
                 response.finishResponse();
-            } catch (IOException | IllegalStateException ignorada) {
-                // resposta já comprometida ou cliente desconectado: nada a fazer
+            } catch (IOException | IllegalStateException e) {
+                // resposta já comprometida ou cliente desconectado: só registra
+                LOG.debug("Resposta de erro do servidor não escrita: {}", e.toString());
             }
         }
     }
