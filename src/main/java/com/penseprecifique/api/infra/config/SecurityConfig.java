@@ -37,16 +37,33 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // #785: o redirecionamento de erro do contêiner (ex.: TRACE recusado pelo Tomcat) não carrega o token;
+                        // sem isto o status real (405) virava 401. O /error devolve só o status e uma mensagem fixa.
+                        .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/register").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html",
                                 "/api-docs/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, e) ->
-                                res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Não autorizado")))
+                                escreverErro(res, HttpServletResponse.SC_UNAUTHORIZED, "Não autorizado"))
+                        .accessDeniedHandler((req, res, e) ->
+                                escreverErro(res, HttpServletResponse.SC_FORBIDDEN, "Sem permissão para este recurso")))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * #781 — 401 e 403 da camada de segurança saem no mesmo formato JSON de {@code ErrorResponseDTO} que o OpenAPI
+     * declara (antes: corpo vazio, sem Content-Type). A mensagem é fixa: nenhum detalhe interno vai ao cliente.
+     */
+    private static void escreverErro(HttpServletResponse res, int status, String mensagem) throws java.io.IOException {
+        res.setStatus(status);
+        res.setContentType("application/json;charset=UTF-8");
+        res.getWriter().write("{\"message\":\"" + mensagem + "\",\"status\":" + status + ",\"timestamp\":\""
+                + java.time.LocalDateTime.now() + "\",\"fieldErrors\":null,\"titulo\":null,\"motivo\":null,"
+                + "\"comoResolver\":null,\"itens\":null}");
     }
 
     @Bean

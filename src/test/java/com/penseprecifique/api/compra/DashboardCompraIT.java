@@ -30,6 +30,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** V0.15.0 — #548 (RN-NOVA-15) e #577 (RN-NOVA-29). Cenários CEN-NOVO-24, 25, 40 e 41. */
@@ -220,5 +221,20 @@ class DashboardCompraIT {
                 () -> dashboardCompraService.evolucaoPreco(seis, null, null)).getMessage());
         assertEquals("Escolha pelo menos um insumo.", assertThrows(BusinessException.class,
                 () -> dashboardCompraService.evolucaoPreco(List.of(), null, null)).getMessage());
+    }
+
+    private static final String MSG_FAIXA = "As datas precisam estar entre 01/01/2000 e 31/12/2100.";
+
+    /** #769 — datas extremas devolvem "Período inválido" (400) em vez de estourar o timestamp do banco (500). */
+    @Test
+    void periodoForaDeDoisMilAteDoisMilECemERejeitado() {
+        UUID insumoId = insumo("A").getId();
+        assertEquals(MSG_FAIXA, assertThrows(BusinessException.class,
+                () -> dashboardCompraService.dashboard(LocalDate.of(845, 1, 16), LocalDate.of(9523, 8, 8))).getMessage());
+        assertEquals(MSG_FAIXA, assertThrows(BusinessException.class,
+                () -> dashboardCompraService.dashboard(LocalDate.of(1999, 12, 31), SET_30)).getMessage());
+        assertEquals(MSG_FAIXA, assertThrows(BusinessException.class,
+                () -> dashboardCompraService.evolucaoPreco(List.of(insumoId), SET_1, LocalDate.of(2101, 1, 1))).getMessage());
+        assertNotNull(dashboardCompraService.dashboard(LocalDate.of(2000, 1, 1), SET_30));
     }
 }

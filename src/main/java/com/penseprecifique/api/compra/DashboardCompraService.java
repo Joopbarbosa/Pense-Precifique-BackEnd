@@ -65,10 +65,24 @@ public class DashboardCompraService {
      * Período anterior: começando no dia 1, os mesmos N meses de calendário imediatamente antes (mês
      * atual → mês passado inteiro); senão, a mesma quantidade de dias imediatamente antes.
      */
+    private static final LocalDate PRIMEIRO_DIA_VALIDO = LocalDate.of(2000, 1, 1);
+    private static final LocalDate ULTIMO_DIA_VALIDO = LocalDate.of(2100, 12, 31);
+
+    /** #769 — datas fora de 2000–2100 estouravam o timestamp do banco (500); agora voltam como período inválido. */
+    private static void validarFaixa(LocalDate inicio, LocalDate fim) {
+        if (inicio.isBefore(PRIMEIRO_DIA_VALIDO) || fim.isAfter(ULTIMO_DIA_VALIDO)
+                || inicio.isAfter(ULTIMO_DIA_VALIDO) || fim.isBefore(PRIMEIRO_DIA_VALIDO)) {
+            throw BusinessException.explicado("Período inválido", "As datas precisam estar entre 01/01/2000 e 31/12/2100.",
+                    "O painel só calcula períodos dentro desse intervalo.",
+                    "Escolha datas entre os anos 2000 e 2100.");
+        }
+    }
+
     public DashboardComprasResponse dashboard(LocalDate de, LocalDate ate) {
         UUID usuarioId = usuarioId();
         LocalDate fim = ate != null ? ate : LocalDate.now();
         LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
+        validarFaixa(inicio, fim);
         if (inicio.isAfter(fim)) {
             throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
                     "O período vai da data inicial até a data final.",
@@ -160,6 +174,7 @@ public class DashboardCompraService {
         }
         LocalDate fim = ate != null ? ate : LocalDate.now();
         LocalDate inicio = de != null ? de : fim.minusMonths(3);
+        validarFaixa(inicio, fim);
         if (inicio.isAfter(fim)) {
             throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
                     "O período vai da data inicial até a data final.",

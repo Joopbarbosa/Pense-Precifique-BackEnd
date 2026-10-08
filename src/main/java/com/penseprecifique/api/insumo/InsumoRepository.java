@@ -22,7 +22,7 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
     // como bytea e `lower(bytea)` falha em runtime (só reproduz com busca=null, testado no fix).
     @Query("SELECT i FROM Insumo i WHERE i.usuario.id = :usuarioId AND i.deletedAt IS NULL " +
             "AND (:busca IS NULL OR LOWER(i.nome) LIKE LOWER(CONCAT('%', CAST(:busca AS string), '%'))) " +
-            "AND (:ativo IS NULL OR i.ativo = :ativo)")
+            "AND (:ativo IS NULL OR i.ativo = :ativo) ")
     Page<Insumo> buscarComFiltros(@Param("usuarioId") UUID usuarioId, @Param("busca") String busca,
             @Param("ativo") Boolean ativo, Pageable pageable);
 
@@ -31,9 +31,14 @@ public interface InsumoRepository extends JpaRepository<Insumo, UUID> {
     @EntityGraph(attributePaths = "unidadeMedida")
     Optional<Insumo> findByIdAndUsuarioIdAndDeletedAtIsNull(UUID id, UUID usuarioId);
 
+    @Query("SELECT (COUNT(i) > 0) FROM Insumo i WHERE i.nome = :nome "
+            + "AND COALESCE(i.marca, '') = COALESCE(:marca, '') AND i.usuario.id = :usuarioId AND i.deletedAt IS NULL")
     boolean existsByNomeAndMarcaAndUsuarioIdAndDeletedAtIsNull(
             String nome, String marca, UUID usuarioId);
 
+    @Query("SELECT (COUNT(i) > 0) FROM Insumo i WHERE i.nome = :nome "
+            + "AND COALESCE(i.marca, '') = COALESCE(:marca, '') AND i.usuario.id = :usuarioId "
+            + "AND i.id <> :id AND i.deletedAt IS NULL")
     boolean existsByNomeAndMarcaAndUsuarioIdAndIdNotAndDeletedAtIsNull(
             String nome, String marca, UUID usuarioId, UUID id);
 

@@ -25,6 +25,7 @@ public class ItemCatalogoController {
         return ResponseEntity.ok(itemCatalogoService.listarPorCatalogo(catalogoId));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<ItemCatalogoResponse> adicionar(
             @PathVariable UUID catalogoId,

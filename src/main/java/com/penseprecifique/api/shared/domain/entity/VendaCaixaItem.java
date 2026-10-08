@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -51,4 +52,11 @@ public class VendaCaixaItem {
      *  Nulo = venda anterior à V0.15.0 (CMV estimado, RN-NOVA-27). */
     @Column(name = "custo_material_unitario", precision = 15, scale = 4)
     private BigDecimal custoMaterialUnitario;
+
+    /**
+     * #763 (V0.16.0) — ordem de lançamento: carimbo gravado pelo banco ({@code clock_timestamp()}, V73), usado só
+     * para ordenar os itens da venda. Somente leitura para o JPA.
+     */
+    @Column(name = "created_at", insertable = false, updatable = false)
+    private LocalDateTime createdAt;
 }

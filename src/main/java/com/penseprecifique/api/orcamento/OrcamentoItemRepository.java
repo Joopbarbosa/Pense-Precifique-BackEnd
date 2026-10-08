@@ -32,7 +32,12 @@ public interface OrcamentoItemRepository extends JpaRepository<OrcamentoItem, UU
     """)
     List<Object[]> findTopProdutosMaisVendidos(@Param("uid") UUID uid, Pageable pageable);
 
-    /** #560/#451 (V0.15.0) — itens de vários orçamentos de uma vez (indicadores do cliente). */
+    /**
+     * #560/#451 (V0.15.0) — itens de vários orçamentos de uma vez (indicadores do cliente). #761 (V0.16.0): ordem de
+     * criação explícita; sem ORDER BY o PostgreSQL devolve em ordem de plano, e o resumo "Laço ×3, Caixa presente ×1"
+     * do histórico do cliente trocava de ordem.
+     */
     @EntityGraph(attributePaths = {"itemCatalogo", "produto"})
-    List<OrcamentoItem> findByOrcamentoIdIn(Collection<UUID> orcamentoIds);
+    @Query("SELECT oi FROM OrcamentoItem oi WHERE oi.orcamento.id IN :orcamentoIds ORDER BY oi.createdAt, oi.id")
+    List<OrcamentoItem> findByOrcamentoIdIn(@Param("orcamentoIds") Collection<UUID> orcamentoIds);
 }

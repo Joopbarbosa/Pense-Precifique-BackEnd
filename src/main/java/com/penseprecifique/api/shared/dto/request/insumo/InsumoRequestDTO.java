@@ -34,12 +34,8 @@ public record InsumoRequestDTO(
         BigDecimal estoqueMinimo,
 
         // #590/RN-NOVA-39 (V0.15.0) — opcional; nulo mantém a regra atual.
-        RegraPrecoReferencia regraPrecoReferencia
+        RegraPrecoReferencia regraPrecoReferencia,
+
+        Boolean qualquerMarca
 ) {
-    public InsumoRequestDTO(String nome, String marca, UUID unidadeMedidaId, Boolean fracionavel,
-                            TipoExibicaoQuantidade tipoExibicaoQuantidade, Boolean permitirEstoqueNegativo,
-                            BigDecimal estoqueAtual, BigDecimal estoqueMinimo) {
-        this(nome, marca, unidadeMedidaId, fracionavel, tipoExibicaoQuantidade, permitirEstoqueNegativo,
-                estoqueAtual, estoqueMinimo, null);
-    }
 }

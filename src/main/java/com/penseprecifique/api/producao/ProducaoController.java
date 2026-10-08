@@ -57,6 +57,7 @@ public class ProducaoController {
         return ResponseEntity.ok(producaoService.buscarPorId(id));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<ProducaoDetalheResponse> criar(@Valid @RequestBody CriarProducaoRequest request) {
         return ResponseEntity.status(201).body(producaoService.criarProducao(request));
@@ -78,7 +79,7 @@ public class ProducaoController {
 
     @PostMapping("/simular-alertas")
     public ResponseEntity<List<AlertaInsumoResponse>> simularAlertas(
-            @Valid @RequestBody List<ProducaoProdutoRequest> produtos) {
+            @RequestBody List<@jakarta.validation.constraints.NotNull @Valid ProducaoProdutoRequest> produtos) {
         return ResponseEntity.ok(producaoService.simularAlertas(produtos));
     }
 

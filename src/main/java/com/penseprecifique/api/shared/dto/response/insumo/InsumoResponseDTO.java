@@ -28,5 +28,6 @@ public record InsumoResponseDTO(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         // #590/RN-NOVA-39 (V0.15.0)
-        RegraPrecoReferencia regraPrecoReferencia
+        RegraPrecoReferencia regraPrecoReferencia,
+        boolean qualquerMarca
 ) {}

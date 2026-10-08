@@ -5,7 +5,7 @@ import com.penseprecifique.api.infra.security.JwtTokenProvider;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -62,4 +63,151 @@ class UploadNaoMultipartIT {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Parâmetro obrigatório ausente: 'produtoId'."));
     }
+
+    /** #762 — método e Content-Type fora do contrato respondem 405 e 415, não 500. */
+    @Test
+    void metodoEContentTypeForaDoContratoNaoViram500() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("metodo-ct-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(put("/usuarios/me").header("Authorization", token))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405));
+        // #767 — caminho inexistente com usuário autenticado é 404, não 500
+        mockMvc.perform(get("/rota-que-nao-existe").header("Authorization", token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+        mockMvc.perform(post("/auth/login").contentType(MediaType.TEXT_PLAIN).content("x"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.status").value(415));
+    }
+
+    /** #774 — lista inválida no corpo dos simuladores é 400 (era NullPointerException e HandlerMethodValidationException: 500). */
+    @Test
+    void simuladoresDeAlertaRecusamCorpoInvalidoComo400() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("simuladores-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        for (String corpo : new String[] {"[{\"a\":{\"b\":false}}]", "[{}]", "[1,2]", "{}", "[null]"}) {
+            mockMvc.perform(post("/orcamentos/simular-alertas").header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+        for (String corpo : new String[] {
+                "[{\"produtoId\":\"9d54b643-0e9c-34aa-a802-8648b1ffee65\"},{\"produtoId\":\"923867b7-3d23-45c3-bea2-b9dd6010c663\"}]",
+                "[{}]", "[1]", "[null]"}) {
+            mockMvc.perform(post("/producoes/simular-alertas").header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+    }
+
+    /** #775 — todo 405 diz no cabeçalho Allow quais métodos o endereço aceita. */
+    @Test
+    void metodoNaoPermitidoTrazOCabecalhoAllow() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("allow-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(post("/usuarios/me/senha").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", "PUT"));
+    }
+
+    /** #781 — 401 da camada de segurança sai em JSON (formato do ErrorResponseDTO), não vazio e sem Content-Type. */
+    @Test
+    void semTokenOuComTokenInvalidoRetorna401EmJson() throws Exception {
+        for (String cabecalho : new String[] {null, "Bearer token-invalido"}) {
+            var requisicao = get("/orcamentos");
+            if (cabecalho != null) {
+                requisicao = requisicao.header("Authorization", cabecalho);
+            }
+            mockMvc.perform(requisicao)
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                            .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.status").value(401))
+                    .andExpect(jsonPath("$.message").value("Não autorizado"));
+        }
+    }
+
+    @Autowired tools.jackson.databind.json.JsonMapper jsonMapper;
+
+    /** #801 — elemento nulo numa lista do corpo é descartado e vira erro de negócio (400), não NullPointerException (500). */
+    @Test
+    void listaComElementoNuloNoCorpoNaoVira500() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("lista-nula-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(post("/listas-compra").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itens\":[null]}"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    /** #806 — nulo em campo primitivo do corpo vira o valor padrão (o contrato diz que campo opcional aceita nulo). */
+    @Test
+    void nuloEmCampoPrimitivoNaoRecusaOCorpo() throws Exception {
+        var pedido = jsonMapper.readValue("{\"inicioAssimQueAprovado\":null}",
+                com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest.class);
+        org.junit.jupiter.api.Assertions.assertNotNull(pedido);
+    }
+
+    /** #802 — método sem mapeamento num caminho literal que também casa com "{id}" é 405 com Allow, não 400. */
+    @Test
+    void metodoNaoMapeadoEmCaminhoLiteralRetorna405() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("literal-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+
+        mockMvc.perform(put("/compras/confirmar").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().exists("Allow"));
+        mockMvc.perform(put("/compras/" + UUID.randomUUID()).header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().is4xxClientError());
+        mockMvc.perform(put("/compras/nao-e-uuid").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** #807, #808 e #809 — UUID em branco no caminho é 400; OPTIONS e método não mapeado seguem o caminho mais específico. */
+    @Test
+    void caminhoEmBrancoOptionsEMetodoEmCaminhoParcialmenteLiteral() throws Exception {
+        Usuario usuario = usuarioRepository.save(Usuario.builder()
+                .email("caminho-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String token = "Bearer " + jwtTokenProvider.generateToken(usuario);
+        String id = UUID.randomUUID().toString();
+
+        for (String rota : new String[] {"/orcamentos/{id}", "/orcamentos/{id}/pdf-multa/preview-html"}) {
+            mockMvc.perform(get(rota, " ").header("Authorization", token))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+        mockMvc.perform(put("/catalogos/" + id + "/itens/preview-preco").header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", org.hamcrest.Matchers.containsString("POST")));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options("/compras/confirmar")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", "OPTIONS,POST"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options("/clientes/contagens")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Allow", "GET,HEAD,OPTIONS"));
+    }
 }
+

@@ -58,7 +58,7 @@ class InsumoCadastroSemMovimentacaoAutomaticaIT {
         // R$ 45,00 ÷ 10 unidades = custo unitário R$ 4,50 — valores não-redondos de propósito.
         InsumoCreateRequestDTO request = new InsumoCreateRequestDTO(
                 "Papelão 30x30cm " + UUID.randomUUID(), null, unidadeMedida("un").getId(), true, null, true,
-                BigDecimal.ZERO, new BigDecimal("45.00"), new BigDecimal("10"));
+                BigDecimal.ZERO, new BigDecimal("45.00"), new BigDecimal("10"), null, null);
 
         InsumoResponseDTO criado = insumoService.cadastrar(request);
 

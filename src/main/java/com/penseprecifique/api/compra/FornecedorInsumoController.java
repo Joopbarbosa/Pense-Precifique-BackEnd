@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.request.compra.PrecoReferenciaRequest;
 import com.penseprecifique.api.shared.dto.response.compra.FornecedorInsumoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,11 +23,14 @@ public class FornecedorInsumoController {
     /** Exatamente um dos dois filtros: os insumos de um fornecedor, ou os fornecedores de um insumo. */
     @GetMapping
     public ResponseEntity<List<FornecedorInsumoResponse>> listar(
+            @Parameter(description = "Informe o fornecedor ou o insumo (ao menos um); sem nenhum, a resposta é 400")
             @RequestParam(required = false) UUID fornecedorId,
+            @Parameter(description = "Informe o fornecedor ou o insumo (ao menos um); sem nenhum, a resposta é 400")
             @RequestParam(required = false) UUID insumoId) {
         return ResponseEntity.ok(fornecedorInsumoService.listar(fornecedorId, insumoId));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<FornecedorInsumoResponse> criar(@Valid @RequestBody FornecedorInsumoRequest request) {
         return ResponseEntity.status(201).body(fornecedorInsumoService.criar(request));

@@ -102,7 +102,7 @@ class UnidadeMedidaServiceIT {
         UnidadeMedidaResponseDTO grama = unidadeMedidaService.cadastrar(new UnidadeMedidaRequestDTO("Grama", "g"));
         insumoService.cadastrar(new InsumoCreateRequestDTO(
                 "Farinha " + UUID.randomUUID(), null, grama.id(), true, null, true,
-                BigDecimal.ZERO, new BigDecimal("10.00"), new BigDecimal("1")));
+                BigDecimal.ZERO, new BigDecimal("10.00"), new BigDecimal("1"), null, null));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> unidadeMedidaService.excluir(grama.id()));
         assertEquals("Esta unidade está em uso por 1 ou mais insumos. Troque a unidade dos insumos vinculados antes de excluir.",

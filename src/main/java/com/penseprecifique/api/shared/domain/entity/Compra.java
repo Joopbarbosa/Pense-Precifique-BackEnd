@@ -2,6 +2,7 @@ package com.penseprecifique.api.shared.domain.entity;
 
 import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 
+import com.penseprecifique.api.shared.domain.enums.ComprovanteTipo;
 import com.penseprecifique.api.shared.domain.enums.OrigemCompra;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import jakarta.persistence.*;
@@ -81,6 +82,21 @@ public class Compra {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private OrigemCompra origem = OrigemCompra.MANUAL;
+
+    /** #683/DT-NOVA-10 (V0.16.0) — chave de acesso da nota (44 posições, maiúscula); nula nas compras manuais. */
+    @Column(name = "chave_acesso", length = 44)
+    private String chaveAcesso;
+
+    /** #683/DT-NOVA-10 — comprovante da compra por nota: link do QR ou arquivo original no armazenamento. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "comprovante_tipo", length = 10)
+    private ComprovanteTipo comprovanteTipo;
+
+    @Column(name = "comprovante_nome", length = 255)
+    private String comprovanteNome;
+
+    @Column(name = "comprovante_url", columnDefinition = "TEXT")
+    private String comprovanteUrl;
 
     // #596/RN-NOVA-41 (V0.15.0) — lista de onde a compra foi criada (RN-NOVA-13), para o status da lista.
     @ManyToOne(fetch = FetchType.LAZY)

@@ -85,6 +85,7 @@ public class CompraController {
     }
 
     /** "Salvar rascunho" de compra nova — o COM-N nasce aqui. */
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<CompraResponse> criarRascunho(@Valid @RequestBody CompraRequest request) {
         return ResponseEntity.status(201).body(compraService.criarRascunho(request));
@@ -102,6 +103,7 @@ public class CompraController {
     }
 
     /** Confirmar compra nova sem rascunho prévio (tudo ou nada: se falhar, nada é criado). */
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/confirmar")
     public ResponseEntity<CompraConfirmacaoResponse> confirmarNova(@Valid @RequestBody CompraRequest request) {
         return ResponseEntity.status(201).body(compraService.confirmarNova(request));
@@ -126,6 +128,7 @@ public class CompraController {
         return ResponseEntity.ok(compraService.cancelar(id, request));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/duplicar")
     public ResponseEntity<CompraResponse> duplicar(@PathVariable UUID id,
                                                    @RequestParam(defaultValue = "true") boolean manterDescontos) {
