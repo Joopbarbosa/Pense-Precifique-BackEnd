@@ -82,6 +82,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * #819 — valor que estoura a coluna numérica ("numeric field overflow") é entrada fora da faixa (400).
      * #784 — NUL (0x00) em texto de corpo JSON chega ao PostgreSQL e volta como erro de acesso a dados; é entrada
      * inválida (400), não falha interna. Outros erros de acesso a dados continuam sendo tratados como antes (500).
      */
@@ -91,6 +92,10 @@ public class GlobalExceptionHandler {
             if (causa.getMessage() != null && causa.getMessage().contains("0x00")) {
                 return ResponseEntity.badRequest().body(new ErrorResponseDTO(
                         "O texto enviado contém caracteres inválidos.", HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), null));
+            }
+            if (causa.getMessage() != null && causa.getMessage().contains("numeric field overflow")) {
+                return ResponseEntity.badRequest().body(new ErrorResponseDTO(
+                        "O valor numérico enviado está fora da faixa permitida.", HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), null));
             }
         }
         return handleGenericException(ex);

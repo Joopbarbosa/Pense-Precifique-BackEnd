@@ -4,6 +4,7 @@ import com.penseprecifique.api.shared.validation.LimitesTexto;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -20,6 +21,7 @@ public record BaixaManualInsumoRequestDTO(
 
         @NotNull(message = "A quantidade é obrigatória")
         @DecimalMin(value = "0.001", message = "A quantidade deve ser maior que zero")
+        @Digits(integer = 11, fraction = 4, message = "Quantidade com no máximo 11 dígitos inteiros e 4 casas decimais")
         BigDecimal quantidade,
 
         @NotNull(message = "O motivo é obrigatório")
