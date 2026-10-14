@@ -182,7 +182,7 @@ class HistoricoPrecoSugeridoIT {
 
         // CEN-NOVO-31 — margem 50% → 100%: 4,50 → 6,00
         produtoService.editar(laco.getId(), request("Laço grande", "100", "1.5"));
-        confere(linhasDePreco(laco).get(0), "4.50", "6.00", "PRODUTO_EDICAO", "PRO-" + laco.getNumero());
+        confere(linhasDePreco(laco).get(0), "4.50", "6.00", "PRODUTO_MARGEM", "PRO-" + laco.getNumero());
         assertEquals(2, linhasDePreco(laco).size());
     }
 

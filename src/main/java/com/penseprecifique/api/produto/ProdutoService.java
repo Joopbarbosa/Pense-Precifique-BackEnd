@@ -251,6 +251,7 @@ public class ProdutoService {
         // antes de qualquer alteração da edição.
         Set<UUID> afetadosPelaEdicao = comAncestrais(List.of(produto.getId()));
         Map<UUID, BigDecimal> precoSugeridoAntes = capturarPrecosSugeridos(afetadosPelaEdicao);
+        BigDecimal custoUnitarioAntes = custoUnitarioAoVivo(produto);
 
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
         BigDecimal margemLucroAntigo = produto.getMargemLucro();
@@ -293,7 +294,12 @@ public class ProdutoService {
         Set<UUID> paisAfetados = new HashSet<>(afetadosPelaEdicao);
         paisAfetados.remove(produto.getId());
         recalcularPersistidoEmOrdem(paisAfetados);
-        registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes, CausaPrecoSugerido.PRODUTO_EDICAO, produto.getId(),
+        // a causa é "mudança de margem" quando só a margem mexeu no preço sugerido (o custo ficou igual); senão, edição
+        boolean soMargem = margemLucroAntigo != null && produto.getMargemLucro() != null
+                && margemLucroAntigo.compareTo(produto.getMargemLucro()) != 0
+                && custoUnitarioAntes.compareTo(custoUnitario) == 0;
+        registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes,
+                soMargem ? CausaPrecoSugerido.PRODUTO_MARGEM : CausaPrecoSugerido.PRODUTO_EDICAO, produto.getId(),
                 IdentificadorFormatter.formatar("PRO", produto.getNumero()), Map.of());
 
         List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
@@ -675,6 +681,14 @@ public class ProdutoService {
         BigDecimal valorHora = buscarValorHora(produto.getUsuario().getId());
         BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
         return calcularPrecoSugerido(calcularCustoUnitario(custoTotalLote, produto.getRendimento()), produto.getMargemLucro());
+    }
+
+    /** #672 — custo unitário ao vivo (mesma conta do detalhe do produto). */
+    @Transactional(readOnly = true)
+    public BigDecimal custoUnitarioAoVivo(Produto produto) {
+        BigDecimal somaComponentes = fichaTecnicaService.recalcularPrecoCusto(produto.getId());
+        BigDecimal valorHora = buscarValorHora(produto.getUsuario().getId());
+        return calcularCustoUnitario(somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora)), produto.getRendimento());
     }
 
     /** #672 — preço sugerido (ao vivo) de cada produto informado; ignora excluídos. */

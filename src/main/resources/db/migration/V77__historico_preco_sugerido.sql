@@ -11,7 +11,7 @@ CREATE TABLE mudancas_preco_sugerido (
   referencia_texto VARCHAR(40),
   created_at       TIMESTAMP NOT NULL,
   CONSTRAINT chk_mudanca_preco_sugerido_causa CHECK (causa IN
-    ('COMPRA_ENTRADA', 'COMPRA_CANCELAMENTO', 'PRODUTO_EDICAO', 'INSUMO_SUBSTITUICAO', 'VALOR_HORA'))
+    ('COMPRA_ENTRADA', 'COMPRA_CANCELAMENTO', 'PRODUTO_EDICAO', 'PRODUTO_MARGEM', 'INSUMO_SUBSTITUICAO', 'VALOR_HORA'))
 );
 CREATE INDEX idx_mudancas_preco_sugerido_produto ON mudancas_preco_sugerido (produto_id, created_at DESC);
 
