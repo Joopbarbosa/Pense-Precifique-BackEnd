@@ -44,7 +44,9 @@ public class DashboardController {
             @RequestParam(required = false) List<String> status,
             @RequestParam(required = false) String busca,
             @RequestParam(defaultValue = "false") boolean somenteQueContam,
+            @RequestParam(required = false) String produtoId,
+            @RequestParam(required = false) String forma,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(dashboardVendasService.lista(de, ate, origem, status, busca, somenteQueContam, pageable));
+        return ResponseEntity.ok(dashboardVendasService.lista(de, ate, origem, status, busca, somenteQueContam, produtoId, forma, pageable));
     }
 }

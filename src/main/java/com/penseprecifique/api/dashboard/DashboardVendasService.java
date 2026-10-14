@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * #719/RN-NOVA-17 (V0.17.0, DT-NOVA-8 e 10) — Dashboard de Vendas: aba Gráficos (números, meses, origem, produtos mais vendidos e
@@ -79,12 +78,24 @@ public class DashboardVendasService {
      */
     public ListaVendasResponse lista(LocalDate de, LocalDate ate, TipoVendaCmv origem, Collection<String> status, String busca,
                                      boolean somenteQueContam, Pageable pageable) {
+        return lista(de, ate, origem, status, busca, somenteQueContam, null, null, pageable);
+    }
+
+    /**
+     * {@code produtoId} (id do produto/Catálogo, ou o nome quando a linha não tem id) e {@code forma} (forma de pagamento, inclusive
+     * "Não informada") abrem as vendas que formam aquele ranking; valem só sobre vendas que contam nos números (RN-NOVA-12).
+     */
+    public ListaVendasResponse lista(LocalDate de, LocalDate ate, TipoVendaCmv origem, Collection<String> status, String busca,
+                                     boolean somenteQueContam, String produtoId, String forma, Pageable pageable) {
         PeriodoDashboard p = PeriodoDashboard.de(de, ate);
         if (pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
             throw new BusinessException("Use uma página de 1 a 100 vendas.");
         }
         String termo = normalizar(busca);
+        boolean porRanking = (produtoId != null && !produtoId.isBlank()) || (forma != null && !forma.isBlank());
+        java.util.Set<String> queFormam = porRanking ? vendasQueFormam(p, produtoId, forma) : null;
         List<VendasService.LinhaLista> filtradas = vendasService.todas(usuarioId(), p.inicio(), p.fim()).stream()
+                .filter(l -> queFormam == null || queFormam.contains(l.origem() + "|" + l.id()))
                 .filter(l -> origem == null || l.origem() == origem)
                 .filter(l -> status == null || status.isEmpty() || status.contains(l.status()))
                 .filter(l -> !somenteQueContam || l.contaNosNumeros())
@@ -105,6 +116,16 @@ public class DashboardVendasService {
     }
 
     // ---------------------------------------------------------------------------------------------
+
+    private java.util.Set<String> vendasQueFormam(PeriodoDashboard p, String produtoId, String forma) {
+        return vendasService.vendas(usuarioId(), p.inicio(), p.fim()).stream()
+                .filter(v -> produtoId == null || produtoId.isBlank() || v.linhas().stream()
+                        .anyMatch(l -> produtoId.equals(String.valueOf(l.id())) || produtoId.equals(l.nome())))
+                .filter(v -> forma == null || forma.isBlank()
+                        || (v.pagamentos().isEmpty() ? NAO_INFORMADA.equals(forma) : v.pagamentos().stream().anyMatch(pg -> forma.equals(pg.forma()))))
+                .map(v -> v.tipo() + "|" + v.id())
+                .collect(java.util.stream.Collectors.toSet());
+    }
 
     private static List<VendasService.Venda> entre(List<VendasService.Venda> vendas, LocalDate de, LocalDate ate) {
         return vendas.stream().filter(v -> !v.data().isBefore(de) && !v.data().isAfter(ate)).toList();

@@ -167,6 +167,20 @@ class DashboardVendasIT {
     }
 
     @Test
+    void cliqueNoRankingDeProdutoEDeFormaAbreAsVendasQueFormamOValor() {
+        cenarioTodosOsStatus();
+
+        ListaVendasResponse porProduto = service.lista(OUT, OUT_FIM, null, null, null, true, produto.getId().toString(), null, PageRequest.of(0, 20));
+        assertEquals(2, porProduto.quantidadeFiltrada());
+        assertEquals(0, bd("145").compareTo(porProduto.totalFiltrado()));
+
+        ListaVendasResponse porForma = service.lista(OUT, OUT_FIM, null, null, null, true, null, "Pix", PageRequest.of(0, 20));
+        assertEquals(List.of("ORC-14"), porForma.vendas().getContent().stream().map(ListaVendasResponse.Linha::identificador).toList());
+        ListaVendasResponse semForma = service.lista(OUT, OUT_FIM, null, null, null, true, null, "Não informada", PageRequest.of(0, 20));
+        assertEquals(List.of("CX-2"), semForma.vendas().getContent().stream().map(ListaVendasResponse.Linha::identificador).toList());
+    }
+
+    @Test
     void buscaPorIdentificadorOuClienteESemAcentoEEntradaHostil() {
         cenarioTodosOsStatus();
 
