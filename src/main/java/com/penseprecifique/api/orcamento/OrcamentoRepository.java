@@ -80,4 +80,15 @@ public interface OrcamentoRepository extends JpaRepository<Orcamento, UUID> {
     /** #577/RN-NOVA-27 (V0.15.0) — vendas por orçamento no período do CMV (ENTREGUE pela data de entrega). */
     List<Orcamento> findByUsuarioIdAndStatusAndDeletedAtIsNullAndDataEntregaBetween(
             UUID usuarioId, StatusOrcamento status, LocalDateTime de, LocalDateTime ate);
+
+    /**
+     * #719/RN-NOVA-17 (V0.17.0) — orçamentos de qualquer status para a aba Vendas: ENTREGUE pela data de entrega e os demais
+     * pela data de criação.
+     */
+    @org.springframework.data.jpa.repository.Query("SELECT o FROM Orcamento o WHERE o.usuario.id = :usuarioId AND o.deletedAt IS NULL AND (" +
+            "(o.status = com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE AND o.dataEntrega BETWEEN :de AND :ate) OR " +
+            "(o.status <> com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE AND o.createdAt BETWEEN :de AND :ate))")
+    List<Orcamento> findParaListaVendas(@org.springframework.data.repository.query.Param("usuarioId") UUID usuarioId,
+                                        @org.springframework.data.repository.query.Param("de") LocalDateTime de,
+                                        @org.springframework.data.repository.query.Param("ate") LocalDateTime ate);
 }
