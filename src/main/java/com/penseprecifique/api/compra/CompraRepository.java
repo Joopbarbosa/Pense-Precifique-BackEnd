@@ -32,6 +32,8 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
     @Query(value = "SELECT c FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +
             "AND (:filtrarStatus = false OR c.status IN :statuses) " +
             "AND (:filtrarPago = false OR c.pago = :pago) " +
+            "AND (:somenteAtrasadas = false OR (c.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.PENDENTE_RECEBIMENTO " +
+            "     AND c.previsaoEntrega < :hoje)) " +
             "AND (:comDesconto = false OR c.descontoNota > 0 " +
             "     OR EXISTS (SELECT 1 FROM CompraItem ci5 WHERE ci5.compra = c AND ci5.descontoLinha > 0)) " +
             "AND (CAST(:de AS date) IS NULL OR c.dataCompra >= :de) " +
@@ -45,6 +47,8 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
             countQuery = "SELECT COUNT(c) FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +
             "AND (:filtrarStatus = false OR c.status IN :statuses) " +
             "AND (:filtrarPago = false OR c.pago = :pago) " +
+            "AND (:somenteAtrasadas = false OR (c.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.PENDENTE_RECEBIMENTO " +
+            "     AND c.previsaoEntrega < :hoje)) " +
             "AND (:comDesconto = false OR c.descontoNota > 0 " +
             "     OR EXISTS (SELECT 1 FROM CompraItem ci5 WHERE ci5.compra = c AND ci5.descontoLinha > 0)) " +
             "AND (CAST(:de AS date) IS NULL OR c.dataCompra >= :de) " +
@@ -70,6 +74,8 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
                                   @Param("filtrarBusca") boolean filtrarBusca,
                                   @Param("numeroBusca") Integer numeroBusca,
                                   @Param("busca") String busca,
+                                  @Param("somenteAtrasadas") boolean somenteAtrasadas,
+                                  @Param("hoje") LocalDate hoje,
                                   Pageable pageable);
 
     /** #683/RN-NOVA-5 — a compra viva (não excluída) da usuária para a chave de acesso, em qualquer status. */
@@ -78,6 +84,9 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
 
     /** #591/RN-NOVA-44 — contagem por status (total da conta, sem filtros). */
     long countByUsuarioIdAndStatusAndDeletedAtIsNull(UUID usuarioId, StatusCompra status);
+
+    /** #958/RN-NOVA-6 — pendentes de recebimento com previsão anterior a {@code hoje}. */
+    long countByUsuarioIdAndStatusAndPrevisaoEntregaBeforeAndDeletedAtIsNull(UUID usuarioId, StatusCompra status, LocalDate hoje);
 
     /** Compras (não excluídas) em que o cadastro é fornecedor no cabeçalho ou em alguma linha. */
     @Query("SELECT c FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +
