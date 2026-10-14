@@ -118,6 +118,13 @@ public class CompraController {
         return ResponseEntity.ok(compraService.confirmar(id, request));
     }
 
+    /** #959/RN-NOVA-7 — entrada da compra pendente de recebimento (compra inteira, tudo ou nada). */
+    @PostMapping("/{id}/entrada")
+    public ResponseEntity<CompraConfirmacaoResponse> darEntrada(@PathVariable UUID id,
+                                                                @Valid @RequestBody EntradaCompraRequest request) {
+        return ResponseEntity.ok(compraService.darEntrada(id, request));
+    }
+
     /** #544 — prévia do cancelamento: bloqueios (estoque negativo) e avisos (custo mantido). */
     @PostMapping("/{id}/simular-cancelamento")
     public ResponseEntity<SimulacaoCancelamentoResponse> simularCancelamento(@PathVariable UUID id) {

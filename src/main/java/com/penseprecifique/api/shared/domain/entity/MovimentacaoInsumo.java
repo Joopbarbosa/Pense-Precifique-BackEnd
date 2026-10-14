@@ -57,6 +57,10 @@ public class MovimentacaoInsumo {
     @Builder.Default
     private Boolean estornada = false;
 
+    /** #959/DT-NOVA-4 — data do recebimento (ou da compra, na entrega imediata), só para exibição; ordem e saldos seguem createdAt. */
+    @Column(name = "data_referencia")
+    private java.time.LocalDate dataReferencia;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

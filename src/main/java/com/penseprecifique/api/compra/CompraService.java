@@ -276,9 +276,15 @@ public class CompraService {
         for (CompraItem item : itens) {
             Insumo insumo = item.getInsumo();
             BigDecimal custoAnterior = insumo.getCustoUnitario();
+            // #959/DT-NOVA-2 — sem divergência de quantidade o cálculo recebe exatamente o que recebia (quantidade e
+            // total pago original); com divergência, quantidade recebida × preço unitário pago gravado.
+            boolean divergente = item.getQuantidadePedida() != null && item.getPrecoUnitarioPago() != null
+                    && item.getQuantidadePedida().compareTo(item.getQuantidade()) != 0;
+            BigDecimal valorParaCusto = divergente ? item.getQuantidade().multiply(item.getPrecoUnitarioPago()) : item.getPrecoTotal();
             BigDecimal novoCusto = CustoMedioPonderado.calcular(insumo.getEstoqueAtual(), custoAnterior,
-                    item.getQuantidade(), item.getPrecoTotal());
-            BigDecimal precoPago = CompraMapper.precoUnitario(item.getPrecoTotal(), item.getQuantidade());
+                    item.getQuantidade(), valorParaCusto);
+            BigDecimal precoPago = divergente ? item.getPrecoUnitarioPago()
+                    : CompraMapper.precoUnitario(item.getPrecoTotal(), item.getQuantidade());
 
             insumo.setCustoUnitario(novoCusto);
             insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(item.getQuantidade()));
@@ -292,6 +298,7 @@ public class CompraService {
                     .custoUnitario(novoCusto)
                     .referenciaId(compra.getId())
                     .referenciaTipo(ReferenciaMovimentacaoTipo.COMPRA)
+                    .dataReferencia(dataEntrada) // #959/DT-NOVA-4 — só exibição
                     .estornada(false)
                     .build());
 
@@ -318,6 +325,118 @@ public class CompraService {
 
         ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes));
         return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), impacto);
+    }
+
+    // --------------------------------------------------------------------------------- entrada (#959)
+
+    /**
+     * #959/RN-NOVA-7, DT-NOVA-2 — entrada da compra pendente: sempre a compra inteira, síncrona e numa transação
+     * (tudo ou nada). A quantidade recebida (maior que zero) pode diferir da pedida; o preço unitário pago é
+     * calculado sobre a quantidade pedida, gravado, e o valor da linha passa a ser recebida × esse preço.
+     */
+    public CompraConfirmacaoResponse darEntrada(UUID id, EntradaCompraRequest request) {
+        Usuario usuario = getUsuarioAutenticado();
+        Compra compra = buscarEntidade(id, usuario.getId());
+        if (compra.getStatus() != StatusCompra.PENDENTE_RECEBIMENTO) {
+            throw BusinessException.explicado("Entrada não permitida", "Só é possível dar entrada em uma compra pendente de recebimento.",
+                    "A entrada move para o estoque a mercadoria de uma compra que ainda não chegou; as demais compras já tiveram, ou nunca terão, entrada.",
+                    "Abra Minhas compras e escolha uma compra pendente de recebimento.");
+        }
+        List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
+        LocalDate recebimento = request.dataRecebimento();
+        if (recebimento.isAfter(LocalDate.now()) || recebimento.isBefore(compra.getDataCompra())) {
+            throw BusinessException.explicado("Data do recebimento",
+                    recebimento.isAfter(LocalDate.now()) ? "A data do recebimento não pode ser futura"
+                            : "A data do recebimento não pode ser anterior à data da compra",
+                    "A entrada registra uma mercadoria que já chegou, depois de a compra ter sido feita.",
+                    "Use a data de hoje ou a data em que a mercadoria chegou.");
+        }
+
+        Map<UUID, BigDecimal> recebidas = new LinkedHashMap<>();
+        Set<UUID> idsDaCompra = itens.stream().map(CompraItem::getId).collect(Collectors.toSet());
+        for (EntradaCompraRequest.ItemEntrada linha : request.itens()) {
+            if (!idsDaCompra.contains(linha.itemId())) {
+                throw new ResourceNotFoundException("Linha não encontrada na compra: " + linha.itemId());
+            }
+            recebidas.put(linha.itemId(), linha.quantidadeRecebida());
+        }
+
+        List<String> problemas = new ArrayList<>();
+        for (int i = 0; i < itens.size(); i++) {
+            CompraItem item = itens.get(i);
+            BigDecimal recebida = recebidas.getOrDefault(item.getId(), item.getQuantidade());
+            List<String> daLinha = new ArrayList<>();
+            if (recebida == null || recebida.signum() <= 0) {
+                daLinha.add("informe uma quantidade maior que zero; para tirar o item, edite a compra pendente");
+            }
+            if (!Boolean.TRUE.equals(item.getInsumo().getAtivo()) || item.getInsumo().getDeletedAt() != null) {
+                daLinha.add("insumo inativo");
+            }
+            if (!daLinha.isEmpty()) {
+                problemas.add(item.getInsumo().getNome() + ": " + String.join("; ", daLinha));
+            }
+        }
+        if (!problemas.isEmpty()) {
+            throw BusinessException.explicado("Entrada bloqueada", "Corrija as linhas abaixo para dar entrada na compra.",
+                    "A entrada vale para a compra inteira: se uma linha estiver inválida, nada entra no estoque.",
+                    "Informe a quantidade recebida maior que zero e reative os insumos inativos. Item que não veio: edite a compra pendente e remova a linha antes da entrada.")
+                    .comItens(problemas);
+        }
+
+        for (int i = 0; i < itens.size(); i++) {
+            CompraItem item = itens.get(i);
+            BigDecimal recebida = recebidas.getOrDefault(item.getId(), item.getQuantidade());
+            escalarLinha(item, recebida, i);
+        }
+        compra.setDescontoNota(itens.stream().map(CompraItem::getDescontoNota).reduce(BigDecimal.ZERO, BigDecimal::add));
+        if (compra.getDescontoNotaTipo() == com.penseprecifique.api.shared.domain.enums.TipoDesconto.VALOR
+                && compra.getDescontoNotaInformado() != null) {
+            compra.setDescontoNotaInformado(compra.getDescontoNota());
+        }
+        compraItemRepository.saveAll(itens);
+        return aplicarEntrada(compra, itens, usuario, recebimento);
+    }
+
+    /**
+     * #959/DT-NOVA-2 — grava o preço unitário pago (valor líquido ÷ quantidade pedida, 4 casas) e a quantidade pedida;
+     * se a recebida difere, a linha vira recebida × esse preço (2 casas), com preço cheio e desconto da linha na mesma
+     * razão. A diferença de centavos dos descontos vai para a parte do desconto da nota.
+     */
+    private static void escalarLinha(CompraItem item, BigDecimal recebida, int indice) {
+        BigDecimal pedida = item.getQuantidade();
+        BigDecimal unitario = CompraMapper.precoUnitario(item.getPrecoTotal(), pedida);
+        item.setPrecoUnitarioPago(unitario);
+        item.setQuantidadePedida(pedida);
+        if (recebida.compareTo(pedida) == 0) {
+            return;
+        }
+        BigDecimal razao = recebida.divide(pedida, 12, java.math.RoundingMode.HALF_UP);
+        BigDecimal total = recebida.multiply(unitario).setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal cheio = item.getPrecoCheio().multiply(razao).setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal descontoLinha = item.getDescontoLinha().multiply(razao).setScale(2, java.math.RoundingMode.HALF_UP);
+        if (total.signum() <= 0) {
+            throw BusinessException.explicado("Entrada bloqueada",
+                    "Linha " + (indice + 1) + " (" + item.getInsumo().getNome() + "): a quantidade recebida é pequena demais para o preço pago.",
+                    "O valor da linha é a quantidade recebida vezes o preço unitário pago e não pode zerar.",
+                    "Informe uma quantidade recebida maior.");
+        }
+        BigDecimal descontoNota = cheio.subtract(descontoLinha).subtract(total);
+        if (descontoNota.signum() < 0) {
+            descontoLinha = cheio.subtract(total);
+            descontoNota = BigDecimal.ZERO;
+            if (descontoLinha.signum() < 0) {
+                descontoLinha = BigDecimal.ZERO;
+                cheio = total;
+            }
+        }
+        item.setQuantidade(recebida);
+        item.setPrecoTotal(total);
+        item.setPrecoCheio(cheio);
+        item.setDescontoLinha(descontoLinha);
+        item.setDescontoNota(descontoNota);
+        if (item.getDescontoTipo() == com.penseprecifique.api.shared.domain.enums.TipoDesconto.VALOR && item.getDescontoInformado() != null) {
+            item.setDescontoInformado(descontoLinha);
+        }
     }
 
     private static List<ImpactoCompraService.MudancaCusto> mudancas(List<CompraItem> itens, Map<UUID, BigDecimal> custoAntes) {

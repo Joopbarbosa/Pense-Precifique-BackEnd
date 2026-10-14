@@ -585,7 +585,7 @@ public class PdfMapper {
                         i.getInsumo().getUnidadeMedida() != null ? i.getInsumo().getUnidadeMedida().getSigla() : null))
                     .precoTotal(formatarMoeda(i.getPrecoTotal()))
                     .precoUnitario(formatarMoedaUnitaria(
-                        com.penseprecifique.api.shared.mapper.CompraMapper.precoUnitario(i.getPrecoTotal(), i.getQuantidade())))
+                        com.penseprecifique.api.shared.mapper.CompraMapper.precoUnitarioExibido(i)))
                     .precoCheio(formatarMoeda(i.getPrecoCheio()))
                     .desconto(formatarMoeda(nz(i.getDescontoLinha()).add(nz(i.getDescontoNota()))))
                     .build())

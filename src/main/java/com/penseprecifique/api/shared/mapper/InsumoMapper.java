@@ -103,7 +103,8 @@ public class InsumoMapper {
                 mov.getReferenciaTipo(),
                 referencia,
                 mov.getEstornada(),
-                mov.getCreatedAt()
+                mov.getCreatedAt(),
+                mov.getDataReferencia()
         );
     }
 
