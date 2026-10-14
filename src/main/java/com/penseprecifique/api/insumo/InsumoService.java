@@ -34,6 +34,7 @@ import com.penseprecifique.api.shared.dto.response.insumo.ProdutoRelacionadoResp
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.InsumoMapper;
+import com.penseprecifique.api.produto.CausaPrecoSugerido;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.FichaTecnicaService;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -59,6 +60,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -96,6 +98,7 @@ public class InsumoService {
     private final CompraRepository compraRepository;
     private final VendaCaixaRepository vendaCaixaRepository;
     private final FornecedorInsumoService fornecedorInsumoService;
+    private final com.penseprecifique.api.produto.MudancaPrecoSugeridoInsumoRepository mudancaPrecoSugeridoInsumoRepository;
 
     @Transactional(readOnly = true)
     public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, Pageable pageable) {
@@ -334,6 +337,10 @@ public class InsumoService {
                     "As substituições precisam cobrir todos os produtos vinculados ao insumo antes de prosseguir.");
         }
 
+        // #672/DT-NOVA-6 — preço sugerido de antes (ao vivo) dos produtos vinculados e dos que os usam como componente
+        Set<UUID> afetados = produtoService.comAncestrais(produtoIdsVinculados);
+        Map<UUID, BigDecimal> precoSugeridoAntes = produtoService.capturarPrecosSugeridos(afetados);
+
         for (SubstituicaoInsumoRequestDTO substituicao : lista) {
             if (!produtoIdsVinculados.contains(substituicao.produtoId())) {
                 continue;
@@ -342,6 +349,13 @@ public class InsumoService {
                     substituicao.produtoId(), insumoId, substituicao.novoInsumoId(), usuarioId);
             produtoService.recalcularPrecoCustoPersistido(substituicao.produtoId());
         }
+
+        Set<UUID> paisAfetados = new java.util.HashSet<>(afetados);
+        paisAfetados.removeAll(produtoIdsVinculados);
+        produtoService.recalcularPersistidoEmOrdem(paisAfetados);
+        Insumo substituido = insumoRepository.findById(insumoId).orElseThrow();
+        produtoService.registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes, CausaPrecoSugerido.INSUMO_SUBSTITUICAO,
+                insumoId, IdentificadorFormatter.formatar("INS", substituido.getNumero()), Map.of());
     }
 
     /** V0.13.0 (#516, DT-NOVA-1) — vínculo novo: Insumo usado como componente de Item de Catálogo. */
@@ -417,7 +431,36 @@ public class InsumoService {
                 ReferenciaMovimentacaoTipo.COMPRA, numeroCompraPorId,
                 ReferenciaMovimentacaoTipo.CAIXA, numeroVendaPorId);
 
-        return movimentacoes.map(mov -> insumoMapper.toMovimentacaoResponse(mov, resolverReferencia(mov, numeros)));
+        List<MovimentacaoInsumoResponseDTO> linhas = new ArrayList<>(movimentacoes
+                .map(mov -> insumoMapper.toMovimentacaoResponse(mov, resolverReferencia(mov, numeros))).getContent());
+
+        // #672/DT-NOVA-7 — uma linha agregada por evento de custo ("Preço sugerido de N produtos mudou"), na janela de
+        // data/hora da página de estoque (primeira página até o presente, última até o começo).
+        if (!(movimentacoes.isEmpty() && pageable.getPageNumber() > 0)) {
+            java.time.LocalDateTime de = movimentacoes.isEmpty() || movimentacoes.isLast() ? java.time.LocalDateTime.of(1970, 1, 1, 0, 0)
+                    : movimentacoes.getContent().get(movimentacoes.getNumberOfElements() - 1).getCreatedAt();
+            java.time.LocalDateTime ate = movimentacoes.isEmpty() || movimentacoes.isFirst() ? java.time.LocalDateTime.of(9999, 12, 31, 23, 59)
+                    : movimentacoes.getContent().get(0).getCreatedAt();
+            Map<String, List<com.penseprecifique.api.produto.MudancaPrecoSugeridoInsumo>> porEvento = new java.util.LinkedHashMap<>();
+            for (var v : mudancaPrecoSugeridoInsumoRepository.findDoInsumoNaJanela(insumoId, de, ate)) {
+                porEvento.computeIfAbsent(v.getMudanca().getCausa() + "|" + v.getMudanca().getReferenciaId(), k -> new ArrayList<>()).add(v);
+            }
+            porEvento.values().forEach(vinculos -> {
+                var primeira = vinculos.get(0).getMudanca();
+                var produtos = vinculos.stream().map(v -> new PrecoSugeridoAgregadoResponse.ProdutoPrecoSugerido(
+                        v.getMudanca().getProduto().getId(),
+                        IdentificadorFormatter.formatar("PRO", v.getMudanca().getProduto().getNumero()),
+                        v.getMudanca().getProduto().getNome(), v.getMudanca().getValorAnterior(), v.getMudanca().getValorNovo()))
+                        .sorted(java.util.Comparator.comparing(PrecoSugeridoAgregadoResponse.ProdutoPrecoSugerido::nome))
+                        .toList();
+                linhas.add(new MovimentacaoInsumoResponseDTO(primeira.getId(), null, null, null, null, null,
+                        primeira.getReferenciaId(), null, primeira.getReferenciaTexto(), false, primeira.getCreatedAt(), null,
+                        "PRECO_SUGERIDO", new PrecoSugeridoAgregadoResponse(primeira.getCausa().name(),
+                                primeira.getReferenciaTexto(), produtos.size(), produtos)));
+            });
+            linhas.sort(java.util.Comparator.comparing(MovimentacaoInsumoResponseDTO::createdAt).reversed());
+        }
+        return new org.springframework.data.domain.PageImpl<>(linhas, pageable, movimentacoes.getTotalElements());
     }
 
     private Set<UUID> referenciaIdsDoTipo(Page<MovimentacaoInsumo> movimentacoes, ReferenciaMovimentacaoTipo tipo) {

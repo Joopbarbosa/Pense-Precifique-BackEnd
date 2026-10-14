@@ -7,6 +7,7 @@ import com.penseprecifique.api.insumo.CustoMedioPonderado;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.produto.CausaPrecoSugerido;
 import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.CompraItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -323,7 +324,8 @@ public class CompraService {
             }
         }
 
-        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes));
+        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes),
+                new ImpactoCompraService.EventoPreco(CausaPrecoSugerido.COMPRA_ENTRADA, compra.getId(), identificador(compra)));
         return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), impacto);
     }
 
@@ -594,7 +596,8 @@ public class CompraService {
         itens.stream().filter(i -> i.getFornecedor() != null)
                 .forEach(i -> fornecedorInsumoService.recalcular(i.getFornecedor(), i.getInsumo()));
 
-        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes));
+        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes),
+                new ImpactoCompraService.EventoPreco(CausaPrecoSugerido.COMPRA_CANCELAMENTO, compra.getId(), identificador(compra)));
         return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), impacto);
     }
 
