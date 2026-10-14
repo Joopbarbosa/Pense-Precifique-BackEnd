@@ -56,7 +56,10 @@ public class CompraMapper {
                 compra.getChaveAcesso(),
                 compra.getComprovanteTipo(),
                 compra.getComprovanteNome(),
-                compra.getComprovanteUrl());
+                compra.getComprovanteUrl(),
+                compra.getEntregaImediata(),
+                compra.getPrevisaoEntrega(),
+                compra.getDataEntrada());
     }
 
     /** #576 — soma dos descontos de linha e das partes da nota. */

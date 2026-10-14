@@ -108,6 +108,18 @@ public class Compra {
     @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.SMALLINT)
     private Integer parcelas;
 
+    /** #957/RN-NOVA-4 (V0.17.0) — nulo nas compras antigas (não se aplica); o registro novo grava sim ou não. */
+    @Column(name = "entrega_imediata")
+    private Boolean entregaImediata;
+
+    /** #957/RN-NOVA-4 — só quando a entrega não é imediata; exigida ao confirmar. */
+    @Column(name = "previsao_entrega")
+    private LocalDate previsaoEntrega;
+
+    /** #957/DT-NOVA-1 — data em que a compra passa a contar nos números (entrega imediata e antigas: a data da compra). */
+    @Column(name = "data_entrada")
+    private LocalDate dataEntrada;
+
     @Column(name = "confirmada_em")
     private LocalDateTime confirmadaEm;
 

@@ -280,6 +280,7 @@ public class CompraService {
         }
 
         compra.setStatus(StatusCompra.CONFIRMADA);
+        compra.setDataEntrada(compra.getDataCompra()); // #957/DT-NOVA-1 — entrega imediata: conta pela data da compra
         compra.setConfirmadaEm(LocalDateTime.now());
         compraRepository.saveAndFlush(compra);
 
@@ -316,6 +317,14 @@ public class CompraService {
                     "Busque o insumo em \"Adicionar insumo à compra…\", informe quantidade e preço e confirme de novo.");
         }
         validarData(compra.getDataCompra());
+        if (Boolean.FALSE.equals(compra.getEntregaImediata())) {
+            if (compra.getPrevisaoEntrega() == null) {
+                throw BusinessException.explicado("Previsão de entrega", "Informe a previsão de entrega",
+                        "Sem entrega imediata, a previsão diz quando a mercadoria deve chegar e permite avisar o atraso.",
+                        "Preencha a data prevista para a entrega ou marque Entrega imediata como Sim.");
+            }
+            validarPrevisaoInformada(compra.getPrevisaoEntrega(), compra.getDataCompra());
+        }
         List<String> problemas = new ArrayList<>();
         for (int i = 0; i < itens.size(); i++) {
             CompraItem item = itens.get(i);
@@ -512,6 +521,7 @@ public class CompraService {
         }
         Compra copia = novaCompra(usuario);
         copia.setDataCompra(LocalDate.now());
+        copia.setEntregaImediata(true); // #957/RN-NOVA-4 — duplicar volta para Sim e não copia a previsão
         copia.setMultiplosFornecedores(origem.getMultiplosFornecedores());
         copia.setFornecedor(origem.getFornecedor());
         copia.setObservacoes(origem.getObservacoes());
@@ -594,6 +604,10 @@ public class CompraService {
         boolean multiplos = Boolean.TRUE.equals(request.multiplosFornecedores());
         Cliente fornecedorCabecalho = resolverFornecedor(request.fornecedorId(), usuarioId, fornecedoresSalvos);
 
+        boolean entregaImediata = !Boolean.FALSE.equals(request.entregaImediata());
+        validarPrevisaoInformada(entregaImediata ? null : request.previsaoEntrega(), request.dataCompra());
+        compra.setEntregaImediata(entregaImediata);
+        compra.setPrevisaoEntrega(entregaImediata ? null : request.previsaoEntrega());
         compra.setDataCompra(request.dataCompra());
         compra.setMultiplosFornecedores(multiplos);
         compra.setFornecedor(fornecedorCabecalho);
@@ -716,6 +730,23 @@ public class CompraService {
             throw BusinessException.explicado("Data no futuro", "A data da compra não pode ser futura",
                     "A compra registra algo que já aconteceu: dá entrada no estoque e muda o custo hoje.",
                     "Use a data de hoje ou a data em que a compra foi feita.");
+        }
+    }
+
+    /** #957/RN-NOVA-4 — previsão informada não pode ser anterior à data da compra nem a hoje. */
+    private static void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra) {
+        if (previsao == null) {
+            return;
+        }
+        if (dataCompra != null && previsao.isBefore(dataCompra)) {
+            throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior à data da compra",
+                    "A mercadoria só pode chegar depois de ser comprada.",
+                    "Escolha uma data igual ou posterior à data da compra.");
+        }
+        if (previsao.isBefore(LocalDate.now())) {
+            throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior a hoje",
+                    "A previsão aponta uma entrega que ainda vai acontecer; uma data passada já a marcaria como atrasada.",
+                    "Escolha a data de hoje ou uma data futura.");
         }
     }
 
