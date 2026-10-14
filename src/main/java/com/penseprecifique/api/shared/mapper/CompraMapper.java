@@ -131,7 +131,8 @@ public class CompraMapper {
                 item.getDescontoInformado(),
                 item.getDescontoLinha(),
                 item.getDescontoNota(),
-                item.getQuantidadePedida());
+                item.getQuantidadePedida(),
+                com.penseprecifique.api.cliente.DestinoCadastro.insumo(item.getInsumo()));
     }
 
     /**

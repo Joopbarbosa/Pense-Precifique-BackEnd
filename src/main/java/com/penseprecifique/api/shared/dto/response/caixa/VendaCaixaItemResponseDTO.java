@@ -12,5 +12,9 @@ public record VendaCaixaItemResponseDTO(
         BigDecimal quantidade,
         BigDecimal precoUnitario,
         BigDecimal subtotal,
-        List<VendaCaixaItemCustomizacaoResponseDTO> customizacoes
+        List<VendaCaixaItemCustomizacaoResponseDTO> customizacoes,
+        /** #720/RN-NOVA-14 — PRODUTO ou CATALOGO (item de Catálogo → Catálogo dono). */
+        String destinoTipo,
+        /** Id do cadastro de destino; nulo quando excluído (sem link). */
+        UUID destinoId
 ) {}

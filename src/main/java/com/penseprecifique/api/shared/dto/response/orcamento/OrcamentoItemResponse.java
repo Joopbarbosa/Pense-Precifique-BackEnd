@@ -20,6 +20,10 @@ public class OrcamentoItemResponse {
     private String catalogoNome;
     private UUID produtoId;
     private String nomeProduto;
+    /** #720/RN-NOVA-14 — o que abre ao clicar no item: PRODUTO ou CATALOGO (item de Catálogo → Catálogo dono). */
+    private String destinoTipo;
+    /** Id do cadastro de destino; nulo quando o cadastro foi excluído (sem link). */
+    private UUID destinoId;
     /** RN-054 — preenchido apenas quando a origem do item é produto avulso (sem Catálogo). */
     private BigDecimal margemAplicada;
     private Integer quantidade;

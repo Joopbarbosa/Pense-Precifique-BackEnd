@@ -9,5 +9,7 @@ public record VendaCaixaItemCustomizacaoResponseDTO(
         String produtoNome,
         Integer quantidade,
         BigDecimal precoUnitario,
-        BigDecimal subtotal
+        BigDecimal subtotal,
+        /** #720/RN-NOVA-14 — Produto da customização; nulo quando excluído. */
+        UUID destinoId
 ) {}

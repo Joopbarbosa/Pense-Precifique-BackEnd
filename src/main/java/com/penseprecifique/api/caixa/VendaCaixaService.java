@@ -10,6 +10,7 @@ import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoTaxaParcelaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
+import com.penseprecifique.api.cliente.DestinoCadastro;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoTaxaParcela;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -294,7 +295,7 @@ public class VendaCaixaService {
                         .build());
                 customizacoesResponse.add(new VendaCaixaItemCustomizacaoResponseDTO(
                         custSalva.getId(), cp.produto().getId(), cp.produto().getNome(),
-                        cp.quantidade(), cp.precoUnitario(), cp.subtotal()));
+                        cp.quantidade(), cp.precoUnitario(), cp.subtotal(), DestinoCadastro.produto(cp.produto())));
             }
 
             // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio, sem "o produto
@@ -305,7 +306,9 @@ public class VendaCaixaService {
             itensResponse.add(new VendaCaixaItemResponseDTO(
                     itemSalvo.getId(), produtoIdResposta, nomeResposta,
                     item.itemCatalogo() != null ? item.itemCatalogo().getId() : null,
-                    item.quantidade(), item.precoUnitario(), item.subtotal(), customizacoesResponse));
+                    item.quantidade(), item.precoUnitario(), item.subtotal(), customizacoesResponse,
+                    item.itemCatalogo() != null ? "CATALOGO" : "PRODUTO",
+                    item.itemCatalogo() != null ? DestinoCadastro.catalogoDoItem(item.itemCatalogo()) : DestinoCadastro.produto(item.produtoDireto())));
         }
 
         // RN-NOVA-14 — baixa de estoque (SAIDA, motivo/referencia_tipo CAIXA), acumulada por
@@ -547,7 +550,7 @@ public class VendaCaixaService {
             customizacoesPorItem.computeIfAbsent(c.getVendaCaixaItem().getId(), k -> new ArrayList<>())
                     .add(new VendaCaixaItemCustomizacaoResponseDTO(
                             c.getId(), c.getProduto().getId(), c.getProduto().getNome(),
-                            c.getQuantidade(), c.getPrecoUnitario(), c.getSubtotal()));
+                            c.getQuantidade(), c.getPrecoUnitario(), c.getSubtotal(), DestinoCadastro.produto(c.getProduto())));
         }
         // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio, sem "o produto vendido"
         // único; produtoId fica nulo pra origem Catálogo.
@@ -558,7 +561,9 @@ public class VendaCaixaService {
                         item.getItemCatalogo() != null ? item.getItemCatalogo().getNome() : item.getProduto().getNome(),
                         item.getItemCatalogo() != null ? item.getItemCatalogo().getId() : null,
                         item.getQuantidade(), item.getPrecoUnitario(), item.getSubtotal(),
-                        customizacoesPorItem.getOrDefault(item.getId(), List.of())))
+                        customizacoesPorItem.getOrDefault(item.getId(), List.of()),
+                        item.getItemCatalogo() != null ? "CATALOGO" : "PRODUTO",
+                        item.getItemCatalogo() != null ? DestinoCadastro.catalogoDoItem(item.getItemCatalogo()) : DestinoCadastro.produto(item.getProduto())))
                 .toList();
     }
 

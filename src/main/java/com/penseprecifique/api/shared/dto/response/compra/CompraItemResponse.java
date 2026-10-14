@@ -28,5 +28,7 @@ public record CompraItemResponse(
         BigDecimal descontoLinha,
         BigDecimal descontoNota,
         /** #959/DT-NOVA-2 — quantidade pedida, só nas linhas que passaram pela entrada de uma compra pendente. */
-        BigDecimal quantidadePedida
+        BigDecimal quantidadePedida,
+        /** #720/RN-NOVA-14 — id do Insumo que o item abre; nulo quando o insumo foi excluído (sem link). */
+        UUID destinoId
 ) {}
