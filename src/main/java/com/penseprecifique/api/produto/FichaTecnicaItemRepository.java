@@ -25,4 +25,9 @@ public interface FichaTecnicaItemRepository extends JpaRepository<FichaTecnicaIt
     List<Produto> findProdutosByProdutoBaseId(@Param("produtoBaseId") UUID produtoBaseId);
 
     List<FichaTecnicaItem> findByProdutoBaseId(UUID produtoBaseId);
+
+    /** #607/RN-NOVA-16 — quantos produtos ativos usam cada insumo diretamente na ficha técnica (insumo, quantidade). */
+    @Query("SELECT f.insumo.id, COUNT(DISTINCT f.produto.id) FROM FichaTecnicaItem f WHERE f.produto.usuario.id = :usuarioId " +
+            "AND f.produto.deletedAt IS NULL AND f.produto.ativo = true AND f.insumo IS NOT NULL GROUP BY f.insumo.id")
+    List<Object[]> contarProdutosAtivosPorInsumo(@Param("usuarioId") UUID usuarioId);
 }

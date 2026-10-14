@@ -71,8 +71,8 @@ public class VendasService {
                         boolean semCusto, boolean custoEstimado,
                         List<LinhaProduto> linhas, List<Pagamento> pagamentos) {}
 
-    /** #719 — uma linha de produto (ou item de Catálogo) da venda: base dos "produtos mais vendidos". */
-    public record LinhaProduto(UUID id, String tipo, String nome, BigDecimal quantidade, BigDecimal faturamento) {}
+    /** #719/#607 — uma linha de produto (ou item de Catálogo) da venda: base dos "mais vendidos", do lucro e da curva ABC; {@code custo} é o custo de material da linha. */
+    public record LinhaProduto(UUID id, String tipo, String nome, BigDecimal quantidade, BigDecimal faturamento, BigDecimal custo) {}
 
     /** #719 — forma de pagamento registrada na venda e o valor; lista vazia = "Não informada". */
     public record Pagamento(String forma, BigDecimal valor) {}
@@ -148,23 +148,24 @@ public class VendasService {
         List<Venda> vendas = new ArrayList<>();
         for (Orcamento o : orcamentos) {
             Acumulado a = new Acumulado();
+            List<LinhaProduto> linhas = new ArrayList<>();
             for (OrcamentoItem i : itens.getOrDefault(o.getId(), List.of())) {
+                Acumulado doItem = new Acumulado();
                 BigDecimal qtd = BigDecimal.valueOf(i.getQuantidade());
-                a.somar(qtd, i.getCustoMaterialUnitario(), () -> estimarItem(i.getProduto(), i.getItemCatalogo(),
+                doItem.somar(qtd, i.getCustoMaterialUnitario(), () -> estimarItem(i.getProduto(), i.getItemCatalogo(),
                         componentes.getOrDefault(i.getId(), List.of()).stream()
                                 .map(c -> new CustoMaterialService.Componente(c.getInsumo(), c.getProdutoBase(), c.getQuantidade()))
                                 .toList(), qtd, calculo));
                 for (OrcamentoItemCustomizacao c : customizacoes.getOrDefault(i.getId(), List.of())) {
-                    a.somar(BigDecimal.valueOf(c.getQuantidade()), c.getCustoMaterialUnitario(),
+                    doItem.somar(BigDecimal.valueOf(c.getQuantidade()), c.getCustoMaterialUnitario(),
                             () -> c.getProduto() != null ? calculo.produto(c.getProduto()) : null);
                 }
+                a.incorporar(doItem);
+                linhas.add(linha(i.getProduto(), i.getItemCatalogo(), qtd, i.getSubtotal(), doItem.cmv));
             }
             String resumo = itens.getOrDefault(o.getId(), List.of()).stream()
                     .map(i -> resumir(BigDecimal.valueOf(i.getQuantidade()), i.getProduto(), i.getItemCatalogo()))
                     .collect(Collectors.joining("; "));
-            List<LinhaProduto> linhas = itens.getOrDefault(o.getId(), List.of()).stream()
-                    .map(i -> linha(i.getProduto(), i.getItemCatalogo(), BigDecimal.valueOf(i.getQuantidade()), i.getSubtotal()))
-                    .toList();
             List<Pagamento> pagamentos = o.getMetodoPagamento() == null ? List.of()
                     : List.of(new Pagamento(rotulo(o.getMetodoPagamento()), o.getTotal() != null ? o.getTotal() : BigDecimal.ZERO));
             vendas.add(a.venda(o.getId(), TipoVendaCmv.ORCAMENTO, IdentificadorFormatter.formatar("ORC", o.getNumero()),
@@ -196,22 +197,23 @@ public class VendasService {
         List<Venda> vendas = new ArrayList<>();
         for (VendaCaixa v : vendasCaixa) {
             Acumulado a = new Acumulado();
+            List<LinhaProduto> linhas = new ArrayList<>();
             for (VendaCaixaItem i : itens.getOrDefault(v.getId(), List.of())) {
-                a.somar(i.getQuantidade(), i.getCustoMaterialUnitario(), () -> estimarItem(i.getProduto(), i.getItemCatalogo(),
+                Acumulado doItem = new Acumulado();
+                doItem.somar(i.getQuantidade(), i.getCustoMaterialUnitario(), () -> estimarItem(i.getProduto(), i.getItemCatalogo(),
                         componentes.getOrDefault(i.getId(), List.of()).stream()
                                 .map(c -> new CustoMaterialService.Componente(c.getInsumo(), c.getProdutoBase(), c.getQuantidade()))
                                 .toList(), i.getQuantidade(), calculo));
                 for (VendaCaixaItemCustomizacao c : customizacoes.getOrDefault(i.getId(), List.of())) {
-                    a.somar(BigDecimal.valueOf(c.getQuantidade()), c.getCustoMaterialUnitario(),
+                    doItem.somar(BigDecimal.valueOf(c.getQuantidade()), c.getCustoMaterialUnitario(),
                             () -> c.getProduto() != null ? calculo.produto(c.getProduto()) : null);
                 }
+                a.incorporar(doItem);
+                linhas.add(linha(i.getProduto(), i.getItemCatalogo(), i.getQuantidade(), i.getSubtotal(), doItem.cmv));
             }
             String resumo = itens.getOrDefault(v.getId(), List.of()).stream()
                     .map(i -> resumir(i.getQuantidade(), i.getProduto(), i.getItemCatalogo()))
                     .collect(Collectors.joining("; "));
-            List<LinhaProduto> linhas = itens.getOrDefault(v.getId(), List.of()).stream()
-                    .map(i -> linha(i.getProduto(), i.getItemCatalogo(), i.getQuantidade(), i.getSubtotal()))
-                    .toList();
             List<Pagamento> pagamentos = pagamentosPorVenda.getOrDefault(v.getId(), List.of()).stream()
                     .map(p -> new Pagamento(CompraMapper.rotulo(p.getMetodoPagamento()), p.getValor())).toList();
             vendas.add(a.venda(v.getId(), TipoVendaCmv.VENDA_CAIXA, IdentificadorFormatter.formatar("CX", v.getNumero()),
@@ -221,13 +223,13 @@ public class VendasService {
         return vendas;
     }
 
-    private static LinhaProduto linha(Produto produto, ItemCatalogo itemCatalogo, BigDecimal quantidade, BigDecimal subtotal) {
+    private static LinhaProduto linha(Produto produto, ItemCatalogo itemCatalogo, BigDecimal quantidade, BigDecimal subtotal, BigDecimal custo) {
+        BigDecimal faturamento = subtotal != null ? subtotal : BigDecimal.ZERO;
         if (itemCatalogo != null) {
-            return new LinhaProduto(itemCatalogo.getId(), "CATALOGO", itemCatalogo.getNome(), quantidade,
-                    subtotal != null ? subtotal : BigDecimal.ZERO);
+            return new LinhaProduto(itemCatalogo.getId(), "CATALOGO", itemCatalogo.getNome(), quantidade, faturamento, custo);
         }
         return new LinhaProduto(produto != null ? produto.getId() : null, "PRODUTO",
-                produto != null ? produto.getNome() : "Item sem referência", quantidade, subtotal != null ? subtotal : BigDecimal.ZERO);
+                produto != null ? produto.getNome() : "Item sem referência", quantidade, faturamento, custo);
     }
 
     private static String rotulo(com.penseprecifique.api.shared.domain.enums.MetodoPagamento metodo) {
@@ -262,6 +264,13 @@ public class VendasService {
         private BigDecimal estimado = BigDecimal.ZERO;
         private boolean semCusto;
         private boolean custoEstimado;
+
+        void incorporar(Acumulado outro) {
+            cmv = cmv.add(outro.cmv);
+            estimado = estimado.add(outro.estimado);
+            semCusto |= outro.semCusto;
+            custoEstimado |= outro.custoEstimado;
+        }
 
         void somar(BigDecimal quantidade, BigDecimal gravado, java.util.function.Supplier<BigDecimal> estimativa) {
             if (quantidade == null) {
