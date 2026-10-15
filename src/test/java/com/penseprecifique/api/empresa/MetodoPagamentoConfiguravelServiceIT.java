@@ -52,7 +52,7 @@ class MetodoPagamentoConfiguravelServiceIT {
     @Test
     void registroDeContaSemeiaOs4MetodosFixos() {
         String email = "seed-" + UUID.randomUUID() + "@test.com";
-        authService.register(new CadastroRequestDTO(email, "senha12345", "senha12345"));
+        authService.register(new CadastroRequestDTO(email, "senha12345", "senha12345", null));
         autenticarComo(usuarioRepository.findByEmail(email).orElseThrow());
 
         List<MetodoPagamentoConfiguravelResponseDTO> metodos = metodoPagamentoService.listar();

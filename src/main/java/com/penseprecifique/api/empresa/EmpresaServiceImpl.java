@@ -156,6 +156,12 @@ public class EmpresaServiceImpl implements EmpresaService {
         return toResponse(empresa);
     }
 
+    @Override
+    @Transactional
+    public void criarEmpresaInicial(UUID usuarioId, String nome) {
+        empresaRepository.save(Empresa.builder().usuarioId(usuarioId).nome(nome).build());
+    }
+
     private UUID getUsuarioIdAutenticado() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return usuarioRepository.findByEmailAndDeletedAtIsNull(email)
