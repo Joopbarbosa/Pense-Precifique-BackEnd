@@ -666,6 +666,7 @@ public class PdfMapper {
     private static String formatarStatusCompra(com.penseprecifique.api.shared.domain.enums.StatusCompra status) {
         return switch (status) {
             case RASCUNHO -> "Rascunho";
+            case PENDENTE_RECEBIMENTO -> "Pendente de recebimento";
             case CONFIRMADA -> "Confirmada";
             case CANCELADA -> "Cancelada";
         };

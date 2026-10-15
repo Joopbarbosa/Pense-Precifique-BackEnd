@@ -50,7 +50,9 @@ public record CompraResponse(
         Boolean entregaImediata,
         LocalDate previsaoEntrega,
         /** #957/DT-NOVA-1 — data em que a compra passou a contar nos números. */
-        LocalDate dataEntrada
+        LocalDate dataEntrada,
+        /** #958/RN-NOVA-6 — dias inteiros de atraso da pendente (previsão anterior a hoje); nulo nos demais casos. */
+        Integer diasAtraso
 ) {
     public record ListaCompraRef(UUID id, String identificador) {}
 }

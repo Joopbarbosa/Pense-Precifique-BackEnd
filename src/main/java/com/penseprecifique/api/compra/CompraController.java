@@ -49,10 +49,12 @@ public class CompraController {
             @RequestParam(required = false) String busca,
             @RequestParam(required = false) Boolean pago,
             @RequestParam(defaultValue = "false") boolean comDesconto,
+            // #958/RN-NOVA-6 — pendentes de recebimento com previsão anterior a hoje
+            @RequestParam(defaultValue = "false") boolean atrasadas,
             @PageableDefault(size = 20, sort = {"dataCompra", "numero"}, direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(compraService.listarComFiltros(status == null ? List.of() : status,
                 fornecedorId == null ? List.of() : fornecedorId, de, ate, insumoId == null ? List.of() : insumoId,
-                busca, pago, comDesconto, pageable));
+                busca, pago, comDesconto, atrasadas, pageable));
     }
 
     /** #591/RN-NOVA-44 — contagens dos filtros (total da conta). */

@@ -59,7 +59,18 @@ public class CompraMapper {
                 compra.getComprovanteUrl(),
                 compra.getEntregaImediata(),
                 compra.getPrevisaoEntrega(),
-                compra.getDataEntrada());
+                compra.getDataEntrada(),
+                diasAtraso(compra));
+    }
+
+    /** #958/RN-NOVA-6 — dias inteiros entre a previsão e hoje; previsão igual a hoje não é atraso. */
+    public static Integer diasAtraso(Compra compra) {
+        if (compra.getStatus() != com.penseprecifique.api.shared.domain.enums.StatusCompra.PENDENTE_RECEBIMENTO
+                || compra.getPrevisaoEntrega() == null) {
+            return null;
+        }
+        long dias = java.time.temporal.ChronoUnit.DAYS.between(compra.getPrevisaoEntrega(), java.time.LocalDate.now());
+        return dias > 0 ? (int) dias : null;
     }
 
     /** #576 — soma dos descontos de linha e das partes da nota. */
@@ -98,7 +109,9 @@ public class CompraMapper {
                 Boolean.TRUE.equals(compra.getPago()),
                 total(itens),
                 itens.size(),
-                resumoItens(itens));
+                resumoItens(itens),
+                compra.getPrevisaoEntrega(),
+                diasAtraso(compra));
     }
 
     public CompraItemResponse toItemResponse(CompraItem item) {

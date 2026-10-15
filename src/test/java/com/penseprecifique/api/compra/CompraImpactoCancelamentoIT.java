@@ -261,7 +261,7 @@ class CompraImpactoCancelamentoIT {
     void soCompraConfirmadaPodeSerCancelada() {
         Insumo cola = insumo("Cola", "0", "10.00", true);
         CompraResponse rascunho = compraService.criarRascunho(compra(null, List.of(linha(cola, "1", "1.00"))));
-        assertEquals("Só é possível cancelar uma compra confirmada.", assertThrows(BusinessException.class,
+        assertEquals("Só é possível cancelar uma compra confirmada ou pendente de recebimento.", assertThrows(BusinessException.class,
                 () -> compraService.cancelar(rascunho.id(), new CancelarCompraRequest(OBS, true))).getMessage());
     }
 
