@@ -21,7 +21,7 @@ class VendasServiceSemCustoTest {
         var custom=mock(VendaCaixaItemCustomizacaoRepository.class);
         var componentes=mock(VendaCaixaItemComponenteRepository.class);
         var service=new VendasService(orc,mock(OrcamentoItemRepository.class),mock(OrcamentoItemCustomizacaoRepository.class),
-                mock(OrcamentoItemComponenteRepository.class),caixa,itens,custom,componentes,custo);
+                mock(OrcamentoItemComponenteRepository.class),caixa,itens,custom,componentes,custo,mock(VendaCaixaPagamentoRepository.class));
         UUID usuario=UUID.randomUUID(), id=UUID.randomUUID();
         LocalDate dia=LocalDate.of(2026,5,7);
         var venda=VendaCaixa.builder().id(id).numero(7).dataVenda(dia.atStartOfDay()).total(new BigDecimal("13.47")).build();

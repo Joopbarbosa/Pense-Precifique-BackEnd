@@ -13,6 +13,9 @@ public interface VendaCaixaPagamentoRepository extends JpaRepository<VendaCaixaP
 
     List<VendaCaixaPagamento> findByVendaCaixaId(UUID vendaCaixaId);
 
+    /** #719 — pagamentos de várias vendas de uma vez (formas de pagamento do Dashboard de Vendas). */
+    List<VendaCaixaPagamento> findByVendaCaixaIdIn(java.util.Collection<UUID> vendaCaixaIds);
+
     /** RN-NOVA-9 — soma dos pagamentos em DINHEIRO das vendas CONCLUIDA de um turno, usada no
      * cálculo de CaixaTurnoService.fecharTurno(). Venda CANCELADA não entra (estoque e efeito
      * financeiro já revertidos no cancelamento, RN-NOVA-4). */
