@@ -104,7 +104,9 @@ public class InsumoMapper {
                 referencia,
                 mov.getEstornada(),
                 mov.getCreatedAt(),
-                mov.getDataReferencia()
+                mov.getDataReferencia(),
+                "MOVIMENTACAO",
+                null
         );
     }
 

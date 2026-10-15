@@ -21,5 +21,9 @@ public record MovimentacaoInsumoResponseDTO(
         boolean estornada,
         LocalDateTime createdAt,
         /** #959/DT-NOVA-4 — data do recebimento da compra; nula nas movimentações sem ela. */
-        java.time.LocalDate dataReferencia
+        java.time.LocalDate dataReferencia,
+        /** #672/DT-NOVA-7 — MOVIMENTACAO (estoque) ou PRECO_SUGERIDO (linha agregada das mudanças do preço sugerido). */
+        String tipoLinha,
+        /** Só na linha PRECO_SUGERIDO. */
+        com.penseprecifique.api.insumo.PrecoSugeridoAgregadoResponse precosSugeridos
 ) {}

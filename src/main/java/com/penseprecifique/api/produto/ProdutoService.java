@@ -46,6 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.penseprecifique.api.util.IdentificadorFormatter;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -91,6 +92,8 @@ public class ProdutoService {
     private final ItemCatalogoService itemCatalogoService;
     private final R2StorageClient r2StorageClient;
     private final ValidadorArquivoImagem validadorArquivoImagem;
+    private final PrecoSugeridoHistoricoService precoSugeridoHistoricoService;
+    private final MudancaPrecoSugeridoRepository mudancaPrecoSugeridoRepository;
 
     /**
      * #135/RN-039 — custoUnitario recalculado ao vivo por item da página, mesmo cálculo de buscarPorId
@@ -244,6 +247,12 @@ public class ProdutoService {
 
         validarRendimento(request);
 
+        // #672/DT-NOVA-6 — preço sugerido de antes (ao vivo) do produto e dos produtos-pai que o usam, capturado
+        // antes de qualquer alteração da edição.
+        Set<UUID> afetadosPelaEdicao = comAncestrais(List.of(produto.getId()));
+        Map<UUID, BigDecimal> precoSugeridoAntes = capturarPrecosSugeridos(afetadosPelaEdicao);
+        BigDecimal custoUnitarioAntes = custoUnitarioAoVivo(produto);
+
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
         BigDecimal margemLucroAntigo = produto.getMargemLucro();
         Boolean fracionavelAntigo = produto.getFracionavel();
@@ -279,6 +288,19 @@ public class ProdutoService {
                 fracionavelAntigo, fracionavelOverrideAntigo);
 
         produtoRepository.save(produto);
+
+        // #672 — o custo gravado dos produtos-pai acompanha a edição (componentes antes de quem os usa) e a mudança
+        // do preço sugerido de cada um fica no histórico; o preço de venda nunca é tocado.
+        Set<UUID> paisAfetados = new HashSet<>(afetadosPelaEdicao);
+        paisAfetados.remove(produto.getId());
+        recalcularPersistidoEmOrdem(paisAfetados);
+        // a causa é "mudança de margem" quando só a margem mexeu no preço sugerido (o custo ficou igual); senão, edição
+        boolean soMargem = margemLucroAntigo != null && produto.getMargemLucro() != null
+                && margemLucroAntigo.compareTo(produto.getMargemLucro()) != 0
+                && custoUnitarioAntes.compareTo(custoUnitario) == 0;
+        registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes,
+                soMargem ? CausaPrecoSugerido.PRODUTO_MARGEM : CausaPrecoSugerido.PRODUTO_EDICAO, produto.getId(),
+                IdentificadorFormatter.formatar("PRO", produto.getNumero()), Map.of());
 
         List<FichaTecnicaItem> itens = fichaTecnicaItemRepository.findByProdutoId(produto.getId());
         ProdutoDetalheResponse response = produtoMapper.toDetalheResponse(produto, itens);
@@ -647,6 +669,110 @@ public class ProdutoService {
         return buscarValorHora(usuarioId);
     }
 
+    // ---------------------------------------------------------------- #672 — histórico do preço sugerido
+
+    /**
+     * #672/DT-NOVA-6 — preço sugerido pela MESMA conta do detalhe do produto: custo unitário calculado ao vivo (ficha técnica
+     * + mão de obra, ÷ rendimento) × margem. Nunca lê a coluna {@code precoCusto}, defasada por natureza, nem o preço de venda.
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal precoSugeridoAoVivo(Produto produto) {
+        BigDecimal somaComponentes = fichaTecnicaService.recalcularPrecoCusto(produto.getId());
+        BigDecimal valorHora = buscarValorHora(produto.getUsuario().getId());
+        BigDecimal custoTotalLote = somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora));
+        return calcularPrecoSugerido(calcularCustoUnitario(custoTotalLote, produto.getRendimento()), produto.getMargemLucro());
+    }
+
+    /** #672 — custo unitário ao vivo (mesma conta do detalhe do produto). */
+    @Transactional(readOnly = true)
+    public BigDecimal custoUnitarioAoVivo(Produto produto) {
+        BigDecimal somaComponentes = fichaTecnicaService.recalcularPrecoCusto(produto.getId());
+        BigDecimal valorHora = buscarValorHora(produto.getUsuario().getId());
+        return calcularCustoUnitario(somaComponentes.add(calcularCustoMaoDeObra(produto.getTempoProducao(), valorHora)), produto.getRendimento());
+    }
+
+    /** #672 — preço sugerido (ao vivo) de cada produto informado; ignora excluídos. */
+    @Transactional(readOnly = true)
+    public Map<UUID, BigDecimal> capturarPrecosSugeridos(java.util.Collection<UUID> produtoIds) {
+        Map<UUID, BigDecimal> precos = new LinkedHashMap<>();
+        for (UUID id : produtoIds) {
+            produtoRepository.findById(id).filter(p -> p.getDeletedAt() == null)
+                    .ifPresent(p -> precos.put(id, precoSugeridoAoVivo(p)));
+        }
+        return precos;
+    }
+
+    /** #672 — todos os produtos da conta (para o valor da hora, que alcança todos). */
+    @Transactional(readOnly = true)
+    public Set<UUID> idsDosProdutosDaConta(UUID usuarioId) {
+        Set<UUID> ids = new java.util.LinkedHashSet<>();
+        for (TipoProduto tipo : TipoProduto.values()) {
+            produtoRepository.findByUsuarioIdAndTipoAndDeletedAtIsNull(usuarioId, tipo).forEach(p -> ids.add(p.getId()));
+        }
+        return ids;
+    }
+
+    /**
+     * #672 — depois do evento, compara com o preço sugerido ao vivo de agora e grava só quem mudou em centavos.
+     * {@code insumosPorProduto}: insumos de origem (compra); vazio nas demais causas.
+     */
+    public void registrarMudancasPrecoSugerido(UUID usuarioId, Map<UUID, BigDecimal> antes, CausaPrecoSugerido causa,
+                                               UUID referenciaId, String referenciaTexto,
+                                               Map<UUID, ? extends java.util.Collection<UUID>> insumosPorProduto) {
+        for (Map.Entry<UUID, BigDecimal> e : antes.entrySet()) {
+            java.util.Collection<UUID> origem = insumosPorProduto.get(e.getKey());
+            produtoRepository.findById(e.getKey()).filter(p -> p.getDeletedAt() == null).ifPresent(p ->
+                    precoSugeridoHistoricoService.registrarSeMudou(usuarioId, p, e.getValue(), precoSugeridoAoVivo(p), causa,
+                            referenciaId, referenciaTexto, origem != null ? origem : List.<UUID>of()));
+        }
+    }
+
+    /** #672 — os produtos informados e todos os que os usam como componente, direta ou indiretamente (limite de 20 níveis). */
+    @Transactional(readOnly = true)
+    public Set<UUID> comAncestrais(java.util.Collection<UUID> produtoIds) {
+        Set<UUID> resultado = new java.util.LinkedHashSet<>(produtoIds);
+        List<UUID> nivel = new ArrayList<>(produtoIds);
+        for (int n = 0; n < 20 && !nivel.isEmpty(); n++) {
+            List<UUID> proximo = new ArrayList<>();
+            for (UUID id : nivel) {
+                for (Produto pai : fichaTecnicaItemRepository.findProdutosByProdutoBaseId(id)) {
+                    if (resultado.add(pai.getId())) {
+                        proximo.add(pai.getId());
+                    }
+                }
+            }
+            nivel = proximo;
+        }
+        return resultado;
+    }
+
+    /** #672 — recalcula o custo gravado dos produtos informados, componentes antes de quem os usa. */
+    public void recalcularPersistidoEmOrdem(java.util.Collection<UUID> produtoIds) {
+        Set<UUID> conjunto = new HashSet<>(produtoIds);
+        Map<UUID, Integer> profundidade = new HashMap<>();
+        conjunto.forEach(id -> profundidadeNoConjunto(id, conjunto, profundidade, 0));
+        conjunto.stream().sorted(java.util.Comparator.comparing(profundidade::get)).forEach(this::recalcularPrecoCustoPersistido);
+    }
+
+    private int profundidadeNoConjunto(UUID id, Set<UUID> conjunto, Map<UUID, Integer> memo, int guarda) {
+        Integer conhecido = memo.get(id);
+        if (conhecido != null) {
+            return conhecido;
+        }
+        if (guarda > 20) {
+            return 0;
+        }
+        int max = 0;
+        for (FichaTecnicaItem item : fichaTecnicaItemRepository.findByProdutoId(id)) {
+            UUID base = item.getProdutoBase() != null ? item.getProdutoBase().getId() : null;
+            if (base != null && conjunto.contains(base) && !base.equals(id)) {
+                max = Math.max(max, 1 + profundidadeNoConjunto(base, conjunto, memo, guarda + 1));
+            }
+        }
+        memo.put(id, max);
+        return max;
+    }
+
     /**
      * Frente 5/P-BE-CONSOLIDADO-001 — reverte a inativação: {@code ativo=true}. Só atua sobre produto
      * não excluído (deletedAt null) — reativar produto excluído não é suportado, exclusão é permanente
@@ -666,8 +792,32 @@ public class ProdutoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));
-        return movimentacaoProdutoRepository.findByProdutoIdOrderByCreatedAtDesc(produtoId, pageable)
-                .map(produtoMapper::toMovimentacaoResponse);
+        Page<MovimentacaoProduto> pagina = movimentacaoProdutoRepository.findByProdutoIdOrderByCreatedAtDesc(produtoId, pageable);
+        List<MovimentacaoProdutoResponse> linhas = new ArrayList<>(pagina.map(produtoMapper::toMovimentacaoResponse).getContent());
+
+        // #672/DT-NOVA-7 — as mudanças do preço sugerido entram na mesma lista, na janela de data/hora da página de estoque
+        // (a primeira página vai até o presente e a última até o começo), para a ordem e a paginação continuarem estáveis.
+        LocalDateTime de = pagina.isEmpty() || pagina.isLast() ? LocalDateTime.of(1970, 1, 1, 0, 0)
+                : pagina.getContent().get(pagina.getNumberOfElements() - 1).getCreatedAt();
+        LocalDateTime ate = pagina.isEmpty() || pagina.isFirst() ? LocalDateTime.of(9999, 12, 31, 23, 59)
+                : pagina.getContent().get(0).getCreatedAt();
+        if (pagina.isEmpty() && pageable.getPageNumber() > 0) {
+            return new PageImpl<>(linhas, pageable, pagina.getTotalElements());
+        }
+        for (MudancaPrecoSugerido m : mudancaPrecoSugeridoRepository.findDoProdutoNaJanela(produtoId, de, ate)) {
+            MovimentacaoProdutoResponse r = new MovimentacaoProdutoResponse();
+            r.setId(m.getId());
+            r.setTipoLinha("PRECO_SUGERIDO");
+            r.setPrecoSugeridoAnterior(m.getValorAnterior());
+            r.setPrecoSugeridoNovo(m.getValorNovo());
+            r.setCausaPrecoSugerido(m.getCausa().name());
+            r.setReferenciaTexto(m.getReferenciaTexto());
+            r.setReferenciaId(m.getReferenciaId());
+            r.setCreatedAt(m.getCreatedAt());
+            linhas.add(r);
+        }
+        linhas.sort(java.util.Comparator.comparing(MovimentacaoProdutoResponse::getCreatedAt).reversed());
+        return new PageImpl<>(linhas, pageable, pagina.getTotalElements());
     }
 
     // RN-NOVA-5/DT-NOVA-4 (V0.14.0, #534 — réplica de #514) — "Edição manual": tipo (ENTRADA/

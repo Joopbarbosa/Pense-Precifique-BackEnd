@@ -1,6 +1,8 @@
 package com.penseprecifique.api.compra;
 
+import com.penseprecifique.api.produto.CausaPrecoSugerido;
 import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
+import com.penseprecifique.api.produto.PrecoSugeridoHistoricoService;
 import com.penseprecifique.api.produto.ProdutoService;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -47,14 +49,26 @@ public class ImpactoCompraService {
 
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final ProdutoService produtoService;
+    private final PrecoSugeridoHistoricoService precoSugeridoHistoricoService;
 
     /** Custo de um insumo antes e depois da operação. */
     public record MudancaCusto(Insumo insumo, BigDecimal antes, BigDecimal depois) {}
 
     /**
-     * @param mudancas insumo → custo antes/depois (só os que de fato mudaram entram no cálculo)
+     * #672/DT-NOVA-6 — evento que provocou a mudança de custo: a causa e a compra (id e COM-N). Com ele, a mesma conta do
+     * modal grava a mudança do preço sugerido de cada produto afetado, com os insumos que a provocaram.
      */
+    public record EventoPreco(CausaPrecoSugerido causa, UUID referenciaId, String referenciaTexto) {}
+
     public ImpactoCompraResponse aplicar(UUID usuarioId, List<MudancaCusto> mudancas) {
+        return aplicar(usuarioId, mudancas, null);
+    }
+
+    /**
+     * @param mudancas insumo → custo antes/depois (só os que de fato mudaram entram no cálculo)
+     * @param evento   quando informado, grava no histórico a mudança do preço sugerido de cada produto afetado
+     */
+    public ImpactoCompraResponse aplicar(UUID usuarioId, List<MudancaCusto> mudancas, EventoPreco evento) {
         List<MudancaCusto> mudaram = mudancas.stream()
                 .filter(m -> m.antes().compareTo(m.depois()) != 0).toList();
         if (mudaram.isEmpty()) {
@@ -103,6 +117,16 @@ public class ImpactoCompraService {
         List<Produto> ordem = new ArrayList<>(afetados.values());
         ordem.sort(Comparator.comparing((Produto p) -> profundidade.get(p.getId())).thenComparing(Produto::getNome));
 
+        // 2b) #672 — de qual insumo veio cada produto: a busca roda a partir de cada insumo que mudou, separadamente.
+        Map<UUID, Set<UUID>> insumosPorProduto = new HashMap<>();
+        if (evento != null) {
+            for (MudancaCusto m : mudaram) {
+                for (UUID produtoId : alcance(m.insumo().getId())) {
+                    insumosPorProduto.computeIfAbsent(produtoId, k -> new java.util.LinkedHashSet<>()).add(m.insumo().getId());
+                }
+            }
+        }
+
         // 3) Antes/depois com os custos substitutos, e persistência na mesma ordem.
         BigDecimal valorHora = produtoService.valorHora(usuarioId);
         Map<UUID, BigDecimal> produtoAntes = new HashMap<>();
@@ -114,6 +138,14 @@ public class ImpactoCompraService {
             produtoAntes.put(p.getId(), antes);
             produtoDepois.put(p.getId(), depois);
             produtoService.recalcularPrecoCustoPersistido(p.getId());
+            if (evento != null) {
+                // a mudança registrada é sempre igual à que o modal mostra (mesmos custos antes/depois, mesma margem)
+                precoSugeridoHistoricoService.registrarSeMudou(usuarioId, p,
+                        produtoService.precoSugerido(antes, p.getMargemLucro()),
+                        produtoService.precoSugerido(depois, p.getMargemLucro()),
+                        evento.causa(), evento.referenciaId(), evento.referenciaTexto(),
+                        insumosPorProduto.getOrDefault(p.getId(), Set.of()));
+            }
             if (antes.compareTo(depois) != 0) {
                 produtos.add(new ImpactoCompraResponse.ProdutoImpacto(p.getId(),
                         IdentificadorFormatter.formatar("PRO", p.getNumero()), p.getNome(), p.getTipo(),
@@ -133,6 +165,33 @@ public class ImpactoCompraService {
                         m.antes(), m.depois()))
                 .toList();
         return new ImpactoCompraResponse(true, insumos, produtos);
+    }
+
+    /** #672 — produtos (diretos e indiretos, até {@value #LIMITE_NIVEIS} níveis) que um insumo alcança. */
+    private Set<UUID> alcance(UUID insumoId) {
+        Set<UUID> alcancados = new java.util.LinkedHashSet<>();
+        Map<UUID, Integer> nivel = new HashMap<>();
+        Deque<Produto> fila = new ArrayDeque<>();
+        for (Produto p : fichaTecnicaItemRepository.findProdutosByInsumoId(insumoId)) {
+            if (alcancados.add(p.getId())) {
+                nivel.put(p.getId(), 1);
+                fila.add(p);
+            }
+        }
+        while (!fila.isEmpty()) {
+            Produto atual = fila.poll();
+            int n = nivel.get(atual.getId());
+            if (n >= LIMITE_NIVEIS) {
+                continue;
+            }
+            for (Produto pai : fichaTecnicaItemRepository.findProdutosByProdutoBaseId(atual.getId())) {
+                if (alcancados.add(pai.getId())) {
+                    nivel.put(pai.getId(), n + 1);
+                    fila.add(pai);
+                }
+            }
+        }
+        return alcancados;
     }
 
     /** Maior distância até um componente afetado (0 = só insumos/produtos não afetados na ficha). */
