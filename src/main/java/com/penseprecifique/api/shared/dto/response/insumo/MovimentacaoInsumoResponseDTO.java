@@ -19,5 +19,7 @@ public record MovimentacaoInsumoResponseDTO(
         ReferenciaMovimentacaoTipo referenciaTipo,
         String referencia,
         boolean estornada,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /** #959/DT-NOVA-4 — data do recebimento da compra; nula nas movimentações sem ela. */
+        java.time.LocalDate dataReferencia
 ) {}

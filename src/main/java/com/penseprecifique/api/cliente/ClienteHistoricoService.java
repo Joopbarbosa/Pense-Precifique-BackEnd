@@ -340,10 +340,10 @@ public class ClienteHistoricoService {
         Map<UUID, ItemCompradoResponse> porInsumo = new LinkedHashMap<>();
         linhasDoFornecedor(fornecedorId, usuarioId).forEach((compra, linhas) -> {
             if (compra.getStatus() != StatusCompra.CONFIRMADA
-                    || compra.getDataCompra().isBefore(inicio) || compra.getDataCompra().isAfter(fim)) {
+                    || compra.dataParaContagem().isBefore(inicio) || compra.dataParaContagem().isAfter(fim)) {
                 return;
             }
-            porMes.merge(YearMonth.from(compra.getDataCompra()), CompraMapper.total(linhas), BigDecimal::add);
+            porMes.merge(YearMonth.from(compra.dataParaContagem()), CompraMapper.total(linhas), BigDecimal::add);
             for (CompraItem l : linhas) {
                 BigDecimal qtd = l.getQuantidade() != null ? l.getQuantidade() : BigDecimal.ZERO;
                 BigDecimal valor = l.getPrecoTotal() != null ? l.getPrecoTotal() : BigDecimal.ZERO;
@@ -491,7 +491,7 @@ public class ClienteHistoricoService {
         BigDecimal total = porCompra.values().stream().map(CompraMapper::total).reduce(BigDecimal.ZERO, BigDecimal::add);
         long n = porCompra.size();
         Compra ultima = porCompra.keySet().stream()
-                .max(Comparator.comparing(Compra::getDataCompra).thenComparing(Compra::getNumero)).orElseThrow();
+                .max(Comparator.comparing(Compra::dataParaContagem).thenComparing(Compra::getNumero)).orElseThrow();
 
         Map<UUID, IndicadoresFornecedorResponse.InsumoCompradoResponse> porInsumo = new LinkedHashMap<>();
         porCompra.values().stream().flatMap(List::stream).filter(i -> i.getQuantidade() != null)
@@ -511,7 +511,7 @@ public class ClienteHistoricoService {
 
         return new IndicadoresFornecedorResponse(
                 new IndicadoresFornecedorResponse.UltimaCompraFornecedor(ultima.getId(),
-                        IdentificadorFormatter.formatar("COM", ultima.getNumero()), ultima.getDataCompra()),
+                        IdentificadorFormatter.formatar("COM", ultima.getNumero()), ultima.dataParaContagem()),
                 total,
                 total.divide(BigDecimal.valueOf(n), 2, RoundingMode.HALF_UP),
                 n,

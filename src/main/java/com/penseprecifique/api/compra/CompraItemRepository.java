@@ -41,7 +41,7 @@ public interface CompraItemRepository extends JpaRepository<CompraItem, UUID> {
      */
     @Query("SELECT ci FROM CompraItem ci WHERE ci.fornecedor.id = :fornecedorId AND ci.insumo.id = :insumoId " +
             "AND ci.compra.deletedAt IS NULL AND ci.compra.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.CONFIRMADA " +
-            "AND ci.compra.dataCompra >= :desde")
+            "AND COALESCE(ci.compra.dataEntrada, ci.compra.dataCompra) >= :desde")
     List<CompraItem> findConfirmadasDoPar(@Param("fornecedorId") UUID fornecedorId,
                                           @Param("insumoId") UUID insumoId,
                                           @Param("desde") java.time.LocalDate desde);
@@ -50,7 +50,7 @@ public interface CompraItemRepository extends JpaRepository<CompraItem, UUID> {
     @EntityGraph(attributePaths = {"compra"})
     @Query("SELECT ci FROM CompraItem ci WHERE ci.fornecedor.id = :fornecedorId AND ci.insumo.id = :insumoId " +
             "AND ci.compra.deletedAt IS NULL AND ci.compra.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.CONFIRMADA " +
-            "ORDER BY ci.compra.dataCompra DESC, ci.compra.numero DESC")
+            "ORDER BY COALESCE(ci.compra.dataEntrada, ci.compra.dataCompra) DESC, ci.compra.numero DESC")
     List<CompraItem> findUltimasConfirmadasDoPar(@Param("fornecedorId") UUID fornecedorId,
                                                  @Param("insumoId") UUID insumoId,
                                                  org.springframework.data.domain.Pageable pageable);

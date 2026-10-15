@@ -145,11 +145,13 @@ public class FornecedorInsumoService {
         }
         BigDecimal preco;
         if (regra == RegraPrecoReferencia.MEDIA) {
-            BigDecimal pago = linhas.stream().map(CompraItem::getPrecoTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+            // #959/DT-NOVA-2 — linha de entrada com divergência de quantidade: preço unitário pago gravado × quantidade
+            // recebida (nunca o total arredondado); as demais, o total pago como sempre.
+            BigDecimal pago = linhas.stream().map(FornecedorInsumoService::valorPagoDaLinha).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal quantidade = linhas.stream().map(CompraItem::getQuantidade).reduce(BigDecimal.ZERO, BigDecimal::add);
             preco = pago.divide(quantidade, 4, RoundingMode.HALF_UP);
         } else {
-            preco = linhas.stream().map(i -> CompraMapper.precoUnitario(i.getPrecoTotal(), i.getQuantidade()))
+            preco = linhas.stream().map(CompraMapper::precoUnitarioExibido)
                     .min(Comparator.naturalOrder()).orElseThrow();
         }
         if (preco.signum() <= 0) {
@@ -157,6 +159,12 @@ public class FornecedorInsumoService {
         }
         vinculo.setPrecoReferencia(preco);
         fornecedorInsumoRepository.save(vinculo);
+    }
+
+    private static BigDecimal valorPagoDaLinha(CompraItem i) {
+        boolean divergente = i.getQuantidadePedida() != null && i.getPrecoUnitarioPago() != null
+                && i.getQuantidadePedida().compareTo(i.getQuantidade()) != 0;
+        return divergente ? i.getPrecoUnitarioPago().multiply(i.getQuantidade()) : i.getPrecoTotal();
     }
 
     private FornecedorInsumo buscar(UUID id) {
@@ -171,7 +179,7 @@ public class FornecedorInsumoService {
                 .stream().findFirst()
                 .map(i -> new FornecedorInsumoResponse.UltimaCompra(i.getCompra().getId(),
                         IdentificadorFormatter.formatar("COM", i.getCompra().getNumero()),
-                        i.getCompra().getDataCompra(), i.getPrecoUnitarioPago()))
+                        i.getCompra().dataParaContagem(), i.getPrecoUnitarioPago()))
                 .orElse(null);
         return new FornecedorInsumoResponse(v.getId(), compraMapper.toRef(v.getFornecedor()),
                 compraMapper.toRef(v.getInsumo()), v.getPrecoReferencia(), v.getUpdatedAt(),

@@ -26,5 +26,7 @@ public record CompraItemResponse(
         TipoDesconto descontoTipo,
         BigDecimal descontoInformado,
         BigDecimal descontoLinha,
-        BigDecimal descontoNota
+        BigDecimal descontoNota,
+        /** #959/DT-NOVA-2 — quantidade pedida, só nas linhas que passaram pela entrada de uma compra pendente. */
+        BigDecimal quantidadePedida
 ) {}

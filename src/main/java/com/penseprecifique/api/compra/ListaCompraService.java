@@ -380,7 +380,7 @@ public class ListaCompraService {
         Map<UUID, Cliente> resultado = new LinkedHashMap<>();
         compraItemRepository.findPorInsumosEStatus(usuarioId, insumoIds, StatusCompra.CONFIRMADA).stream()
                 .filter(i -> i.getFornecedor() != null && fornecedorValido(i.getFornecedor()))
-                .sorted(Comparator.comparing((CompraItem i) -> i.getCompra().getDataCompra())
+                .sorted(Comparator.comparing((CompraItem i) -> i.getCompra().dataParaContagem())
                         .thenComparing(i -> i.getCompra().getNumero()).reversed())
                 .forEach(i -> resultado.putIfAbsent(i.getInsumo().getId(), i.getFornecedor()));
         return resultado;

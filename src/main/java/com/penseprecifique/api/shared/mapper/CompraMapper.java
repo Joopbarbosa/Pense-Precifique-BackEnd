@@ -122,7 +122,7 @@ public class CompraMapper {
                 toRef(item.getFornecedor()),
                 item.getQuantidade(),
                 item.getPrecoTotal(),
-                precoUnitario(item.getPrecoTotal(), item.getQuantidade()),
+                precoUnitarioExibido(item),
                 item.getPrecoUnitarioPago(),
                 item.getCustoUnitarioAnterior(),
                 item.getCustoUnitarioPosterior(),
@@ -130,7 +130,17 @@ public class CompraMapper {
                 item.getDescontoTipo(),
                 item.getDescontoInformado(),
                 item.getDescontoLinha(),
-                item.getDescontoNota());
+                item.getDescontoNota(),
+                item.getQuantidadePedida());
+    }
+
+    /**
+     * #959/DT-NOVA-2 — depois da entrada o preço unitário pago gravado é a única fonte (nunca se divide o total
+     * de volta); em rascunho e pendente ele ainda não existe e vale preço total ÷ quantidade.
+     */
+    public static BigDecimal precoUnitarioExibido(CompraItem item) {
+        return item.getPrecoUnitarioPago() != null ? item.getPrecoUnitarioPago()
+                : precoUnitario(item.getPrecoTotal(), item.getQuantidade());
     }
 
     /** Preço total ÷ quantidade, 4 casas (mesma escala do custo do insumo); nulo se faltar um dos dois. */

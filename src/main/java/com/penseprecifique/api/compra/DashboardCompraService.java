@@ -56,7 +56,7 @@ public class DashboardCompraService {
     private final CmvService cmvService;
 
     private static final Comparator<CompraItem> CRONOLOGICA = Comparator
-            .comparing((CompraItem i) -> i.getCompra().getDataCompra())
+            .comparing((CompraItem i) -> i.getCompra().dataParaContagem())
             .thenComparing(i -> i.getCompra().getNumero())
             .thenComparing(CompraItem::getOrdem);
 
@@ -189,7 +189,7 @@ public class DashboardCompraService {
         Map<UUID, List<CompraItem>> porInsumo = compraItemRepository.findPorInsumosEStatus(usuarioId, ids, StatusCompra.CONFIRMADA)
                 .stream()
                 .filter(i -> i.getPrecoUnitarioPago() != null)
-                .filter(i -> !i.getCompra().getDataCompra().isBefore(inicio) && !i.getCompra().getDataCompra().isAfter(fim))
+                .filter(i -> !i.getCompra().dataParaContagem().isBefore(inicio) && !i.getCompra().dataParaContagem().isAfter(fim))
                 .sorted(CRONOLOGICA)
                 .collect(Collectors.groupingBy(i -> i.getInsumo().getId()));
 
@@ -198,7 +198,7 @@ public class DashboardCompraService {
             List<CompraItem> pontos = porInsumo.getOrDefault(id, List.of());
             BigDecimal base = pontos.isEmpty() ? null : pontos.get(0).getPrecoUnitarioPago();
             series.add(new EvolucaoPrecoResponse.Serie(compraMapper.toRef(insumos.get(id)), pontos.stream()
-                    .map(i -> new EvolucaoPrecoResponse.Ponto(i.getCompra().getDataCompra(), i.getCompra().getId(),
+                    .map(i -> new EvolucaoPrecoResponse.Ponto(i.getCompra().dataParaContagem(), i.getCompra().getId(),
                             IdentificadorFormatter.formatar("COM", i.getCompra().getNumero()), i.getPrecoUnitarioPago(),
                             i.getQuantidade(), i.getFornecedor() != null ? i.getFornecedor().getNome() : null,
                             variacao(base, i.getPrecoUnitarioPago()),
@@ -216,7 +216,7 @@ public class DashboardCompraService {
 
     private static List<CompraItem> entre(List<CompraItem> linhas, LocalDate de, LocalDate ate) {
         return linhas.stream().filter(i -> {
-            LocalDate d = i.getCompra().getDataCompra();
+            LocalDate d = i.getCompra().dataParaContagem();
             return !d.isBefore(de) && !d.isAfter(ate);
         }).toList();
     }
@@ -281,8 +281,8 @@ public class DashboardCompraService {
             BigDecimal v = variacao(primeiro.getPrecoUnitarioPago(), ultimo.getPrecoUnitarioPago());
             if (v != null && v.signum() > 0) {
                 lista.add(new DashboardComprasResponse.InsumoVariacao(compraMapper.toRef(primeiro.getInsumo()),
-                        primeiro.getPrecoUnitarioPago(), primeiro.getCompra().getDataCompra(),
-                        ultimo.getPrecoUnitarioPago(), ultimo.getCompra().getDataCompra(), v));
+                        primeiro.getPrecoUnitarioPago(), primeiro.getCompra().dataParaContagem(),
+                        ultimo.getPrecoUnitarioPago(), ultimo.getCompra().dataParaContagem(), v));
             }
         }
         return lista.stream()

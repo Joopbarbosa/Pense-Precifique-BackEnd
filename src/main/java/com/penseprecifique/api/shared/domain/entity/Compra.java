@@ -138,6 +138,11 @@ public class Compra {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /** #959/DT-NOVA-3 — data em que a compra conta nos números: a de entrada; sem ela (rascunho/legado), a da compra. */
+    public LocalDate dataParaContagem() {
+        return dataEntrada != null ? dataEntrada : dataCompra;
+    }
+
     @PrePersist
     void prePersist() {
         LocalDateTime now = LocalDateTime.now();
