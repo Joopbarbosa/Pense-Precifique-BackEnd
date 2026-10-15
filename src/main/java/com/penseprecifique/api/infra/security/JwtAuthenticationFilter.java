@@ -41,6 +41,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             } catch (UsernameNotFoundException e) {
                 // #334 (DT-NOVA-13) — token de e-mail que já não existe (trocado ou conta removida): segue sem
                 // autenticação e o acesso protegido responde 401, em vez de estourar 500 no filtro.
+                SecurityContextHolder.clearContext();
             }
         }
 
