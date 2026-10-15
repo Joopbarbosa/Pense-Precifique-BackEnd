@@ -107,6 +107,8 @@ public class OrcamentoMapper {
             response.setCatalogoIdentificador(
                     IdentificadorFormatter.formatar("CTG", item.getItemCatalogo().getCatalogo().getNumero()));
             response.setCatalogoNome(item.getItemCatalogo().getCatalogo().getNome());
+            response.setDestinoTipo("CATALOGO");
+            response.setDestinoId(com.penseprecifique.api.cliente.DestinoCadastro.catalogoDoItem(item.getItemCatalogo()));
             // Item de Catálogo tem nome próprio desde RN-NOVA-1 (V0.13.0) — sem produtoId nem
             // badges de estoque/fracionável de um único produto (estoque agora é por componente,
             // N deles; ver Divergência de Premissa em decisoes-catalogo.md).
@@ -118,6 +120,8 @@ public class OrcamentoMapper {
             Produto produto = item.getProduto();
             response.setProdutoId(produto.getId());
             response.setNomeProduto(produto.getNome());
+            response.setDestinoTipo("PRODUTO");
+            response.setDestinoId(com.penseprecifique.api.cliente.DestinoCadastro.produto(produto));
             response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
             response.setEstoqueAtual(produto.getEstoqueAtual());
             // RN-NOVA-7 (V0.10.0, #461) — reversão de RN-NOVA-6: badge fracionável volta ao
@@ -153,6 +157,7 @@ public class OrcamentoMapper {
         response.setId(c.getId());
         response.setProdutoId(c.getProduto().getId());
         response.setNomeProduto(c.getProduto().getNome());
+        response.setDestinoId(com.penseprecifique.api.cliente.DestinoCadastro.produto(c.getProduto()));
         response.setQuantidade(c.getQuantidade());
         response.setPrecoUnitario(c.getPrecoUnitario());
         response.setSubtotal(c.getSubtotal());
