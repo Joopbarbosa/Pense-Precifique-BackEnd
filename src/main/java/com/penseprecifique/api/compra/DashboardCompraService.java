@@ -1,6 +1,7 @@
 package com.penseprecifique.api.compra;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.dashboard.VendasService;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.CompraItem;
@@ -9,6 +10,10 @@ import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import com.penseprecifique.api.shared.dto.response.compra.DashboardComprasResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.QuantidadeValorResponse;
 import com.penseprecifique.api.shared.dto.response.compra.EvolucaoPrecoResponse;
+import com.penseprecifique.api.shared.dto.response.compra.VendaCmvResponse;
+import com.penseprecifique.api.shared.dto.response.compra.VendasCmvResponse;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.CompraMapper;
@@ -78,6 +83,47 @@ public class DashboardCompraService {
         }
     }
 
+    /**
+     * #615 (V0.17.0, RN-NOVA-13, DT-NOVA-8/9) — composição do CMV: a listagem das vendas que somam o número do dashboard,
+     * da mesma fonte única ({@link VendasService}). Ordem fixa: data desc, identificador, id; o total vale para o filtro inteiro,
+     * não para a página. {@code mes} consulta o mês inteiro exibido na barra (limitado por {@code ate} no último mês).
+     */
+    public VendasCmvResponse vendasCmv(LocalDate de, LocalDate ate, YearMonth mes, Pageable pageable) {
+        LocalDate fim = ate != null ? ate : LocalDate.now();
+        LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
+        validarFaixa(inicio, fim);
+        if (inicio.isAfter(fim)) {
+            throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
+                    "O período vai da data inicial até a data final.",
+                    "Troque as datas de lugar (ex.: de 01/09/2026 até 30/09/2026).");
+        }
+        if (pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
+            throw new BusinessException("Use uma página de 1 a 100 vendas.");
+        }
+        if (mes != null) {
+            YearMonth primeiro = YearMonth.from(inicio).isBefore(YearMonth.from(fim).minusMonths(5))
+                    ? YearMonth.from(inicio) : YearMonth.from(fim).minusMonths(5);
+            if (mes.isBefore(primeiro) || mes.isAfter(YearMonth.from(fim))) {
+                throw new BusinessException("Escolha um mês exibido no gráfico.");
+            }
+            inicio = mes.atDay(1);
+            if (mes.atEndOfMonth().isBefore(fim)) fim = mes.atEndOfMonth();
+        }
+        List<VendasService.Venda> vendas = cmvService.vendas(usuarioId(), inicio, fim).stream()
+                .sorted(Comparator.comparing(VendasService.Venda::data).reversed()
+                        .thenComparing(VendasService.Venda::identificador).thenComparing(VendasService.Venda::id))
+                .toList();
+        BigDecimal total = somarCmv(vendas);
+        int inicioPagina = (int) Math.min(pageable.getOffset(), vendas.size());
+        int fimPagina = Math.min(inicioPagina + pageable.getPageSize(), vendas.size());
+        List<VendaCmvResponse> pagina = vendas.subList(inicioPagina, fimPagina).stream()
+                .map(v -> new VendaCmvResponse(v.id(), v.tipo(), v.identificador(), v.data(), v.cliente(), v.itens(),
+                        v.faturamento(), v.cmv(), v.faturamento().signum() == 0 ? BigDecimal.ZERO.setScale(2)
+                                : percentual(v.cmv(), v.faturamento()), v.custoEstimado(), v.semCusto()))
+                .toList();
+        return new VendasCmvResponse(new PageImpl<>(pagina, pageable, vendas.size()), total);
+    }
+
     public DashboardComprasResponse dashboard(LocalDate de, LocalDate ate) {
         UUID usuarioId = usuarioId();
         LocalDate fim = ate != null ? ate : LocalDate.now();
@@ -112,9 +158,9 @@ public class DashboardCompraService {
         BigDecimal cheio = cheio(doPeriodo);
         BigDecimal descontoAnterior = descontos(doAnterior);
 
-        List<CmvService.Venda> vendas = cmvService.vendas(usuarioId, inicioGeral, fim);
-        List<CmvService.Venda> vendasPeriodo = vendasEntre(vendas, inicio, fim);
-        List<CmvService.Venda> vendasAnterior = vendasEntre(vendas, inicioAnterior, fimAnterior);
+        List<VendasService.Venda> vendas = cmvService.vendas(usuarioId, inicioGeral, fim);
+        List<VendasService.Venda> vendasPeriodo = vendasEntre(vendas, inicio, fim);
+        List<VendasService.Venda> vendasAnterior = vendasEntre(vendas, inicioAnterior, fimAnterior);
         BigDecimal cmv = somarCmv(vendasPeriodo);
         BigDecimal faturamento = somarFaturamento(vendasPeriodo);
         BigDecimal cmvAnterior = somarCmv(vendasAnterior);
@@ -125,7 +171,7 @@ public class DashboardCompraService {
         for (YearMonth m = primeiroMes; !m.isAfter(YearMonth.from(fim)); m = m.plusMonths(1)) {
             LocalDate a = m.atDay(1);
             LocalDate b = m.atEndOfMonth();
-            List<CmvService.Venda> vm = vendasEntre(vendas, a, b);
+            List<VendasService.Venda> vm = vendasEntre(vendas, a, b);
             BigDecimal fat = somarFaturamento(vm);
             BigDecimal c = somarCmv(vm);
             // #599/RN-NOVA-37 (adendo 2) — mês sem faturamento = 0% no gráfico (linha sem buraco); o
@@ -147,8 +193,8 @@ public class DashboardCompraService {
                 new DashboardComprasResponse.Economia(desconto, cheio, percentual(desconto, cheio), descontoAnterior,
                         variacaoEntre(descontoAnterior, desconto)),
                 new DashboardComprasResponse.Cmv(cmv, faturamento, percentual(cmv, faturamento),
-                        vendasPeriodo.stream().map(CmvService.Venda::estimado).reduce(BigDecimal.ZERO, BigDecimal::add),
-                        vendasPeriodo.stream().filter(CmvService.Venda::semCusto).count(),
+                        vendasPeriodo.stream().map(VendasService.Venda::estimado).reduce(BigDecimal.ZERO, BigDecimal::add),
+                        vendasPeriodo.stream().filter(VendasService.Venda::semCusto).count(),
                         cmvAnterior, percentual(cmvAnterior, somarFaturamento(vendasAnterior)),
                         variacaoEntre(cmvAnterior, cmv)),
                 new QuantidadeValorResponse(naoPagas.size(), valorNaoPago),
@@ -221,7 +267,7 @@ public class DashboardCompraService {
         }).toList();
     }
 
-    private static List<CmvService.Venda> vendasEntre(List<CmvService.Venda> vendas, LocalDate de, LocalDate ate) {
+    private static List<VendasService.Venda> vendasEntre(List<VendasService.Venda> vendas, LocalDate de, LocalDate ate) {
         return vendas.stream().filter(v -> !v.data().isBefore(de) && !v.data().isAfter(ate)).toList();
     }
 
@@ -241,12 +287,12 @@ public class DashboardCompraService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private static BigDecimal somarCmv(List<CmvService.Venda> vendas) {
-        return vendas.stream().map(CmvService.Venda::cmv).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
+    private static BigDecimal somarCmv(List<VendasService.Venda> vendas) {
+        return vendas.stream().map(VendasService.Venda::cmv).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private static BigDecimal somarFaturamento(List<CmvService.Venda> vendas) {
-        return vendas.stream().map(CmvService.Venda::faturamento).reduce(BigDecimal.ZERO, BigDecimal::add);
+    private static BigDecimal somarFaturamento(List<VendasService.Venda> vendas) {
+        return vendas.stream().map(VendasService.Venda::faturamento).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** parte ÷ todo × 100, 2 casas; nulo sem base. */
