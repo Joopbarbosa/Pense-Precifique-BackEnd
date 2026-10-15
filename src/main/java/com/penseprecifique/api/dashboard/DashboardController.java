@@ -21,6 +21,7 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
     private final DashboardVendasService dashboardVendasService;
+    private final DashboardCadastrosService dashboardCadastrosService;
 
     @GetMapping
     public ResponseEntity<DashboardResponse> getDashboard() {
@@ -48,5 +49,23 @@ public class DashboardController {
             @RequestParam(required = false) String forma,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(dashboardVendasService.lista(de, ate, origem, status, busca, somenteQueContam, produtoId, forma, pageable));
+    }
+
+    /** #607/RN-NOVA-16 (V0.17.0) — Dashboard de Cadastros; sem datas, o mês atual; {@code insumoId} escolhe o insumo da evolução de preço. */
+    @GetMapping("/cadastros")
+    public ResponseEntity<DashboardCadastrosResponse> cadastros(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
+            @RequestParam(required = false) java.util.UUID insumoId) {
+        return ResponseEntity.ok(dashboardCadastrosService.dashboard(de, ate, insumoId));
+    }
+
+    /** #607 — evolução do preço médio mensal de um insumo escolhido na tela. */
+    @GetMapping("/cadastros/evolucao-preco")
+    public ResponseEntity<DashboardCadastrosResponse.EvolucaoPreco> evolucaoPreco(
+            @RequestParam java.util.UUID insumoId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return ResponseEntity.ok(dashboardCadastrosService.evolucaoDoInsumo(insumoId, de, ate));
     }
 }
