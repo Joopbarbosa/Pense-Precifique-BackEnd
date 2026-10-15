@@ -50,12 +50,18 @@ public record CompraRequest(
         BigDecimal descontoNotaValor,
 
         /** #597/RN-NOVA-42 — só com método Cartão de crédito e pago; ignorado nos demais. */
-        Integer parcelas
+        Integer parcelas,
+
+        /** #957/RN-NOVA-4 — nulo = Sim (entrega imediata, como antes da V0.17.0). */
+        Boolean entregaImediata,
+
+        /** #957/RN-NOVA-4 — só vale com entregaImediata = false; exigida ao confirmar. */
+        LocalDate previsaoEntrega
 ) {
     /** Forma anterior ao #576 (sem desconto na nota). */
     public CompraRequest(LocalDate dataCompra, Boolean multiplosFornecedores, UUID fornecedorId, Boolean pago,
                          UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens) {
-        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens, null, null, null);
+        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens, null, null, null, null, null);
     }
 
     /** Forma anterior ao #597 (sem parcelas). */
@@ -63,7 +69,15 @@ public record CompraRequest(
                          UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens,
                          TipoDesconto descontoNotaTipo, BigDecimal descontoNotaValor) {
         this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens,
-                descontoNotaTipo, descontoNotaValor, null);
+                descontoNotaTipo, descontoNotaValor, null, null, null);
+    }
+
+    /** Forma anterior ao #957 (sem entrega imediata nem previsão). */
+    public CompraRequest(LocalDate dataCompra, Boolean multiplosFornecedores, UUID fornecedorId, Boolean pago,
+                         UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens,
+                         TipoDesconto descontoNotaTipo, BigDecimal descontoNotaValor, Integer parcelas) {
+        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens,
+                descontoNotaTipo, descontoNotaValor, parcelas, null, null);
     }
 
     public List<CompraItemRequest> itensOuVazio() {
