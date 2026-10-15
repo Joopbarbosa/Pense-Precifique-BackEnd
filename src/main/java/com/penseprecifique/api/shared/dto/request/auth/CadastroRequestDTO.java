@@ -16,5 +16,9 @@ public record CadastroRequestDTO(
         String senha,
 
         @NotBlank(message = "Confirmação de senha é obrigatória")
-        String confirmarSenha
+        String confirmarSenha,
+
+        /** #339 (RN-NOVA-3) — opcional para não quebrar clientes antigos; o frontend sempre envia. */
+        @Size(max = 255, message = "O nome da empresa deve ter no máximo 255 caracteres")
+        String nomeEmpresa
 ) {}
