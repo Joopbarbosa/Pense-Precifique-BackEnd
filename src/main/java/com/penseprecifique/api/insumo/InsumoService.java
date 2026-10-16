@@ -525,14 +525,19 @@ public class InsumoService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProdutoRelacionadoResponse> listarProdutosRelacionados(UUID insumoId) {
+    public List<ProdutoRelacionadoResponse> listarProdutosRelacionados(UUID insumoId, boolean somenteAtivos) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
+        Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
-        return fichaTecnicaItemRepository.findProdutosByInsumoId(insumoId)
-                .stream()
-                .map(insumoMapper::toProdutoRelacionadoResponse)
-                .toList();
+        // V0.17.0 #971 (DT-NOVA-18): um produto por linha, com a quantidade do insumo na ficha (somada se houver mais de uma linha)
+        java.util.Map<UUID, ProdutoRelacionadoResponse> porProduto = new java.util.LinkedHashMap<>();
+        for (var item : fichaTecnicaItemRepository.findItensProdutosByInsumoId(insumoId, somenteAtivos)) {
+            ProdutoRelacionadoResponse r = porProduto.computeIfAbsent(item.getProduto().getId(),
+                    id -> insumoMapper.toProdutoRelacionadoResponse(item.getProduto()));
+            r.setQuantidade(r.getQuantidade() == null ? item.getQuantidade() : r.getQuantidade().add(item.getQuantidade()));
+            r.setUnidade(insumo.getUnidadeMedida() != null ? insumo.getUnidadeMedida().getSigla() : null);
+        }
+        return new java.util.ArrayList<>(porProduto.values());
     }
 
     private UUID getUsuarioIdAutenticado() {

@@ -18,6 +18,11 @@ public interface FichaTecnicaItemRepository extends JpaRepository<FichaTecnicaIt
     @Query("SELECT DISTINCT f.produto FROM FichaTecnicaItem f WHERE f.insumo.id = :insumoId AND f.produto.deletedAt IS NULL")
     List<Produto> findProdutosByInsumoId(@Param("insumoId") UUID insumoId);
 
+    /** V0.17.0 #971 (DT-NOVA-18): itens da ficha que usam o insumo, com a quantidade; {@code somenteAtivos} filtra os produtos ativos. */
+    @Query("SELECT f FROM FichaTecnicaItem f WHERE f.insumo.id = :insumoId AND f.produto.deletedAt IS NULL " +
+            "AND (:somenteAtivos = false OR f.produto.ativo = true) ORDER BY f.produto.nome")
+    List<FichaTecnicaItem> findItensProdutosByInsumoId(@Param("insumoId") UUID insumoId, @Param("somenteAtivos") boolean somenteAtivos);
+
     List<FichaTecnicaItem> findByProdutoIdAndInsumoId(UUID produtoId, UUID insumoId);
 
     /** #237/PDT-0XX — produtos (pai) cuja ficha técnica usa o produto informado como componente (produtoBase). */
