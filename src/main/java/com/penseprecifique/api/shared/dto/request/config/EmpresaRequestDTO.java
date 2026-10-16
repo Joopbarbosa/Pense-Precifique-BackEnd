@@ -1,6 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.config;
 
 import jakarta.validation.Valid;
+import com.penseprecifique.api.shared.validation.TelefoneValido;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -16,7 +17,9 @@ public record EmpresaRequestDTO(
         @Size(max = 255, message = "E-mail muito longo")
         String email,
 
-        @Size(max = 20, message = "O telefone deve ter no máximo 20 caracteres")
+        // V0.17.0 #964 (RN-NOVA-19): nacional ou estrangeiro, até 25 caracteres
+        @Size(max = 25, message = "O telefone deve ter no máximo 25 caracteres")
+        @TelefoneValido
         String whatsapp,
         String endereco,
         String logoUrl,
