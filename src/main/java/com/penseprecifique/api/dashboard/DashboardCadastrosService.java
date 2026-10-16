@@ -105,7 +105,81 @@ public class DashboardCadastrosService {
                 precosAbaixoDoSugerido(usuarioId),
                 margens(usuarioId),
                 curvaAbc(linhas),
-                variacoes(comprasPeriodo));
+                variacoes(comprasPeriodo),
+                numerosEstoque(usuarioId, vendasPeriodo, vendasAnterior));
+    }
+
+    /**
+     * V0.17.0 #974 (RN-NOVA-25, CEN-NOVO-72 a 75): valor do estoque em material (custo médio pago) e produtos prontos (custo de produção
+     * atual por unidade, 4 casas), potencial de venda, % de CMV e margem do período, e insumos abaixo do mínimo. Fotos de hoje, exceto CMV.
+     */
+    private DashboardCadastrosResponse.Estoque numerosEstoque(UUID usuarioId, List<VendasService.Venda> vendasPeriodo,
+                                                              List<VendasService.Venda> vendasAnterior) {
+        List<DashboardCadastrosResponse.LinhaEstoque> valorInsumos = new ArrayList<>();
+        List<DashboardCadastrosResponse.LinhaMinimo> abaixoMinimo = new ArrayList<>();
+        for (Insumo i : insumoRepository.findByUsuarioIdAndAtivoTrueAndDeletedAtIsNull(usuarioId)) {
+            BigDecimal estoque = i.getEstoqueAtual() == null ? BigDecimal.ZERO : i.getEstoqueAtual();
+            BigDecimal custo = i.getCustoUnitario() == null ? BigDecimal.ZERO : i.getCustoUnitario();
+            if (estoque.signum() > 0) {
+                valorInsumos.add(new DashboardCadastrosResponse.LinhaEstoque(i.getId(), IdentificadorFormatter.formatar("INS", i.getNumero()),
+                        i.getNome(), "INSUMO", estoque, custo, estoque.multiply(custo), null));
+            }
+            if (i.getEstoqueMinimo() != null && estoque.compareTo(i.getEstoqueMinimo()) < 0) {
+                abaixoMinimo.add(new DashboardCadastrosResponse.LinhaMinimo(i.getId(), IdentificadorFormatter.formatar("INS", i.getNumero()),
+                        i.getNome(), estoque, i.getEstoqueMinimo(), i.getEstoqueMinimo().subtract(estoque)));
+            }
+        }
+        List<DashboardCadastrosResponse.LinhaEstoque> valorProdutos = new ArrayList<>();
+        List<DashboardCadastrosResponse.LinhaEstoque> potencial = new ArrayList<>();
+        for (Produto p : produtosAtivos(usuarioId)) {
+            BigDecimal estoque = p.getEstoqueAtual() == null ? BigDecimal.ZERO : p.getEstoqueAtual();
+            if (estoque.signum() <= 0) {
+                continue;
+            }
+            BigDecimal custoUnitario = produtoService.custoUnitarioAoVivo(p).setScale(4, RoundingMode.HALF_UP);
+            String identificador = IdentificadorFormatter.formatar("PRO", p.getNumero());
+            valorProdutos.add(new DashboardCadastrosResponse.LinhaEstoque(p.getId(), identificador, p.getNome(), "PRODUTO", estoque,
+                    custoUnitario, estoque.multiply(custoUnitario), p.getPrecoVenda()));
+            if (p.getPrecoVenda() != null) {
+                potencial.add(new DashboardCadastrosResponse.LinhaEstoque(p.getId(), identificador, p.getNome(), "PRODUTO", estoque, null,
+                        estoque.multiply(p.getPrecoVenda()), p.getPrecoVenda()));
+            }
+        }
+        List<DashboardCadastrosResponse.LinhaEstoque> valorTodos = new ArrayList<>(valorInsumos);
+        valorTodos.addAll(valorProdutos);
+        valorTodos.sort(Comparator.comparing(DashboardCadastrosResponse.LinhaEstoque::valor).reversed()
+                .thenComparing(l -> normalizar(l.nome())).thenComparing(DashboardCadastrosResponse.LinhaEstoque::identificador));
+        potencial.sort(Comparator.comparing(DashboardCadastrosResponse.LinhaEstoque::valor).reversed()
+                .thenComparing(l -> normalizar(l.nome())).thenComparing(DashboardCadastrosResponse.LinhaEstoque::identificador));
+        abaixoMinimo.sort(Comparator.comparing(DashboardCadastrosResponse.LinhaMinimo::falta).reversed()
+                .thenComparing(l -> normalizar(l.nome())).thenComparing(DashboardCadastrosResponse.LinhaMinimo::identificador));
+
+        BigDecimal material = centavos(valorInsumos.stream().map(DashboardCadastrosResponse.LinhaEstoque::valor).reduce(BigDecimal.ZERO, BigDecimal::add));
+        BigDecimal prontos = centavos(valorProdutos.stream().map(DashboardCadastrosResponse.LinhaEstoque::valor).reduce(BigDecimal.ZERO, BigDecimal::add));
+        BigDecimal potencialTotal = centavos(potencial.stream().map(DashboardCadastrosResponse.LinhaEstoque::valor).reduce(BigDecimal.ZERO, BigDecimal::add));
+
+        BigDecimal[] atual = cmvEMargem(vendasPeriodo);
+        BigDecimal[] anterior = cmvEMargem(vendasAnterior);
+        return new DashboardCadastrosResponse.Estoque(material.add(prontos), material, prontos, valorTodos,
+                potencialTotal, potencial,
+                DashboardNumero.de(atual[0], anterior[0]), DashboardNumero.de(atual[1], anterior[1]),
+                abaixoMinimo.size(), abaixoMinimo);
+    }
+
+    /** % de CMV e margem após custo de material do conjunto de vendas; 0% quando não há faturamento (RN-NOVA-25, itens 3 e 4). */
+    private static BigDecimal[] cmvEMargem(List<VendasService.Venda> vendas) {
+        BigDecimal faturamento = vendas.stream().map(VendasService.Venda::faturamento).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cmv = vendas.stream().map(VendasService.Venda::cmv).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (faturamento.signum() <= 0) {
+            return new BigDecimal[]{BigDecimal.ZERO.setScale(2), BigDecimal.ZERO.setScale(2)};
+        }
+        BigDecimal percentualCmv = cmv.multiply(CEM).divide(faturamento, 2, RoundingMode.HALF_UP);
+        BigDecimal margem = faturamento.subtract(cmv).multiply(CEM).divide(faturamento, 2, RoundingMode.HALF_UP);
+        return new BigDecimal[]{percentualCmv, margem};
+    }
+
+    private static BigDecimal centavos(BigDecimal valor) {
+        return valor.setScale(2, RoundingMode.HALF_UP);
     }
 
     /** Evolução do preço de um insumo escolhido, mês a mês (o seletor da tela chama só este pedaço). */
