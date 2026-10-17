@@ -46,7 +46,8 @@ import java.util.stream.Stream;
 @Transactional(readOnly = true)
 public class DashboardCadastrosService {
 
-    private static final int TOP = 5;
+    /** V0.17.0 #971 (RN-NOVA-23): rankings mostram 10 itens; a lupa lista todos (campo {@code todos}). */
+    private static final int TOP = 10;
     private static final BigDecimal CEM = new BigDecimal("100");
     private static final BigDecimal OITENTA = new BigDecimal("80");
     private static final BigDecimal NOVENTA_E_CINCO = new BigDecimal("95");

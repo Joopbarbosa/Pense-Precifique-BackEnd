@@ -93,9 +93,12 @@ public class InsumoController {
         return ResponseEntity.status(201).body(insumoService.baixaManual(id, request));
     }
 
+    /** V0.17.0 #971 — {@code somenteAtivos=true} é o que a modal do ranking "Em quantos produtos" usa (mesmo filtro do número). */
     @GetMapping("/{id}/produtos-relacionados")
-    public ResponseEntity<List<ProdutoRelacionadoResponse>> listarProdutosRelacionados(@PathVariable UUID id) {
-        return ResponseEntity.ok(insumoService.listarProdutosRelacionados(id));
+    public ResponseEntity<List<ProdutoRelacionadoResponse>> listarProdutosRelacionados(
+            @PathVariable UUID id,
+            @RequestParam(name = "somenteAtivos", defaultValue = "false") boolean somenteAtivos) {
+        return ResponseEntity.ok(insumoService.listarProdutosRelacionados(id, somenteAtivos));
     }
 
     @PostMapping("/{id}/resolver-vinculos")

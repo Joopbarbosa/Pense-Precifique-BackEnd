@@ -69,7 +69,7 @@ public class DashboardVendasService {
                 DashboardNumero.de(faturamento, faturamentoAnterior),
                 DashboardNumero.de(BigDecimal.valueOf(doPeriodo.size()), BigDecimal.valueOf(doAnterior.size())),
                 DashboardNumero.de(ticket, ticketAnterior),
-                meses, origens, produtosMaisVendidos(doPeriodo), formasPagamento(doPeriodo));
+                meses, origens, produtosMaisVendidos(doPeriodo), todosProdutosVendidos(doPeriodo), formasPagamento(doPeriodo));
     }
 
     /**
@@ -101,7 +101,7 @@ public class DashboardVendasService {
                 .filter(l -> !somenteQueContam || l.contaNosNumeros())
                 .filter(l -> termo.isEmpty() || normalizar(l.identificador()).contains(termo)
                         || normalizar(l.cliente()).contains(termo))
-                .sorted(Comparator.comparing(VendasService.LinhaLista::data).reversed()
+                .sorted(comparadorLista(pageable).thenComparing(Comparator.comparing(VendasService.LinhaLista::data).reversed())
                         .thenComparing(VendasService.LinhaLista::identificador).thenComparing(VendasService.LinhaLista::id))
                 .toList();
         BigDecimal total = filtradas.stream().map(VendasService.LinhaLista::total).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -139,8 +139,16 @@ public class DashboardVendasService {
         return quantidade == 0 ? null : faturamento.divide(BigDecimal.valueOf(quantidade), 2, RoundingMode.HALF_UP);
     }
 
-    /** Mais vendidos pela quantidade; empate pelo faturamento e depois pelo nome (resultado igual em qualquer tela). */
+    /** Top 10 de produtos vendidos (RN-NOVA-23): mesma ordem da lista completa, cortada no 10º. */
     private static List<DashboardVendasResponse.ProdutoVendido> produtosMaisVendidos(List<VendasService.Venda> vendas) {
+        return todosProdutosVendidos(vendas).stream().limit(TOP).toList();
+    }
+
+    /**
+     * Produtos vendidos ordenados pela quantidade (maior primeiro); empate pelo nome, sem diferenciar maiúsculas e
+     * acentos, depois pelo tipo e pelo id (RN-NOVA-23 — o desempate é o mesmo em qualquer tela).
+     */
+    private static List<DashboardVendasResponse.ProdutoVendido> todosProdutosVendidos(List<VendasService.Venda> vendas) {
         Map<String, DashboardVendasResponse.ProdutoVendido> soma = new LinkedHashMap<>();
         for (VendasService.Venda v : vendas) {
             for (VendasService.LinhaProduto l : v.linhas()) {
@@ -152,9 +160,10 @@ public class DashboardVendasService {
         }
         return soma.values().stream()
                 .sorted(Comparator.comparing(DashboardVendasResponse.ProdutoVendido::quantidade).reversed()
-                        .thenComparing(DashboardVendasResponse.ProdutoVendido::faturamento, Comparator.reverseOrder())
-                        .thenComparing(DashboardVendasResponse.ProdutoVendido::nome))
-                .limit(TOP).toList();
+                        .thenComparing(p -> normalizar(p.nome()))
+                        .thenComparing(DashboardVendasResponse.ProdutoVendido::tipo)
+                        .thenComparing(p -> p.id() == null ? "" : p.id().toString()))
+                .toList();
     }
 
     private static List<DashboardVendasResponse.FormaPagamento> formasPagamento(List<VendasService.Venda> vendas) {
@@ -177,6 +186,37 @@ public class DashboardVendasService {
                 .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
                 .map(e -> new DashboardVendasResponse.FormaPagamento(e.getKey(), e.getValue(), quantidade.getOrDefault(e.getKey(), 0L)))
                 .toList();
+    }
+
+    /**
+     * V0.17.0 #971 (DT-NOVA-18): ordenação pedida pela tabela (identificador, data, cliente, total ou status), com
+     * sentido. Sem ordenação pedida, a ordem é a de sempre (data mais recente primeiro). Campo fora da lista = BLOQUEIO.
+     */
+    private static Comparator<VendasService.LinhaLista> comparadorLista(Pageable pageable) {
+        Comparator<VendasService.LinhaLista> nada = (a, b) -> 0;
+        Comparator<VendasService.LinhaLista> criterio = nada;
+        for (org.springframework.data.domain.Sort.Order ordem : pageable.getSort()) {
+            Comparator<VendasService.LinhaLista> campo = switch (ordem.getProperty()) {
+                case "identificador" -> Comparator.comparing((VendasService.LinhaLista l) -> prefixoIdentificador(l.identificador()))
+                        .thenComparingLong(l -> numeroIdentificador(l.identificador()));
+                case "data" -> Comparator.comparing(VendasService.LinhaLista::data);
+                case "cliente" -> Comparator.comparing(l -> normalizar(l.cliente()));
+                case "total" -> Comparator.comparing(VendasService.LinhaLista::total);
+                case "status" -> Comparator.comparing(l -> normalizar(l.status()));
+                default -> throw new BusinessException("Ordenação inválida para as vendas.");
+            };
+            criterio = criterio.thenComparing(ordem.isDescending() ? campo.reversed() : campo);
+        }
+        return criterio;
+    }
+
+    private static String prefixoIdentificador(String identificador) {
+        return identificador == null ? "" : identificador.replaceAll("[^A-Za-z]", "").toUpperCase(Locale.ROOT);
+    }
+
+    private static long numeroIdentificador(String identificador) {
+        String digitos = identificador == null ? "" : identificador.replaceAll("\\D", "");
+        return digitos.isEmpty() ? 0L : Long.parseLong(digitos.length() > 18 ? digitos.substring(0, 18) : digitos);
     }
 
     private static String normalizar(String texto) {

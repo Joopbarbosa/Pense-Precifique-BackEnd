@@ -17,6 +17,8 @@ public record DashboardVendasResponse(
         List<Mes> meses,
         List<Origem> porOrigem,
         List<ProdutoVendido> produtosMaisVendidos,
+        /** V0.17.0 #971 (DT-NOVA-18): todos os produtos vendidos no período, para a lupa do ranking. */
+        List<ProdutoVendido> todosProdutosVendidos,
         List<FormaPagamento> formasPagamento
 ) {
     public record Mes(LocalDate mes, BigDecimal faturamento, long quantidade) {}
