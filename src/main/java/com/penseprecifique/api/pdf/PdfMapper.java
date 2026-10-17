@@ -308,10 +308,6 @@ public class PdfMapper {
             .build();
     }
 
-    private PdfMicroservicoEmpresaPayload toEmpresaPayload(String nomeEmpresa, String emailEmpresa, String telefoneEmpresa) {
-        return toEmpresaPayload(nomeEmpresa, emailEmpresa, telefoneEmpresa, null);
-    }
-
     /**
      * OpenProject #519 (RN-NOVA-8) — o logo do cadastro da empresa (R2, #518) vai para o cabeçalho.
      * V0.17.0 #965 (RN-NOVA-20): os cinco documentos do orçamento (orçamento, sinal, pagamento, multa e
