@@ -36,6 +36,7 @@ public class PdfMapper {
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
+            .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
             .nomeCliente(orc.getCliente() != null ? orc.getCliente().getNome() : "—")
             .telefoneCliente(orc.getCliente() != null ? orc.getCliente().getWhatsapp() : null)
             .emailCliente(orc.getCliente() != null ? orc.getCliente().getEmail() : null)
@@ -64,12 +65,12 @@ public class PdfMapper {
      * pense-precifique-pdf (contrato-pdf.md seção 1) — reaproveita a formatação já validada em
      * {@link #toOrcamentoPdfData}, só reempacota.
      *
-     * <p>{@code logoUrl} vai sempre {@code null} nesta rodada — decisão explícita do MVP
-     * (contrato-pdf.md seção 1: campo existe na entidade {@code Empresa} mas nunca foi populado).
+     * <p>{@code logoUrl} vem do cadastro da empresa (V0.17.0 #965, RN-NOVA-20); sem logo, vai nulo e o
+     * cabeçalho mostra a inicial do nome.
      */
     public PdfMicroservicoOrcamentoPayload toMicroservicoPayload(OrcamentoPdfData dados) {
         PdfMicroservicoEmpresaPayload empresa =
-            toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa());
+            toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa(), dados.getLogoUrlEmpresa());
 
         List<PdfMicroservicoItemPayload> itens = mapearItensPayload(dados.getItens());
 
@@ -118,6 +119,7 @@ public class PdfMapper {
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
+            .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
             .metodoRecebido(orc.getMetodoSinalRecebido() != null ?
                 formatarMetodoPagamento(orc.getMetodoSinalRecebido()) : "—")
             .valorRecebido(orc.getValorSinal() != null ? formatarMoeda(orc.getValorSinal()) : "—")
@@ -144,6 +146,7 @@ public class PdfMapper {
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
+            .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
             .metodoPagamento(formatarMetodoPagamento(orc.getMetodoPagamento()))
             .valorTotal(formatarMoeda(recibo.getValorTotal()))
             .valorSinalPago(formatarMoeda(recibo.getValorSinalPago()))
@@ -167,7 +170,7 @@ public class PdfMapper {
      */
     public PdfMicroservicoReciboPagamentoPayload toReciboPagamentoMicroservicoPayload(ReciboPagamentoPdfData dados) {
         return PdfMicroservicoReciboPagamentoPayload.builder()
-            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa(), dados.getLogoUrlEmpresa()))
             .documento(PdfMicroservicoDocumentoReciboPagamentoPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
@@ -199,6 +202,7 @@ public class PdfMapper {
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
+            .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
             .percentualMulta(orc.getPercentualMulta() != null ? orc.getPercentualMulta() + "%" : "—")
             .valorMulta(orc.getValorMulta() != null ? formatarMoeda(orc.getValorMulta()) : "—")
             .motivo(orc.getCancelamentoMotivo())
@@ -221,6 +225,7 @@ public class PdfMapper {
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
+            .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
             .valorRecebido(orc.getValorSinal() != null ? formatarMoeda(orc.getValorSinal()) : "—")
             .dataEstorno(orc.getDataEstornoSinal() != null ? formatarData(orc.getDataEstornoSinal()) : "—")
             .motivo(orc.getCancelamentoMotivo())
@@ -237,7 +242,7 @@ public class PdfMapper {
      */
     public PdfMicroservicoReciboSinalPayload toReciboSinalMicroservicoPayload(ReciboPdfData dados) {
         return PdfMicroservicoReciboSinalPayload.builder()
-            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa(), dados.getLogoUrlEmpresa()))
             .documento(PdfMicroservicoDocumentoReciboSinalPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
@@ -266,7 +271,7 @@ public class PdfMapper {
      */
     public PdfMicroservicoPdfMultaPayload toPdfMultaMicroservicoPayload(ReciboPdfData dados) {
         return PdfMicroservicoPdfMultaPayload.builder()
-            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa(), dados.getLogoUrlEmpresa()))
             .documento(PdfMicroservicoDocumentoPdfMultaPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
@@ -287,7 +292,7 @@ public class PdfMapper {
 
     public PdfMicroservicoReciboEstornoPayload toReciboEstornoMicroservicoPayload(ReciboPdfData dados) {
         return PdfMicroservicoReciboEstornoPayload.builder()
-            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa()))
+            .empresa(toEmpresaPayload(dados.getNomeEmpresa(), dados.getEmailEmpresa(), dados.getTelefoneEmpresa(), dados.getLogoUrlEmpresa()))
             .documento(PdfMicroservicoDocumentoReciboEstornoPayload.builder()
                 .numeroFormatado(dados.getNumeroFormatado())
                 .nomeCliente(dados.getNomeCliente())
@@ -303,14 +308,10 @@ public class PdfMapper {
             .build();
     }
 
-    private PdfMicroservicoEmpresaPayload toEmpresaPayload(String nomeEmpresa, String emailEmpresa, String telefoneEmpresa) {
-        return toEmpresaPayload(nomeEmpresa, emailEmpresa, telefoneEmpresa, null);
-    }
-
     /**
-     * OpenProject #519 (RN-NOVA-8) — Catálogo é o 1º documento a de fato popular {@code logoUrl}
-     * (os outros 5 sempre mandam {@code null}, decisão de MVP registrada acima): agora que existe
-     * upload de imagem no sistema (R2, #518), {@code Empresa.logoUrl} pode estar preenchido.
+     * OpenProject #519 (RN-NOVA-8) — o logo do cadastro da empresa (R2, #518) vai para o cabeçalho.
+     * V0.17.0 #965 (RN-NOVA-20): os cinco documentos do orçamento (orçamento, sinal, pagamento, multa e
+     * estorno) passam a levar o logo também.
      */
     private PdfMicroservicoEmpresaPayload toEmpresaPayload(String nomeEmpresa, String emailEmpresa, String telefoneEmpresa, String logoUrl) {
         return PdfMicroservicoEmpresaPayload.builder()

@@ -15,6 +15,8 @@ public class ReciboPagamentoPdfData {
     private String nomeEmpresa;
     private String emailEmpresa;
     private String telefoneEmpresa;
+    // V0.17.0 #965 (RN-NOVA-20): logo cadastrado da empresa; nulo quando não há logo
+    private String logoUrlEmpresa;
     private String metodoPagamento;
     private String valorTotal;
     private String valorSinalPago;
