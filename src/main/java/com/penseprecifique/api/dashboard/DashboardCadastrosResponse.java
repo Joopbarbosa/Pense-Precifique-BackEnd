@@ -20,7 +20,9 @@ public record DashboardCadastrosResponse(
         List<PrecoAbaixoSugerido> produtosComPrecoAbaixoDoSugerido,
         List<MargemProduto> margemPorProduto,
         CurvaAbc curvaAbc,
-        Ranking insumosQueMaisVariaram
+        Ranking insumosQueMaisVariaram,
+        /** V0.17.0 #974 (RN-NOVA-25): faixa de números de estoque e CMV; as listas alimentam as lupas. */
+        Estoque estoque
 ) {
     /** Um item de ranking: {@code valor} é o que ordena (contagem, R$, quantidade ou %); {@code anterior}, o mesmo no período anterior. */
     public record Item(UUID id, String identificador, String rotulo, String marca, BigDecimal valor, BigDecimal anterior, String detalhe) {}
@@ -35,6 +37,21 @@ public record DashboardCadastrosResponse(
     public record PrecoAbaixoSugerido(UUID id, String identificador, String nome, BigDecimal precoVenda, BigDecimal precoSugerido, BigDecimal diferenca) {}
 
     public record MargemProduto(UUID id, String identificador, String nome, BigDecimal precoVenda, BigDecimal custo, BigDecimal margemPercentual) {}
+
+    /**
+     * Estoque (fotos de hoje) e CMV do período. {@code valorItens}, {@code potencialItens} e {@code abaixoMinimoItens} são as listas das
+     * lupas, já ordenadas (maior valor primeiro, depois nome e número).
+     */
+    public record Estoque(BigDecimal valorTotal, BigDecimal valorMaterial, BigDecimal valorProdutosProntos, List<LinhaEstoque> valorItens,
+                          BigDecimal potencialVenda, List<LinhaEstoque> potencialItens,
+                          DashboardNumero percentualCmv, DashboardNumero margemMaterial,
+                          int insumosAbaixoMinimo, List<LinhaMinimo> abaixoMinimoItens) {}
+
+    /** Insumo ({@code tipo} INSUMO, com custo unitário) ou produto pronto ({@code tipo} PRODUTO, com preço de venda). */
+    public record LinhaEstoque(UUID id, String identificador, String nome, String tipo, BigDecimal estoque, BigDecimal custoUnitario,
+                               BigDecimal valor, BigDecimal precoVenda) {}
+
+    public record LinhaMinimo(UUID id, String identificador, String nome, BigDecimal estoque, BigDecimal minimo, BigDecimal falta) {}
 
     public record ItemAbc(UUID id, String identificador, String nome, BigDecimal lucro, BigDecimal percentual, BigDecimal acumulado, String classe) {}
 
