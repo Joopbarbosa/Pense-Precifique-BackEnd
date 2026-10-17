@@ -33,11 +33,11 @@ public class Cliente {
     @Column
     private String email;
 
-    @Column(length = 20)
+    @Column(length = 25)
     private String whatsapp;
 
     // #536 (V0.15.0)
-    @Column(length = 20)
+    @Column(length = 25)
     private String telefone;
 
     @Column

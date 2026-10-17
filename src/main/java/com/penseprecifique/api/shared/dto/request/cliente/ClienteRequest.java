@@ -2,6 +2,7 @@ package com.penseprecifique.api.shared.dto.request.cliente;
 
 import com.penseprecifique.api.shared.domain.enums.TipoPessoa;
 import com.penseprecifique.api.shared.validation.LimitesTexto;
+import com.penseprecifique.api.shared.validation.TelefoneValido;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -27,12 +28,15 @@ public class ClienteRequest {
     @Pattern(regexp = LimitesTexto.SEM_CARACTERE_NULO, message = LimitesTexto.SEM_CARACTERE_NULO_MENSAGEM)
     private String email;
 
-    @Size(max = 20, message = "Máximo de 20 caracteres")
+    // V0.17.0 #964 (RN-NOVA-19): nacional ou estrangeiro, até 25 caracteres
+    @Size(max = 25, message = "Máximo de 25 caracteres")
     @Pattern(regexp = LimitesTexto.SEM_CARACTERE_NULO, message = LimitesTexto.SEM_CARACTERE_NULO_MENSAGEM)
+    @TelefoneValido
     private String whatsapp;
 
-    @Size(max = 20, message = "Máximo de 20 caracteres")
+    @Size(max = 25, message = "Máximo de 25 caracteres")
     @Pattern(regexp = LimitesTexto.SEM_CARACTERE_NULO, message = LimitesTexto.SEM_CARACTERE_NULO_MENSAGEM)
+    @TelefoneValido
     private String telefone;
 
     @Size(max = 255, message = "Máximo de 255 caracteres")
