@@ -71,6 +71,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -166,6 +168,11 @@ public class OrcamentoService {
 
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolverMisto(pageable, CAMPOS_ORDENACAO_ORCAMENTO,
                 EXPRESSOES_ORDENACAO_ORCAMENTO, "total, createdAt, status, cicloDeVida, cliente.nome, numero");
+        // #994: página numerada exige ordem total — o número do orçamento desempata qualquer coluna não única
+        if (pageableOrdenado.getSort().isSorted() && pageableOrdenado.getSort().getOrderFor("numero") == null) {
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    pageableOrdenado.getSort().and(Sort.by(Sort.Direction.ASC, "numero")));
+        }
         Page<Orcamento> page = orcamentoRepository.buscar(
                 usuarioId, status, buscaNormalizada, dataCriacaoDeInicio, dataCriacaoAteFim, pageableOrdenado);
         Page<OrcamentoResponse> mapeado = page.map(orcamentoMapper::toResponse);

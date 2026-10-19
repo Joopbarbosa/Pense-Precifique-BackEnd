@@ -134,6 +134,15 @@ class OrcamentoOrdenacaoIT {
     }
 
     @Test
+    void ordemPorColunaNaoUnicaDesempataPeloNumero() {
+        seed();
+        // dois orçamentos com o mesmo total (100,00): o número desempata, para a página numerada não repetir nem perder registros
+        UUID oDId = novoOrcamento(novoCliente("Delta", 4), 99, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.RASCUNHO);
+        assertEquals(List.of(oAId, oDId, oCId, oBId), idsNaOrdem(Sort.by(Sort.Direction.ASC, "total")));
+    }
+
+    @Test
     void campoForaDaAllowlistLancaBusinessException() {
         seed();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "identificador"));
