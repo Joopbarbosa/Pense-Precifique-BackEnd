@@ -71,6 +71,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -109,6 +111,25 @@ public class OrcamentoService {
             "numero", "numero"
     );
 
+    /**
+     * #994 (RN-NOVA-31 item 3) — a coluna Status ordena pelo ciclo de vida do orçamento (rascunho até pago/cancelado), não
+     * pela ordem alfabética (a mesma dos filtros da tela: ... Finalizado, Entregue, Pago, Cancelado); no servidor, para valer em todas as páginas (antes era reordenada na tela, só na página carregada).
+     */
+    // O COALESCE faz o Spring Data tratar a expressão como função, sem prefixar o alias da consulta.
+    private static final Map<String, String> EXPRESSOES_ORDENACAO_ORCAMENTO = Map.of(
+            "cicloDeVida", "COALESCE(CASE o.status "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.RASCUNHO THEN 0 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENVIADO THEN 1 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.APROVADO THEN 2 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.AGUARDANDO_SINAL THEN 3 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.SINAL_PAGO THEN 4 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.EM_PRODUCAO THEN 5 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.FINALIZADO THEN 6 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE THEN 7 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.PAGO THEN 8 "
+                    + "ELSE 9 END, 9)"
+    );
+
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
@@ -145,8 +166,13 @@ public class OrcamentoService {
         LocalDateTime dataCriacaoDeInicio = dataCriacaoDe != null ? dataCriacaoDe.atStartOfDay() : null;
         LocalDateTime dataCriacaoAteFim = dataCriacaoAte != null ? dataCriacaoAte.atTime(LocalTime.MAX) : null;
 
-        Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_ORCAMENTO,
-                "total, createdAt, status, cliente.nome, numero");
+        Pageable pageableOrdenado = PageableOrdenacaoResolver.resolverMisto(pageable, CAMPOS_ORDENACAO_ORCAMENTO,
+                EXPRESSOES_ORDENACAO_ORCAMENTO, "total, createdAt, status, cicloDeVida, cliente.nome, numero");
+        // #994: página numerada exige ordem total — o número do orçamento desempata qualquer coluna não única
+        if (pageableOrdenado.getSort().isSorted() && pageableOrdenado.getSort().getOrderFor("numero") == null) {
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    pageableOrdenado.getSort().and(Sort.by(Sort.Direction.ASC, "numero")));
+        }
         Page<Orcamento> page = orcamentoRepository.buscar(
                 usuarioId, status, buscaNormalizada, dataCriacaoDeInicio, dataCriacaoAteFim, pageableOrdenado);
         Page<OrcamentoResponse> mapeado = page.map(orcamentoMapper::toResponse);

@@ -789,6 +789,7 @@ public class ProdutoService {
 
     @Transactional(readOnly = true)
     public Page<MovimentacaoProdutoResponse> listarMovimentacoes(UUID produtoId, Pageable pageable) {
+        PageableOrdenacaoResolver.exigirSemOrdenacao(pageable, "a mais recente primeiro");
         UUID usuarioId = getUsuarioIdAutenticado();
         produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(produtoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado"));

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.cliente;
 
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.caixa.VendaCaixaItemRepository;
 import com.penseprecifique.api.caixa.VendaCaixaRepository;
@@ -121,6 +122,7 @@ public class ClienteHistoricoService {
 
     /** Aba Histórico, seção Cliente: todos os orçamentos (qualquer status) e vendas do Caixa. */
     public Page<PedidoClienteResponse> historicoPedidos(UUID clienteId, Pageable pageable) {
+        PageableOrdenacaoResolver.exigirSemOrdenacao(pageable, "o mais recente primeiro");
         UUID usuarioId = validarCadastro(clienteId);
         List<PedidoClienteResponse> todos = new ArrayList<>();
         orcamentoRepository.findByClienteIdAndUsuarioIdAndDeletedAtIsNull(clienteId, usuarioId)
@@ -523,6 +525,7 @@ public class ClienteHistoricoService {
 
     /** Aba Histórico, seção Fornecedor: todas as compras (qualquer status, sem excluídas). */
     public Page<CompraFornecedorResponse> historicoCompras(UUID fornecedorId, Pageable pageable) {
+        PageableOrdenacaoResolver.exigirSemOrdenacao(pageable, "a mais recente primeiro");
         UUID usuarioId = validarCadastro(fornecedorId);
         List<CompraFornecedorResponse> todas = linhasDoFornecedor(fornecedorId, usuarioId).entrySet().stream()
                 .sorted(Comparator.comparing((Map.Entry<Compra, List<CompraItem>> e) -> e.getKey().getDataCompra())

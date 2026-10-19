@@ -32,8 +32,10 @@ public class InsumoController {
             @RequestParam(required = false) Boolean ativo,
             // #616 (adendo 2) — seletores: ativos e inativos, ativos primeiro
             @RequestParam(defaultValue = "false") boolean incluirInativos,
+            // #994 — BAIXO, NEGATIVO ou POSITIVO
+            @RequestParam(required = false) String estoque,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(insumoService.listar(busca, ativo, incluirInativos, pageable));
+        return ResponseEntity.ok(insumoService.listar(busca, ativo, incluirInativos, estoque, pageable));
     }
 
     @GetMapping("/{id}")

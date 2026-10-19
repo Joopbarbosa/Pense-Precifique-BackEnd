@@ -58,6 +58,39 @@ public final class PageableOrdenacaoResolver {
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortResolvido);
     }
 
+    /**
+     * #994 — mistura os dois modos: campo de {@code expressoes} entra como expressão JPQL (ex.: ordem do ciclo de vida
+     * de um status, que não é a alfabética) e os demais como propriedade comum de {@code simples}.
+     */
+    public static Pageable resolverMisto(Pageable pageable, Map<String, String> simples, Map<String, String> expressoes,
+                                          String descricaoCamposPermitidos) {
+        if (pageable.getSort().isUnsorted()) {
+            return pageable;
+        }
+
+        Sort sortResolvido = Sort.unsorted();
+        for (Sort.Order order : pageable.getSort()) {
+            String expressao = expressoes.get(order.getProperty());
+            if (expressao != null) {
+                sortResolvido = sortResolvido.and(JpaSort.unsafe(order.getDirection(), expressao));
+            } else {
+                sortResolvido = sortResolvido.and(Sort.by(order.getDirection(),
+                        validarCampo(order, simples, descricaoCamposPermitidos)));
+            }
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortResolvido);
+    }
+
+    /**
+     * #994 — para listas de ordem fixa (históricos): qualquer {@code sort} do cliente é "fora da lista permitida" e
+     * vira 400, em vez de ser repassado ao Spring Data (500 em consulta derivada) ou ignorado em silêncio.
+     */
+    public static void exigirSemOrdenacao(Pageable pageable, String descricaoOrdemFixa) {
+        if (pageable.getSort().isSorted()) {
+            throw new BusinessException("Esta lista não aceita ordenação escolhida: " + descricaoOrdemFixa + ".");
+        }
+    }
+
     private static String validarCampo(Sort.Order order, Map<String, String> camposPermitidos,
                                         String descricaoCamposPermitidos) {
         String expressao = camposPermitidos.get(order.getProperty());
