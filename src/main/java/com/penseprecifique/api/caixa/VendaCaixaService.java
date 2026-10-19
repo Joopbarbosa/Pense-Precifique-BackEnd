@@ -27,6 +27,7 @@ import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaItemCustomiza
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaItemResponseDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaPagamentoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaResponseDTO;
+import com.penseprecifique.api.shared.mapper.CompraMapper;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.util.IdentificadorFormatter;
@@ -353,7 +354,7 @@ public class VendaCaixaService {
                     .taxaPercentualAplicada(pagamento.taxaAplicada())
                     .build());
             pagamentosResponse.add(new VendaCaixaPagamentoResponseDTO(
-                    pagamentoSalvo.getId(), pagamento.metodo().getId(), pagamento.valor(),
+                    pagamentoSalvo.getId(), pagamento.metodo().getId(), CompraMapper.rotulo(pagamento.metodo()), pagamento.valor(),
                     pagamento.parcelas(), pagamento.taxaAplicada()));
         }
 
@@ -569,7 +570,7 @@ public class VendaCaixaService {
 
     private List<VendaCaixaPagamentoResponseDTO> pagamentosDe(VendaCaixa venda) {
         return vendaCaixaPagamentoRepository.findByVendaCaixaId(venda.getId()).stream()
-                .map(p -> new VendaCaixaPagamentoResponseDTO(p.getId(), p.getMetodoPagamento().getId(),
+                .map(p -> new VendaCaixaPagamentoResponseDTO(p.getId(), p.getMetodoPagamento().getId(), CompraMapper.rotulo(p.getMetodoPagamento()),
                         p.getValor(), p.getParcelas(), p.getTaxaPercentualAplicada()))
                 .toList();
     }
@@ -615,6 +616,7 @@ public class VendaCaixaService {
                 venda.getNumero(),
                 IdentificadorFormatter.formatar("CX", venda.getNumero()),
                 venda.getCliente() != null ? venda.getCliente().getId() : null,
+                venda.getCliente() != null ? venda.getCliente().getNome() : null,
                 venda.getDataVenda(),
                 venda.getCaixaTurno().getId(),
                 venda.getStatus(),
