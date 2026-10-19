@@ -223,6 +223,73 @@ class DashboardCadastrosIT {
         assertEquals(0, bd("4.00").compareTo(evolucao.pontos().get(1).precoMedio()));
     }
 
+    /** #989 (RN-NOVA-29, DT-NOVA-24, CEN-NOVO-91): uma série por insumo, com a unidade, na ordem pedida e só com os pontos de cada um. */
+    @Test
+    void cen91_evolucaoComVariosInsumosDaUmaSeriePorInsumoComUnidade() {
+        Insumo fita = insumo("Fita de cetim", "0.00");
+        Insumo papel = insumo("Papel couchê", "0.00");
+        Insumo cola = insumo("Cola quente", "0.00");
+        compra(fita, "10", "20.00", LocalDate.of(2025, 9, 10));
+        compra(fita, "10", "30.00", LocalDate.of(2025, 10, 10));
+        compra(papel, "10", "3.00", LocalDate.of(2025, 9, 12));
+        compra(papel, "10", "4.00", LocalDate.of(2025, 10, 12));
+        compra(cola, "1", "5.00", LocalDate.of(2025, 10, 15));
+
+        var r = service.evolucaoDosInsumos(List.of(cola.getId(), fita.getId(), papel.getId()), LocalDate.of(2025, 9, 1), LocalDate.of(2025, 10, 31));
+
+        assertEquals(List.of("Cola quente", "Fita de cetim", "Papel couchê"), r.series().stream().map(DashboardCadastrosResponse.EvolucaoPreco::insumo).toList());
+        assertEquals("Metro", r.series().get(1).unidade());
+        assertEquals(1, r.series().get(0).pontos().size()); // cola: só outubro
+        assertEquals(0, bd("5.00").compareTo(r.series().get(0).pontos().get(0).precoMedio()));
+        assertEquals(2, r.series().get(1).pontos().size());
+        assertEquals(0, bd("2.00").compareTo(r.series().get(1).pontos().get(0).precoMedio()));
+        assertEquals(0, bd("3.00").compareTo(r.series().get(1).pontos().get(1).precoMedio()));
+    }
+
+    /**
+     * #989: o ponto é a média mensal PONDERADA da rotina de Cadastros, não um ponto por compra: no mesmo mês, 10 m por R$ 20,00 e 5 m
+     * por R$ 20,00 dão 40 ÷ 15 = 2,6667, arredondado a R$ 2,67; a média simples dos dois preços por metro (2,00 e 4,00) seria R$ 3,00.
+     */
+    @Test
+    void evolucaoDeVariosInsumosUsaAMediaMensalPonderadaESoUmPontoPorMes() {
+        Insumo fita = insumo("Fita de cetim", "0.00");
+        compra(fita, "10", "20.00", LocalDate.of(2025, 10, 5));
+        compra(fita, "5", "20.00", LocalDate.of(2025, 10, 20));
+
+        var serie = service.evolucaoDosInsumos(List.of(fita.getId()), LocalDate.of(2025, 10, 1), LocalDate.of(2025, 10, 31)).series().get(0);
+
+        assertEquals(1, serie.pontos().size());
+        assertEquals(0, bd("2.67").compareTo(serie.pontos().get(0).precoMedio()));
+        assertEquals(0, bd("15").compareTo(serie.pontos().get(0).quantidade()));
+    }
+
+    /** #989 (CEN-NOVO-92): entradas inválidas são erro de cliente; repetido conta uma vez; insumo de outra conta não existe para quem pergunta. */
+    @Test
+    void cen92_evolucaoDeVariosInsumosRecusaVazioMaisDeCincoEInsumoDeOutraConta() {
+        List<Insumo> seis = new java.util.ArrayList<>();
+        for (int i = 1; i <= 6; i++) seis.add(insumo("Insumo " + i, "0.00"));
+        List<UUID> idsSeis = seis.stream().map(Insumo::getId).toList();
+        LocalDate de = LocalDate.of(2025, 10, 1), ate = LocalDate.of(2025, 10, 31);
+
+        var vazio = org.junit.jupiter.api.Assertions.assertThrows(com.penseprecifique.api.shared.exception.BusinessException.class,
+                () -> service.evolucaoDosInsumos(List.of(), de, ate));
+        assertEquals("Escolha ao menos um insumo.", vazio.getMessage());
+        var seisInsumos = org.junit.jupiter.api.Assertions.assertThrows(com.penseprecifique.api.shared.exception.BusinessException.class,
+                () -> service.evolucaoDosInsumos(idsSeis, de, ate));
+        assertEquals("Escolha no máximo 5 insumos", seisInsumos.getMessage());
+
+        // cinco insumos podem; o mesmo insumo repetido seis vezes conta uma vez
+        assertEquals(5, service.evolucaoDosInsumos(idsSeis.subList(0, 5), de, ate).series().size());
+        assertEquals(1, service.evolucaoDosInsumos(java.util.Collections.nCopies(6, idsSeis.get(0)), de, ate).series().size());
+
+        Usuario outro = usuarios.save(Usuario.builder().email("dash-cad-outro-" + UUID.randomUUID() + "@test.com").senhaHash("x").ativo(true).build());
+        UnidadeMedida unidadeOutro = unidades.save(UnidadeMedida.builder().usuario(outro).nome("Metro").sigla("m").build());
+        Insumo alheio = insumos.save(Insumo.builder().usuario(outro).numero(1).nome("Alheio").unidadeMedida(unidadeOutro)
+                .estoqueAtual(bd("1")).custoUnitario(bd("1")).permitirEstoqueNegativo(true).build());
+        org.junit.jupiter.api.Assertions.assertThrows(com.penseprecifique.api.shared.exception.ResourceNotFoundException.class,
+                () -> service.evolucaoDosInsumos(List.of(idsSeis.get(0), alheio.getId()), de, ate));
+    }
+
     @Test
     void rankingsDeInsumosComDesempateAlfabeticoEMarca() {
         Insumo alfa = insumo("Fita", "0.00", "Alfa");

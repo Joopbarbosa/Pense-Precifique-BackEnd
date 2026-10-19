@@ -68,4 +68,13 @@ public class DashboardController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
         return ResponseEntity.ok(dashboardCadastrosService.evolucaoDoInsumo(insumoId, de, ate));
     }
+
+    /** #989 (RN-NOVA-29) — evolução do preço médio mensal de 1 a 5 insumos escolhidos, uma série por insumo. */
+    @GetMapping("/cadastros/evolucao-preco-insumos")
+    public ResponseEntity<DashboardCadastrosResponse.EvolucaoPrecoInsumos> evolucaoPrecoInsumos(
+            @RequestParam(required = false) java.util.List<java.util.UUID> insumoIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return ResponseEntity.ok(dashboardCadastrosService.evolucaoDosInsumos(insumoIds, de, ate));
+    }
 }

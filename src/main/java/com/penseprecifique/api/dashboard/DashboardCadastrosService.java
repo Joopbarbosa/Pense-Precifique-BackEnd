@@ -191,6 +191,33 @@ public class DashboardCadastrosService {
         return evolucaoPreco(insumo, compraItemRepository.findPorStatus(usuarioId, StatusCompra.CONFIRMADA), p.inicio(), p.fim());
     }
 
+    /** Limite de insumos ao mesmo tempo no gráfico de evolução de preço (RN-NOVA-29). */
+    public static final int MAX_INSUMOS_EVOLUCAO = 5;
+
+    /**
+     * #989 (RN-NOVA-29, DT-NOVA-24): a mesma rotina mensal de {@link #evolucaoDoInsumo}, aplicada uma vez a cada insumo, na ordem pedida
+     * (repetidos contam uma vez). Vazio ou mais de 5 insumos é erro de cliente; insumo de outra conta não existe para quem pergunta.
+     */
+    public DashboardCadastrosResponse.EvolucaoPrecoInsumos evolucaoDosInsumos(List<UUID> insumoIds, LocalDate de, LocalDate ate) {
+        List<UUID> ids = insumoIds == null ? List.of() : insumoIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            throw new BusinessException("Escolha ao menos um insumo.");
+        }
+        if (ids.size() > MAX_INSUMOS_EVOLUCAO) {
+            throw new BusinessException("Escolha no máximo " + MAX_INSUMOS_EVOLUCAO + " insumos");
+        }
+        UUID usuarioId = usuarioId();
+        PeriodoDashboard p = PeriodoDashboard.de(de, ate);
+        List<CompraItem> compras = compraItemRepository.findPorStatus(usuarioId, StatusCompra.CONFIRMADA);
+        List<DashboardCadastrosResponse.EvolucaoPreco> series = new ArrayList<>();
+        for (UUID id : ids) {
+            Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + id));
+            series.add(evolucaoPreco(insumo, compras, p.inicio(), p.fim()));
+        }
+        return new DashboardCadastrosResponse.EvolucaoPrecoInsumos(series);
+    }
+
     // ---------------------------------------------------------------------------------------------
 
     private DashboardCadastrosResponse.EvolucaoPreco evolucaoPreco(Insumo insumo, List<CompraItem> compras, LocalDate de, LocalDate ate) {
@@ -213,7 +240,8 @@ public class DashboardCadastrosService {
                         soma[0].divide(soma[1], 4, RoundingMode.HALF_UP).setScale(2, RoundingMode.HALF_UP), soma[1], soma[0]));
             }
         });
-        return new DashboardCadastrosResponse.EvolucaoPreco(insumo.getId(), insumo.getNome(), insumo.getMarca(), pontos);
+        String unidade = insumo.getUnidadeMedida() != null ? insumo.getUnidadeMedida().getNome() : null;
+        return new DashboardCadastrosResponse.EvolucaoPreco(insumo.getId(), insumo.getNome(), insumo.getMarca(), pontos, unidade);
     }
 
     /** O insumo escolhido na tela; sem escolha, o mais comprado no período; sem compras, nenhum. */
