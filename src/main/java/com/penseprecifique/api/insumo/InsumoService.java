@@ -110,7 +110,16 @@ public class InsumoService {
      * mostram o inativo riscado, sem poder escolher); ignora {@code ativo}.
      */
     public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, boolean incluirInativos, Pageable pageable) {
+        return listar(busca, ativo, incluirInativos, null, pageable);
+    }
+
+    /** #994 (RN-NOVA-31 item 3) — {@code estoque}: BAIXO, NEGATIVO ou POSITIVO, filtrado no servidor para valer em todas as páginas. */
+    public Page<InsumoResponseDTO> listar(String busca, Boolean ativo, boolean incluirInativos, String estoque, Pageable pageable) {
         UUID usuarioId = getUsuarioIdAutenticado();
+        String estoqueNormalizado = estoque == null || estoque.isBlank() ? null : estoque.trim().toUpperCase();
+        if (estoqueNormalizado != null && !List.of("BAIXO", "NEGATIVO", "POSITIVO").contains(estoqueNormalizado)) {
+            throw new BusinessException("Filtro de estoque inválido: use BAIXO, NEGATIVO ou POSITIVO.");
+        }
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolver(pageable, CAMPOS_ORDENACAO_INSUMO,
                 "nome, numero, custoUnitario, estoqueAtual, createdAt");
         if (incluirInativos) {
@@ -122,7 +131,7 @@ public class InsumoService {
         // #336 (V0.10.0) — filtro de status agora é server-side (era client-side sobre a janela
         // paginada, causa raiz confirmada de "insumo inativado não aparece no filtro de inativados").
         String buscaNormalizada = (busca != null && !busca.isBlank()) ? busca : null;
-        Page<Insumo> pagina = insumoRepository.buscarComFiltros(usuarioId, buscaNormalizada, ativo, pageableOrdenado);
+        Page<Insumo> pagina = insumoRepository.buscarComFiltros(usuarioId, buscaNormalizada, ativo, estoqueNormalizado, pageableOrdenado);
 
         Page<InsumoResponseDTO> mapeado = pagina.map(insumoMapper::toResponse);
         return new PageImpl<>(mapeado.getContent(), pageable, mapeado.getTotalElements());
