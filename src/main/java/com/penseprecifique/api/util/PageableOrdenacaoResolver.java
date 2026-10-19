@@ -58,6 +58,16 @@ public final class PageableOrdenacaoResolver {
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortResolvido);
     }
 
+    /**
+     * #994 — para listas de ordem fixa (históricos): qualquer {@code sort} do cliente é "fora da lista permitida" e
+     * vira 400, em vez de ser repassado ao Spring Data (500 em consulta derivada) ou ignorado em silêncio.
+     */
+    public static void exigirSemOrdenacao(Pageable pageable, String descricaoOrdemFixa) {
+        if (pageable.getSort().isSorted()) {
+            throw new BusinessException("Esta lista não aceita ordenação escolhida: " + descricaoOrdemFixa + ".");
+        }
+    }
+
     private static String validarCampo(Sort.Order order, Map<String, String> camposPermitidos,
                                         String descricaoCamposPermitidos) {
         String expressao = camposPermitidos.get(order.getProperty());

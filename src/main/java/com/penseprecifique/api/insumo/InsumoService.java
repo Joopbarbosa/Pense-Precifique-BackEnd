@@ -397,6 +397,7 @@ public class InsumoService {
 
     @Transactional(readOnly = true)
     public Page<MovimentacaoInsumoResponseDTO> listarMovimentacoes(UUID insumoId, Pageable pageable) {
+        PageableOrdenacaoResolver.exigirSemOrdenacao(pageable, "a mais recente primeiro");
         UUID usuarioId = getUsuarioIdAutenticado();
         insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado"));
