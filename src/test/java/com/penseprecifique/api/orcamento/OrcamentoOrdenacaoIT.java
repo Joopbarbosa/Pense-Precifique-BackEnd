@@ -124,6 +124,16 @@ class OrcamentoOrdenacaoIT {
     }
 
     @Test
+    void ordenaPeloCicloDeVidaComDesempatePeloNumero() {
+        seed();
+        // #994: RASCUNHO (A, 100) < ENVIADO (C, 102) < APROVADO (B, 101) — a ordem do ciclo de vida, não a alfabética
+        Sort asc = Sort.by(Sort.Order.asc("cicloDeVida"), Sort.Order.asc("numero"));
+        assertEquals(List.of(oAId, oCId, oBId), idsNaOrdem(asc));
+        Sort desc = Sort.by(Sort.Order.desc("cicloDeVida"), Sort.Order.asc("numero"));
+        assertEquals(List.of(oBId, oCId, oAId), idsNaOrdem(desc));
+    }
+
+    @Test
     void campoForaDaAllowlistLancaBusinessException() {
         seed();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "identificador"));
