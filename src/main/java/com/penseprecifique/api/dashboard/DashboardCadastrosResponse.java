@@ -31,8 +31,11 @@ public record DashboardCadastrosResponse(
 
     public record PontoPreco(LocalDate mes, BigDecimal precoMedio, BigDecimal quantidade, BigDecimal valorPago) {}
 
-    /** Preço médio pago por mês de um insumo (média ponderada pela quantidade; o mês é o do recebimento). */
-    public record EvolucaoPreco(UUID insumoId, String insumo, String marca, List<PontoPreco> pontos) {}
+    /** Preço médio pago por mês de um insumo (média ponderada pela quantidade; o mês é o do recebimento); {@code unidade} é a unidade de medida dele. */
+    public record EvolucaoPreco(UUID insumoId, String insumo, String marca, List<PontoPreco> pontos, String unidade) {}
+
+    /** #989 (RN-NOVA-29, DT-NOVA-24): uma série mensal por insumo escolhido, na ordem em que foram pedidos. */
+    public record EvolucaoPrecoInsumos(List<EvolucaoPreco> series) {}
 
     public record PrecoAbaixoSugerido(UUID id, String identificador, String nome, BigDecimal precoVenda, BigDecimal precoSugerido, BigDecimal diferenca) {}
 
