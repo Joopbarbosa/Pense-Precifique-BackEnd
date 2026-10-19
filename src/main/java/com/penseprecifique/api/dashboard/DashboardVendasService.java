@@ -93,7 +93,8 @@ public class DashboardVendasService {
         }
         String termo = normalizar(busca);
         boolean porRanking = (produtoId != null && !produtoId.isBlank()) || (forma != null && !forma.isBlank());
-        java.util.Set<String> queFormam = porRanking ? vendasQueFormam(p, produtoId, forma) : null;
+        List<VendasService.Venda> vendasDoPeriodo = porRanking ? vendasService.vendas(usuarioId(), p.inicio(), p.fim()) : List.of();
+        java.util.Set<String> queFormam = porRanking ? vendasQueFormam(vendasDoPeriodo, produtoId, forma) : null;
         List<VendasService.LinhaLista> filtradas = vendasService.todas(usuarioId(), p.inicio(), p.fim()).stream()
                 .filter(l -> queFormam == null || queFormam.contains(l.origem() + "|" + l.id()))
                 .filter(l -> origem == null || l.origem() == origem)
@@ -112,13 +113,25 @@ public class DashboardVendasService {
                         l.itens(), l.total(), l.status(), l.contaNosNumeros()))
                 .toList();
         Page<ListaVendasResponse.Linha> pag = new PageImpl<>(pagina, pageable, filtradas.size());
-        return new ListaVendasResponse(pag, total, filtradas.size());
+        BigDecimal unidades = produtoId == null || produtoId.isBlank() ? null : unidadesDoProduto(vendasDoPeriodo, filtradas, produtoId);
+        return new ListaVendasResponse(pag, total, filtradas.size(), unidades);
+    }
+
+    /** #988: soma, nas vendas da lista, das unidades do produto clicado (só as linhas dele, não as dos outros produtos da venda). */
+    private static BigDecimal unidadesDoProduto(List<VendasService.Venda> vendas, List<VendasService.LinhaLista> listadas, String produtoId) {
+        java.util.Set<String> chaves = listadas.stream().map(l -> l.origem() + "|" + l.id()).collect(java.util.stream.Collectors.toSet());
+        return vendas.stream()
+                .filter(v -> chaves.contains(v.tipo() + "|" + v.id()))
+                .flatMap(v -> v.linhas().stream())
+                .filter(l -> produtoId.equals(String.valueOf(l.id())) || produtoId.equals(l.nome()))
+                .map(VendasService.LinhaProduto::quantidade)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     // ---------------------------------------------------------------------------------------------
 
-    private java.util.Set<String> vendasQueFormam(PeriodoDashboard p, String produtoId, String forma) {
-        return vendasService.vendas(usuarioId(), p.inicio(), p.fim()).stream()
+    private java.util.Set<String> vendasQueFormam(List<VendasService.Venda> vendas, String produtoId, String forma) {
+        return vendas.stream()
                 .filter(v -> produtoId == null || produtoId.isBlank() || v.linhas().stream()
                         .anyMatch(l -> produtoId.equals(String.valueOf(l.id())) || produtoId.equals(l.nome())))
                 .filter(v -> forma == null || forma.isBlank()
