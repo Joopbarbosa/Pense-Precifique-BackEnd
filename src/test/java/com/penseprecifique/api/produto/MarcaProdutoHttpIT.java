@@ -88,6 +88,15 @@ class MarcaProdutoHttpIT {
         assertEquals(400, criar(t, corpo("\"fita\"", "\"  \"", null)).getResponse().getStatus());
     }
 
+    /** #1020 — só caixa, acento e espaços das pontas são ignorados; espaço interno duplicado é outro nome. */
+    @Test
+    void espacoInternoDuplicadoNaoContaComoOMesmoNome() throws Exception {
+        String t = token();
+        assertEquals(201, criar(t, corpo("\"A B QA\"", "\"Pense\"", null)).getResponse().getStatus());
+        assertEquals(201, criar(t, corpo("\"A  B QA\"", "\"Pense\"", null)).getResponse().getStatus());
+        assertEquals(400, criar(t, corpo("\" a b qa \"", "\"PENSE\"", null)).getResponse().getStatus());
+    }
+
     @Test
     void produtoInativoTambemContaNaUnicidade() throws Exception {
         String t = token();
