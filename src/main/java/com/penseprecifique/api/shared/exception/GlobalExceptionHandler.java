@@ -104,6 +104,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponseDTO> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
         String mensagem = "Corpo da requisição inválido.";
+        Map<String, String> campos = null;
+
+        if (ex.getCause() instanceof tools.jackson.databind.exc.MismatchedInputException mismatched) {
+            // #1016 — tipo errado (ex.: número ou booleano em campo de texto): o campo vai em fieldErrors, como nas demais validações
+            String campoErrado = mismatched.getPath().stream()
+                    .map(JacksonException.Reference::getPropertyName)
+                    .filter(Objects::nonNull)
+                    .reduce((primeiro, ultimo) -> ultimo)
+                    .orElse(null);
+            if (campoErrado != null) {
+                campos = Map.of(campoErrado, "Valor inválido.");
+            }
+        }
 
         if (ex.getCause() instanceof InvalidFormatException invalidFormatException) {
             String campo = invalidFormatException.getPath().stream()
@@ -125,7 +138,7 @@ public class GlobalExceptionHandler {
                 mensagem,
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
-                null
+                campos
         ));
     }
 
