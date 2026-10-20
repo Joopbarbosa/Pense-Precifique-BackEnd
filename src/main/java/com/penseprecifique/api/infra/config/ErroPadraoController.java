@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
  * #785 — erros que o contêiner devolve por {@code sendError} (método recusado pelo Tomcat, por exemplo) saem no mesmo
  * formato JSON de {@link ErrorResponseDTO} que o OpenAPI declara, com mensagem fixa por status (nenhum detalhe interno).
  */
+@io.swagger.v3.oas.annotations.Hidden // #1021 — endereço interno do contêiner, não faz parte do contrato público
 @RestController
 public class ErroPadraoController implements ErrorController {
 

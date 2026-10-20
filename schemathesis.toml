@@ -1,0 +1,9 @@
+# Política de conformidade do contrato OpenAPI (#1021, opção B do Gestor).
+# Mantidas e exigidas com 0 falha: resposta 5xx, status e corpo conforme o contrato, cabeçalhos, método não suportado, e o resto.
+# Desligadas de propósito: aceitar o que o esquema aceita (positive_data_acceptance) e recusar o que o esquema recusa
+# (negative_data_rejection). A API valida regras de negócio e de estado acima do esquema (nome repetido, status da compra,
+# turno de caixa aberto, ordenação permitida por tela) e responde 400 com mensagem explicada por desenho; nenhum contrato
+# OpenAPI descreve isso sem mudar o código de resposta para 409 em todos os clientes.
+[checks]
+positive_data_acceptance.enabled = false
+negative_data_rejection.enabled = false

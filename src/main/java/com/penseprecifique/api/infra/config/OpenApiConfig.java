@@ -110,7 +110,8 @@ public class OpenApiConfig {
             if ("pageable".equals(parametro.getName())) {
                 ajustados.add(new Parameter().name("page").in("query").required(false)
                         .description("Página, a partir de 0. Valor negativo ou não inteiro é recusado (400).")
-                        .schema(new Schema<Integer>().types(Set.of("integer")).minimum(java.math.BigDecimal.ZERO)));
+                        .schema(new Schema<Integer>().types(Set.of("integer")).minimum(java.math.BigDecimal.ZERO)
+                                .maximum(java.math.BigDecimal.valueOf(Integer.MAX_VALUE))));
                 ajustados.add(new Parameter().name("size").in("query").required(false)
                         .description("Itens por página, de 1 a 100. Fora dessa faixa é recusado (400).")
                         .schema(new Schema<Integer>().types(Set.of("integer"))
@@ -144,7 +145,10 @@ public class OpenApiConfig {
         }
         Schema<?> esquema = parametro.getSchema();
         switch (parametro.getName()) {
-            case "page" -> esquema.setMinimum(java.math.BigDecimal.ZERO);
+            case "page" -> {
+                esquema.setMinimum(java.math.BigDecimal.ZERO);
+                esquema.setMaximum(java.math.BigDecimal.valueOf(Integer.MAX_VALUE));
+            }
             case "size" -> {
                 esquema.setMinimum(java.math.BigDecimal.ONE);
                 esquema.setMaximum(java.math.BigDecimal.valueOf(100));
