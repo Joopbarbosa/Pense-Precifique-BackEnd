@@ -55,6 +55,7 @@ public class VendaCaixaService {
 
     private static final BigDecimal CEM = new BigDecimal("100");
 
+    private final java.time.Clock clock;
     private final VendaCaixaRepository vendaCaixaRepository;
     private final CustoMaterialService custoMaterialService;
     private final VendaCaixaItemRepository vendaCaixaItemRepository;
@@ -241,7 +242,7 @@ public class VendaCaixaService {
                 .usuario(usuario)
                 .numero(numero)
                 .cliente(cliente)
-                .dataVenda(LocalDateTime.now())
+                .dataVenda(LocalDateTime.now(clock)) // #999: relógio de Brasília
                 .caixaTurno(turno)
                 .status(StatusVendaCaixa.CONCLUIDA)
                 .subtotal(subtotal)
