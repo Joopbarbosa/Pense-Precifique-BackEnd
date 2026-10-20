@@ -31,6 +31,27 @@ class RequisicaoMalformadaTest {
         assertEquals("Arquivo não enviado corretamente. Tente novamente.", resposta.getBody().message());
     }
 
+    /** #1026 — nome de arquivo com caractere de controle: o Tomcat embrulha a recusa em ServletException; ainda é 400, nunca 500. */
+    @Test
+    void multipartComNomeDeArquivoInvalidoEmbrulhadoRetorna400() {
+        MultipartException ex = new MultipartException("Failed to parse multipart servlet request",
+                new jakarta.servlet.ServletException(
+                        new org.apache.tomcat.util.http.fileupload.InvalidFileNameException("r\u0000a", "Invalid file name: r\u0000a")));
+
+        var resposta = handler.handleMultipartException(ex);
+
+        assertEquals(400, resposta.getStatusCode().value());
+        assertEquals("Arquivo não enviado corretamente. Tente novamente.", resposta.getBody().message());
+    }
+
+    /** #1026 — falha de infraestrutura (disco) continua 500. */
+    @Test
+    void multipartComFalhaDeDiscoContinua500() {
+        MultipartException ex = new MultipartException("Failed to parse multipart servlet request", new java.io.IOException("disco cheio"));
+
+        assertEquals(500, handler.handleMultipartException(ex).getStatusCode().value());
+    }
+
     @Test
     void parametroDeConsultaComNomeVazioRetorna400() {
         var resposta = handler.handleInvalidParameter(new InvalidParameterException("Invalid chunk [=null] ignored"));
