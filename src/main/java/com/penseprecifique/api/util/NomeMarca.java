@@ -18,11 +18,11 @@ public final class NomeMarca {
         return limpa.isEmpty() ? null : limpa;
     }
 
-    /** Chave de comparação de um texto: sem acentos, minúsculo, espaços das pontas removidos e internos reduzidos a um. */
+    /** Chave de comparação de um texto: sem acentos, minúsculo e espaços das pontas removidos; espaços internos continuam distintos (RN-NOVA-36). */
     public static String chave(String texto) {
         if (texto == null) return "";
         return Normalizer.normalize(texto.strip(), Normalizer.Form.NFD).replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+                .toLowerCase(Locale.ROOT);
     }
 
     /** Mesma identidade: nome e marca iguais pela chave (marca ausente igual a marca ausente). */
