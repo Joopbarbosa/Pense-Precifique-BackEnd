@@ -18,6 +18,8 @@ public class ItemCatalogoBuscaResponse {
     /** V0.13.0 (RN-NOVA-1) — nome próprio do item; antes era o nome do único produto do item, que
      *  deixou de existir. */
     private String nome;
+    /** #1017 (RN-NOVA-36) — marca opcional. */
+    private String marca;
     private BigDecimal precoVenda;
     private String catalogoNome;
     private Integer catalogoNumero;

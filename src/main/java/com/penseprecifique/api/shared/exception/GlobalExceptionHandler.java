@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
-                null,
+                ex.getCampo() != null ? Map.of(ex.getCampo(), ex.getMessage()) : null,
                 ex.getTitulo(),
                 ex.getMotivo(),
                 ex.getComoResolver(),

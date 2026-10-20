@@ -22,6 +22,7 @@ public class ItemCatalogoMapper {
         return ItemCatalogo.builder()
                 .catalogo(catalogo)
                 .nome(request.getNome())
+                .marca(com.penseprecifique.api.util.NomeMarca.limparMarca(request.getMarca()))
                 .tempoProducao(request.getTempoProducao())
                 .margemLucro(request.getMargemLucro())
                 .descricao(request.getDescricao())
@@ -72,6 +73,7 @@ public class ItemCatalogoMapper {
         ItemCatalogoResponse response = new ItemCatalogoResponse();
         response.setId(item.getId());
         response.setNome(item.getNome());
+        response.setMarca(item.getMarca());
         response.setTempoProducao(item.getTempoProducao());
         response.setMargemLucro(item.getMargemLucro());
         response.setPrecoVenda(item.getPrecoVenda());
@@ -89,6 +91,7 @@ public class ItemCatalogoMapper {
         response.setId(item.getId());
         response.setCatalogoId(item.getCatalogo().getId());
         response.setNome(item.getNome());
+        response.setMarca(item.getMarca());
         response.setPrecoVenda(item.getPrecoVenda());
         response.setCatalogoNome(item.getCatalogo().getNome());
         response.setCatalogoNumero(item.getCatalogo().getNumero());

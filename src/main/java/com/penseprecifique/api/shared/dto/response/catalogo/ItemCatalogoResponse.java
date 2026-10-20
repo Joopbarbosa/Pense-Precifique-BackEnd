@@ -14,6 +14,8 @@ public class ItemCatalogoResponse {
 
     private UUID id;
     private String nome;
+    /** #1017 (RN-NOVA-36) — marca opcional. */
+    private String marca;
     private List<ItemCatalogoComponenteResponse> componentes = new ArrayList<>();
     private Integer tempoProducao;
     private BigDecimal margemLucro;

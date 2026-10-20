@@ -27,6 +27,7 @@ public class ProdutoMapper {
         response.setNumero(produto.getNumero());
         response.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
         response.setNome(produto.getNome());
+        response.setMarca(produto.getMarca());
         response.setTipo(produto.getTipo());
         response.setFotoUrl(produto.getFotoUrl());
         response.setPrecoVenda(produto.getPrecoVenda());
@@ -59,6 +60,7 @@ public class ProdutoMapper {
         response.setNumero(produto.getNumero());
         response.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
         response.setNome(produto.getNome());
+        response.setMarca(produto.getMarca());
         response.setTipo(produto.getTipo());
         response.setDescricao(produto.getDescricao());
         response.setFotoUrl(produto.getFotoUrl());
@@ -90,6 +92,7 @@ public class ProdutoMapper {
         return Produto.builder()
                 .usuario(usuario)
                 .nome(request.getNome())
+                .marca(com.penseprecifique.api.util.NomeMarca.limparMarca(request.getMarca()))
                 .tipo(request.getTipo())
                 .descricao(request.getDescricao())
                 .tempoProducao(request.getTempoProducao())
@@ -106,6 +109,7 @@ public class ProdutoMapper {
 
     public void updateEntity(ProdutoRequest request, Produto produto) {
         produto.setNome(request.getNome());
+        produto.setMarca(com.penseprecifique.api.util.NomeMarca.limparMarca(request.getMarca()));
         produto.setTipo(request.getTipo());
         produto.setDescricao(request.getDescricao());
         produto.setTempoProducao(request.getTempoProducao());

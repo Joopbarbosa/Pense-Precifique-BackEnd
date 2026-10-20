@@ -21,6 +21,11 @@ public class ProdutoRequest {
     @NotBlank(message = "O nome do produto é obrigatório")
     private String nome;
 
+    /** #1017 (RN-NOVA-36) — marca opcional, até 100 caracteres, sem caractere nulo. */
+    @jakarta.validation.constraints.Size(max = 100, message = "A marca deve ter no máximo 100 caracteres")
+    @jakarta.validation.constraints.Pattern(regexp = com.penseprecifique.api.shared.validation.LimitesTexto.SEM_CARACTERE_NULO, message = com.penseprecifique.api.shared.validation.LimitesTexto.SEM_CARACTERE_NULO_MENSAGEM)
+    private String marca;
+
     @NotNull(message = "O tipo é obrigatório")
     private TipoProduto tipo;
 
