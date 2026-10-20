@@ -263,4 +263,16 @@ class OpenApiContratoIT {
             assertTrue(achou, caminho);
         }
     }
+
+    /** #1021 — o endereço interno /error não faz parte do contrato; page tem teto de inteiro (acima disso o Spring não converte). */
+    @Test
+    void enderecoInternoDeErroForaDoContratoEPageComTeto() throws Exception {
+        JsonNode docs = docs();
+        assertTrue(!docs.get("paths").has("/error"), "/error não deve estar no contrato");
+        for (JsonNode p : docs.get("paths").get("/orcamentos").get("get").get("parameters")) {
+            if ("page".equals(p.get("name").asString())) {
+                assertEquals(Integer.MAX_VALUE, p.get("schema").get("maximum").asLong(), p.toString());
+            }
+        }
+    }
 }
