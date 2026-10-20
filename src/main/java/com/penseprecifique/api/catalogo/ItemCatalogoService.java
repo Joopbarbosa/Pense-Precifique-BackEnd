@@ -112,6 +112,7 @@ public class ItemCatalogoService {
 
         BigDecimal custoComponentes = BigDecimal.ZERO;
         for (ItemCatalogoComponenteRequest req : request.getComponentes()) {
+            exigirUmaReferencia(req);
             BigDecimal custoUnitario = resolverCustoUnitarioComponente(req, usuarioId);
             custoComponentes = custoComponentes.add(req.getQuantidade().multiply(custoUnitario));
         }
@@ -312,14 +313,17 @@ public class ItemCatalogoService {
     // Helpers — componentes
     // ---------------------------------------------------------------
 
+    /** #1029 — a prévia de preço recusa o componente sem referência (ou com as duas) com a mesma mensagem do cadastro do item. */
+    private static void exigirUmaReferencia(ItemCatalogoComponenteRequest req) {
+        if ((req.getInsumoId() != null) == (req.getProdutoBaseId() != null)) {
+            throw new BusinessException("Cada componente do item de catálogo deve referenciar exatamente um insumo ou um produto.");
+        }
+    }
+
     private List<ItemCatalogoComponente> salvarComponentes(ItemCatalogo item, List<ItemCatalogoComponenteRequest> requests, UUID usuarioId) {
         return requests.stream().map(req -> {
+            exigirUmaReferencia(req);
             boolean temInsumo = req.getInsumoId() != null;
-            boolean temProdutoBase = req.getProdutoBaseId() != null;
-            if (temInsumo == temProdutoBase) {
-                throw new BusinessException(
-                        "Cada componente do item de catálogo deve referenciar exatamente um insumo ou um produto.");
-            }
 
             Insumo insumo = null;
             Produto produtoBase = null;

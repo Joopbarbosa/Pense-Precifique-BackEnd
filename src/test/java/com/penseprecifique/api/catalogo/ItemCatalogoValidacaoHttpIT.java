@@ -152,4 +152,19 @@ class ItemCatalogoValidacaoHttpIT {
                 .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
                         .usuario(usuario).nome(sigla).sigla(sigla).build()));
     }
+
+    /** #1029 — a prévia de preço recusa componente sem insumo nem produto com 400 (e a mesma mensagem do cadastro), nunca 404 "null". */
+    @Test
+    void previaDePrecoComComponenteSemReferenciaRetorna400() throws Exception {
+        Usuario usuario = novoUsuario();
+        String token = jwtTokenProvider.generateToken(usuario);
+        UUID catalogoId = novoCatalogoViaHttp(token);
+
+        mockMvc.perform(post("/catalogos/" + catalogoId + "/itens/preview-preco")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tempoProducao\":0,\"margemLucro\":null,\"componentes\":[{\"quantidade\":1}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Cada componente do item de catálogo deve referenciar exatamente um insumo ou um produto."));
+    }
 }

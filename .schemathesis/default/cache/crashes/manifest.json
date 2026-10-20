@@ -1,7 +1,0 @@
-{
-  "format_version": 1,
-  "schemathesis_version": "4.29.1",
-  "schema_location": "http://localhost:18181/v3/api-docs",
-  "base_url": "http://localhost:18181",
-  "created_at": "2026-10-20T19:47:11.531265+00:00"
-}
