@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CatalogoService {
 
+    private static final int NOME_MAX = 255;
+
     private final CatalogoRepository catalogoRepository;
     private final ItemCatalogoRepository itemCatalogoRepository;
     private final ItemCatalogoComponenteRepository componenteRepository;
@@ -140,9 +142,14 @@ public class CatalogoService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Catalogo original = buscarCatalogo(id, usuarioId);
 
-        String novoNome = (request != null && request.getNovoNome() != null && !request.getNovoNome().isBlank())
-                ? request.getNovoNome().trim()
-                : original.getNome() + " (cópia)";
+        boolean nomeInformado = request != null && request.getNovoNome() != null && !request.getNovoNome().isBlank();
+        // #1027 — o nome do catálogo cabe em 255 caracteres: o informado acima disso é recusado (400); o padrão ("... (cópia)") encurta o original
+        String sufixo = " (cópia)";
+        String novoNome = nomeInformado ? request.getNovoNome().trim()
+                : original.getNome().substring(0, Math.min(original.getNome().length(), NOME_MAX - sufixo.length())) + sufixo;
+        if (novoNome.length() > NOME_MAX) {
+            throw new BusinessException("O nome do catálogo pode ter no máximo " + NOME_MAX + " caracteres.");
+        }
         validarNomeUnico(usuarioId, novoNome, null);
 
         Catalogo copia = Catalogo.builder()

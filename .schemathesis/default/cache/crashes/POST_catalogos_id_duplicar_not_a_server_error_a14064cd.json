@@ -1,0 +1,122 @@
+{
+  "operation": "POST /catalogos/{id}/duplicar",
+  "method": "POST",
+  "path_template": "/catalogos/{id}/duplicar",
+  "fingerprint": "a14064cd",
+  "case_id": "j4cqv1",
+  "code_sample": "curl -X POST -H 'Authorization: [Filtered]' -H 'Content-Type: application/json' -d '{\"\\u009e\\ud8ee\\udeb8\": [-35, false], \"\": {}, \"-script.pyw\": {\"\\u00c4\": 4.951881069489194e+16}, \"\\u00f2\\u000f\\u0081\\udaf1\\udd9b6F\": {\"\\u007f\\u00e5\\u00c5\\u00f6\\u00d1\\u00d5\\u009c\\udb47\\udc35\": null}, \"\\u009d\\u009d\": [null, {\"Cw?I\\ud902\\uddaf\\uda14\\udc4bC\": true, \"\\ud8ce\\udff4\": false, \"\\u009c\\u00cd\": 591}], \"novoNome\": \"\"}' http://localhost:18181/catalogos/0fac557a-b591-4ce8-a6fc-0eccde44872e/duplicar",
+  "sequence": [
+    {
+      "method": "POST",
+      "url": "http://localhost:18181/catalogos/0fac557a-b591-4ce8-a6fc-0eccde44872e/duplicar",
+      "url_template": "http://localhost:18181/catalogos/{id}/duplicar",
+      "headers": {
+        "User-Agent": "schemathesis/4.29.1",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "Authorization": "[Filtered]",
+        "X-Schemathesis-TestCaseId": "j4cqv1",
+        "Content-Type": "application/json",
+        "Content-Length": "321"
+      },
+      "response": {
+        "status_code": 500,
+        "headers": {
+          "vary": "Origin",
+          "x-content-type-options": "nosniff",
+          "x-xss-protection": "0",
+          "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+          "pragma": "no-cache",
+          "expires": "0",
+          "x-frame-options": "DENY",
+          "content-type": "application/json",
+          "transfer-encoding": "chunked",
+          "date": "Tue, 20 Oct 2026 19:48:33 GMT",
+          "connection": "close"
+        },
+        "body": "{\"message\":\"Erro interno do servidor\",\"status\":500,\"timestamp\":\"2026-10-20T16:48:33.031410057\",\"fieldErrors\":null,\"titulo\":null,\"motivo\":null,\"comoResolver\":null,\"itens\":null}"
+      },
+      "link": null,
+      "checks": [
+        {
+          "name": "not_a_server_error",
+          "status": "failure",
+          "message": "Server error"
+        }
+      ],
+      "meta": {
+        "generation": {
+          "time": 0.01429243000166025,
+          "mode": "positive"
+        },
+        "components": {
+          "PATH": "positive",
+          "BODY": "positive"
+        },
+        "phase": {
+          "name": "fuzzing",
+          "data": {
+            "type": "FuzzingPhaseData",
+            "description": "Positive test case",
+            "location": null,
+            "parameter": null,
+            "parameter_location": null,
+            "mutations": []
+          }
+        },
+        "pool_draws": [
+          {
+            "location": "path",
+            "parameter_name": "id",
+            "resource_name": "CatalogoResponse",
+            "resource_field": "id",
+            "source_operation": "POST /catalogos",
+            "source_status": 201
+          }
+        ],
+        "pool_misses": [],
+        "semantic_draws": [],
+        "dictionary_draws": [],
+        "constants_draws": [],
+        "raw_containers": {}
+      },
+      "path": "/catalogos/{id}/duplicar",
+      "path_parameters": {
+        "id": "0fac557a-b591-4ce8-a6fc-0eccde44872e"
+      },
+      "query": {},
+      "case_headers": {
+        "Authorization": "[Filtered]"
+      },
+      "cookies": {},
+      "case_body": {
+        "encoding": "json",
+        "value": {
+          "\u009e\ud8ee\udeb8": [
+            -35,
+            false
+          ],
+          "": {},
+          "-script.pyw": {
+            "\u00c4": 4.951881069489194e+16
+          },
+          "\u00f2\u000f\u0081\udaf1\udd9b6F": {
+            "\u007f\u00e5\u00c5\u00f6\u00d1\u00d5\u009c\udb47\udc35": null
+          },
+          "\u009d\u009d": [
+            null,
+            {
+              "Cw?I\ud902\uddaf\uda14\udc4bC": true,
+              "\ud8ce\udff4": false,
+              "\u009c\u00cd": 591
+            }
+          ],
+          "novoNome": ""
+        }
+      },
+      "media_type": "application/json",
+      "parent_index": null
+    }
+  ]
+}
