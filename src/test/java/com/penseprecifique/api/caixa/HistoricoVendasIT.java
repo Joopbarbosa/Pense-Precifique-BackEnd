@@ -129,5 +129,10 @@ class HistoricoVendasIT {
         assertThrows(BusinessException.class, () -> service.listar(null, null, null, null, null, null, 0, 0));
         assertThrows(BusinessException.class, () -> service.listar(null, null, null, null, null, null, 0, 101));
         assertThrows(BusinessException.class, () -> service.listar(null, null, null, null, null, "senhaHash,asc", 0, 20));
+        // #1011 (segurança): status desconhecido e busca acima de 255 caracteres são recusados, nunca ignorados
+        assertThrows(BusinessException.class, () -> service.listar(null, null, List.of("XYZ"), null, null, null, 0, 20));
+        assertThrows(BusinessException.class, () -> service.listar(null, null, List.of("CONCLUIDA", "XYZ"), null, null, null, 0, 20));
+        assertThrows(BusinessException.class, () -> service.listar(null, null, null, null, "a".repeat(256), null, 0, 20));
+        assertEquals(0, service.listar(null, null, List.of("CONCLUIDA"), null, "a".repeat(255), null, 0, 20).getTotalElements());
     }
 }
