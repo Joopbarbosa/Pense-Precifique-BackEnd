@@ -52,6 +52,15 @@ class EntradaJsonTipoErradoHttpIT {
     }
 
     @Test
+    void campoBooleanoComTextoOuNumeroViraBloqueio() throws Exception {
+        String t = token();
+        String base = "{\"nome\":\"Caderno\",\"tipo\":\"PRODUTO\",\"tempoProducao\":10,\"rendimento\":1,\"precoVenda\":10,\"fichaTecnica\":[],\"fracionavel\":";
+        assertEquals(400, enviar("POST", "/produtos", t, base + "\"false\"}"));
+        assertEquals(400, enviar("POST", "/produtos", t, base + "0}"));
+        assertEquals(201, enviar("POST", "/produtos", t, base + "true}"));
+    }
+
+    @Test
     void textoDeVerdadeContinuaAceito() throws Exception {
         String t = token();
         assertEquals(201, enviar("POST", "/catalogos", t, "{\"nome\":\"Natal 2026\"}"));
