@@ -32,6 +32,11 @@ public class JacksonConfig {
                     .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail)
                     .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail)
                     .setCoercion(CoercionInputShape.Float, CoercionAction.Fail));
+            // #1016 — campo booleano recusa texto e número (\"false\", 0, 1): antes virava false/true em silêncio
+            builder.withCoercionConfig(tools.jackson.databind.type.LogicalType.Boolean, c -> c
+                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+                    .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail)
+                    .setCoercion(CoercionInputShape.Float, CoercionAction.Fail));
             for (Class<?> tipo : new Class<?>[] {List.class, Set.class, Collection.class}) {
                 builder.withConfigOverride(tipo, o -> o.setNullHandling(JsonSetter.Value.forContentNulls(Nulls.FAIL)));
             }
