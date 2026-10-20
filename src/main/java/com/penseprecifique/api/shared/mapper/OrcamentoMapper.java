@@ -112,14 +112,14 @@ public class OrcamentoMapper {
             // Item de Catálogo tem nome próprio desde RN-NOVA-1 (V0.13.0) — sem produtoId nem
             // badges de estoque/fracionável de um único produto (estoque agora é por componente,
             // N deles; ver Divergência de Premissa em decisoes-catalogo.md).
-            response.setNomeProduto(item.getItemCatalogo().getNome());
+            response.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(item.getItemCatalogo().getNome(), item.getItemCatalogo().getMarca()));
             if (componentesCatalogo != null) {
                 response.setAlgumInsumoNaoFracionavel(algumComponenteNaoFracionavel(componentesCatalogo));
             }
         } else {
             Produto produto = item.getProduto();
             response.setProdutoId(produto.getId());
-            response.setNomeProduto(produto.getNome());
+            response.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(produto.getNome(), produto.getMarca()));
             response.setDestinoTipo("PRODUTO");
             response.setDestinoId(com.penseprecifique.api.cliente.DestinoCadastro.produto(produto));
             response.setPermitirEstoqueNegativo(produto.getPermitirEstoqueNegativo());
@@ -156,7 +156,7 @@ public class OrcamentoMapper {
         OrcamentoItemCustomizacaoResponse response = new OrcamentoItemCustomizacaoResponse();
         response.setId(c.getId());
         response.setProdutoId(c.getProduto().getId());
-        response.setNomeProduto(c.getProduto().getNome());
+        response.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(c.getProduto().getNome(), c.getProduto().getMarca()));
         response.setDestinoId(com.penseprecifique.api.cliente.DestinoCadastro.produto(c.getProduto()));
         response.setQuantidade(c.getQuantidade());
         response.setPrecoUnitario(c.getPrecoUnitario());

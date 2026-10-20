@@ -72,7 +72,7 @@ public class VendasService {
                         List<LinhaProduto> linhas, List<Pagamento> pagamentos) {}
 
     /** #719/#607 — uma linha de produto (ou item de Catálogo) da venda: base dos "mais vendidos", do lucro e da curva ABC; {@code custo} é o custo de material da linha. */
-    public record LinhaProduto(UUID id, String tipo, String nome, BigDecimal quantidade, BigDecimal faturamento, BigDecimal custo) {}
+    public record LinhaProduto(UUID id, String tipo, String nome, String marca, BigDecimal quantidade, BigDecimal faturamento, BigDecimal custo) {}
 
     /** #719 — forma de pagamento registrada na venda e o valor; lista vazia = "Não informada". */
     public record Pagamento(String forma, BigDecimal valor) {}
@@ -226,10 +226,10 @@ public class VendasService {
     private static LinhaProduto linha(Produto produto, ItemCatalogo itemCatalogo, BigDecimal quantidade, BigDecimal subtotal, BigDecimal custo) {
         BigDecimal faturamento = subtotal != null ? subtotal : BigDecimal.ZERO;
         if (itemCatalogo != null) {
-            return new LinhaProduto(itemCatalogo.getId(), "CATALOGO", itemCatalogo.getNome(), quantidade, faturamento, custo);
+            return new LinhaProduto(itemCatalogo.getId(), "CATALOGO", itemCatalogo.getNome(), itemCatalogo.getMarca(), quantidade, faturamento, custo);
         }
         return new LinhaProduto(produto != null ? produto.getId() : null, "PRODUTO",
-                produto != null ? produto.getNome() : "Item sem referência", quantidade, faturamento, custo);
+                produto != null ? produto.getNome() : "Item sem referência", produto != null ? produto.getMarca() : null, quantidade, faturamento, custo);
     }
 
     private static String rotulo(com.penseprecifique.api.shared.domain.enums.MetodoPagamento metodo) {
@@ -245,7 +245,7 @@ public class VendasService {
     }
 
     private static String resumir(BigDecimal quantidade, Produto produto, ItemCatalogo itemCatalogo) {
-        String nome = itemCatalogo != null ? itemCatalogo.getNome() : produto != null ? produto.getNome() : "Item sem referência";
+        String nome = itemCatalogo != null ? com.penseprecifique.api.util.NomeMarca.rotulo(itemCatalogo.getNome(), itemCatalogo.getMarca()) : produto != null ? com.penseprecifique.api.util.NomeMarca.rotulo(produto.getNome(), produto.getMarca()) : "Item sem referência";
         return quantidade.stripTrailingZeros().toPlainString().replace('.', ',') + " × " + nome;
     }
 

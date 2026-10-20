@@ -58,7 +58,7 @@ public class ItemCatalogoMapper {
             Produto produtoBase = componente.getProdutoBase();
             custoUnitario = produtoBase.getPrecoCusto();
             response.setProdutoBaseId(produtoBase.getId());
-            response.setNomeProdutoBase(produtoBase.getNome());
+            response.setNomeProdutoBase(com.penseprecifique.api.util.NomeMarca.rotulo(produtoBase.getNome(), produtoBase.getMarca()));
             response.setTipoProdutoBase(produtoBase.getTipo());
             ativo = Boolean.TRUE.equals(produtoBase.getAtivo()) && produtoBase.getDeletedAt() == null;
         }

@@ -258,7 +258,7 @@ public class OrcamentoService {
         ItemSemEstoqueResponse resposta = new ItemSemEstoqueResponse();
         resposta.setProdutoId(produto.getId());
         resposta.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
-        resposta.setNomeProduto(produto.getNome());
+        resposta.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(produto.getNome(), produto.getMarca()));
         resposta.setQuantidadeSolicitada(solicitada);
         resposta.setEstoqueAtual(estoqueAtual);
         resposta.setQuantidadeFaltante(solicitada.subtract(estoqueAtual));
@@ -690,7 +690,7 @@ public class OrcamentoService {
 
             SimulacaoEstoqueProdutoResponse alerta = new SimulacaoEstoqueProdutoResponse();
             alerta.setProdutoId(produto.getId());
-            alerta.setNomeProduto(produto.getNome());
+            alerta.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(produto.getNome(), produto.getMarca()));
             alerta.setEstoqueAtual(produto.getEstoqueAtual());
             alerta.setQuantidadeNecessaria(necessaria);
             alerta.setPermitirEstoqueNegativo(permitirEstoqueNegativo);
@@ -799,7 +799,7 @@ public class OrcamentoService {
             if (produto.getEstoqueAtual().compareTo(necessaria) < 0) {
                 AvisoEstoqueResponse aviso = new AvisoEstoqueResponse();
                 aviso.setProdutoId(produto.getId());
-                aviso.setNomeProduto(produto.getNome());
+                aviso.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(produto.getNome(), produto.getMarca()));
                 aviso.setEstoqueAtual(produto.getEstoqueAtual());
                 aviso.setQuantidadeNecessaria(necessaria);
                 aviso.setMensagem("Estoque insuficiente para " + necessaria.stripTrailingZeros().toPlainString()

@@ -392,17 +392,17 @@ public class ClienteHistoricoService {
 
     private static LinhaItem linha(OrcamentoItem i) {
         return linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
-                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
+                i.getItemCatalogo() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getItemCatalogo().getNome(), i.getItemCatalogo().getMarca()) : null,
                 i.getProduto() != null ? i.getProduto().getId() : null,
-                i.getProduto() != null ? i.getProduto().getNome() : null,
+                i.getProduto() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getProduto().getNome(), i.getProduto().getMarca()) : null,
                 BigDecimal.valueOf(i.getQuantidade()), i.getSubtotal());
     }
 
     private static LinhaItem linha(VendaCaixaItem i) {
         return linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
-                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
+                i.getItemCatalogo() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getItemCatalogo().getNome(), i.getItemCatalogo().getMarca()) : null,
                 i.getProduto() != null ? i.getProduto().getId() : null,
-                i.getProduto() != null ? i.getProduto().getNome() : null,
+                i.getProduto() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getProduto().getNome(), i.getProduto().getMarca()) : null,
                 i.getQuantidade(), i.getSubtotal());
     }
 

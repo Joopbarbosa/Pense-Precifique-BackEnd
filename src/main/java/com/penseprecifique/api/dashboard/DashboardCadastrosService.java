@@ -138,10 +138,10 @@ public class DashboardCadastrosService {
             }
             BigDecimal custoUnitario = produtoService.custoUnitarioAoVivo(p).setScale(4, RoundingMode.HALF_UP);
             String identificador = IdentificadorFormatter.formatar("PRO", p.getNumero());
-            valorProdutos.add(new DashboardCadastrosResponse.LinhaEstoque(p.getId(), identificador, p.getNome(), "PRODUTO", estoque,
+            valorProdutos.add(new DashboardCadastrosResponse.LinhaEstoque(p.getId(), identificador, com.penseprecifique.api.util.NomeMarca.rotulo(p.getNome(), p.getMarca()), "PRODUTO", estoque,
                     custoUnitario, estoque.multiply(custoUnitario), p.getPrecoVenda()));
             if (p.getPrecoVenda() != null) {
-                potencial.add(new DashboardCadastrosResponse.LinhaEstoque(p.getId(), identificador, p.getNome(), "PRODUTO", estoque, null,
+                potencial.add(new DashboardCadastrosResponse.LinhaEstoque(p.getId(), identificador, com.penseprecifique.api.util.NomeMarca.rotulo(p.getNome(), p.getMarca()), "PRODUTO", estoque, null,
                         estoque.multiply(p.getPrecoVenda()), p.getPrecoVenda()));
             }
         }
@@ -300,10 +300,10 @@ public class DashboardCadastrosService {
     private Chave chaveDaLinha(VendasService.LinhaProduto l) {
         if ("PRODUTO".equals(l.tipo()) && l.id() != null) {
             return produtoRepository.findById(l.id())
-                    .map(p -> new Chave(p.getId(), IdentificadorFormatter.formatar("PRO", p.getNumero()), p.getNome(), null, p.getNumero()))
-                    .orElse(new Chave(l.id(), "", l.nome(), null, 0));
+                    .map(p -> new Chave(p.getId(), IdentificadorFormatter.formatar("PRO", p.getNumero()), com.penseprecifique.api.util.NomeMarca.rotulo(p.getNome(), p.getMarca()), null, p.getNumero()))
+                    .orElse(new Chave(l.id(), "", com.penseprecifique.api.util.NomeMarca.rotulo(l.nome(), l.marca()), null, 0));
         }
-        return new Chave(l.id(), "", l.nome(), null, 0);
+        return new Chave(l.id(), "", com.penseprecifique.api.util.NomeMarca.rotulo(l.nome(), l.marca()), null, 0);
     }
 
     private DashboardCadastrosResponse.Ranking rankingProdutos(Map<String, LinhaSoma> atual, Map<String, LinhaSoma> anterior, boolean porLucro) {

@@ -141,7 +141,7 @@ public class ProdutoMapper {
         } else {
             custoUnitario = item.getProdutoBase().getPrecoCusto();
             response.setProdutoBaseId(item.getProdutoBase().getId());
-            response.setNomeProdutoBase(item.getProdutoBase().getNome());
+            response.setNomeProdutoBase(com.penseprecifique.api.util.NomeMarca.rotulo(item.getProdutoBase().getNome(), item.getProdutoBase().getMarca()));
             response.setTipoProdutoBase(item.getProdutoBase().getTipo()); // RN-NOVA-8/#462
         }
 
@@ -163,7 +163,7 @@ public class ProdutoMapper {
         response.setVinculoId(item.getId());
         response.setProdutoId(item.getProduto().getId());
         response.setProdutoIdentificador(IdentificadorFormatter.formatar("PRO", item.getProduto().getNumero()));
-        response.setProdutoNome(item.getProduto().getNome());
+        response.setProdutoNome(com.penseprecifique.api.util.NomeMarca.rotulo(item.getProduto().getNome(), item.getProduto().getMarca()));
         return response;
     }
 
