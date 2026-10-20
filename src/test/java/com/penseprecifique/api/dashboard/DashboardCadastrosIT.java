@@ -308,4 +308,25 @@ class DashboardCadastrosIT {
         compraService.confirmarNova(new CompraRequest(dia, false, null, false, null, null,
                 List.of(new CompraItemRequest(insumo.getId(), null, bd(qtd), bd(total)))));
     }
+
+    /** V0.17.0 #1003 (QA da #971, CEN-NOVO-79): 12 insumos com 12, 11, ... 1 compras; o ranking mostra 10 e a lupa lista os 12. */
+    @Test
+    void cen79_rankingDoInsumoMaisCompradoMostraDezELupaListaTodos() {
+        for (int n = 1; n <= 12; n++) {
+            Insumo insumo = insumo("Insumo " + n, "1.00");
+            for (int c = 0; c < 13 - n; c++) compra(insumo, "1", "1.00", DE.plusDays(c));
+        }
+
+        DashboardCadastrosResponse.Ranking r = service.dashboard(DE, ATE, null).insumoMaisComprado();
+
+        assertEquals(10, r.top().size());
+        assertEquals(12, r.todos().size());
+        assertEquals("Insumo 1", r.top().get(0).rotulo());
+        assertEquals("Insumo 10", r.top().get(9).rotulo());
+        assertEquals(List.of("Insumo 11", "Insumo 12"), r.todos().subList(10, 12).stream().map(DashboardCadastrosResponse.Item::rotulo).toList(),
+                "INS-11 (2 compras) e INS-12 (1 compra) só aparecem na lupa");
+        assertEquals(0, bd("12").compareTo(r.todos().get(0).valor()));
+        assertEquals(0, bd("1").compareTo(r.todos().get(11).valor()));
+        assertTrue(r.top().stream().noneMatch(i -> i.rotulo().equals("Insumo 11") || i.rotulo().equals("Insumo 12")));
+    }
 }
