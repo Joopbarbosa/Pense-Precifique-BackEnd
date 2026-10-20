@@ -71,4 +71,24 @@ class ProdutosRelacionadosInsumoIT {
         assertEquals(1, ativos.size());
         assertEquals(laco.getId(), ativos.get(0).getId());
     }
+
+    /** #1018 (RN-NOVA-36) — o produto relacionado traz a marca (e nula quando o cadastro não tem), para a tela mostrar "Nome — Marca". */
+    @Test
+    void produtoRelacionadoTrazAMarcaOuNulaSeNaoTem() {
+        seedUsuario();
+        UnidadeMedida metro = unidadeMedidaRepository.save(UnidadeMedida.builder().usuario(usuario).nome("metro" + UUID.randomUUID()).sigla("m").build());
+        Insumo fita = insumoRepository.save(Insumo.builder().usuario(usuario).numero(1).nome("Fita " + UUID.randomUUID())
+                .unidadeMedida(metro).custoUnitario(new BigDecimal("3.00")).estoqueAtual(BigDecimal.TEN)
+                .permitirEstoqueNegativo(true).fracionavel(true).build());
+        Produto comMarca = produto("Caderno", true);
+        comMarca.setMarca("Pense");
+        produtoRepository.save(comMarca);
+        Produto semMarca = produto("Fita decorada", true);
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder().produto(comMarca).insumo(fita).quantidade(BigDecimal.ONE).build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder().produto(semMarca).insumo(fita).quantidade(BigDecimal.ONE).build());
+
+        List<ProdutoRelacionadoResponse> r = insumoService.listarProdutosRelacionados(fita.getId(), true);
+        assertEquals("Pense", r.stream().filter(x -> x.getId().equals(comMarca.getId())).findFirst().orElseThrow().getMarca());
+        org.junit.jupiter.api.Assertions.assertNull(r.stream().filter(x -> x.getId().equals(semMarca.getId())).findFirst().orElseThrow().getMarca());
+    }
 }
