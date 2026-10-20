@@ -304,7 +304,8 @@ public class GlobalExceptionHandler {
      * nome de arquivo com caractere de controle); qualquer nível da cadeia que seja recusa de upload do cliente é entrada inválida.
      */
     private static boolean causaDeEntradaInvalida(Throwable ex) {
-        for (Throwable causa = ex.getCause(); causa != null; causa = causa.getCause() == causa ? null : causa.getCause()) {
+        Throwable causa = ex.getCause();
+        for (int nivel = 0; causa != null && nivel < 10; nivel++, causa = causa.getCause()) {
             if (causa instanceof FileUploadException || causa instanceof org.apache.tomcat.util.http.fileupload.InvalidFileNameException) {
                 return true;
             }
