@@ -44,7 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Brasília (orçamento ENTREGUE pela data de entrega e venda do Caixa CONCLUÍDA), agrupa por tipo e cadastro e desempata como a Spec manda.
  * O relógio de Brasília é trocado por um relógio fixo; a virada do mês também roda com a JVM em UTC.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+// contexto próprio (relógio fixo): pool pequeno e fechado ao fim, para não esgotar as conexões do banco de teste
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "spring.datasource.hikari.maximum-pool-size=3")
+@org.springframework.test.annotation.DirtiesContext(classMode = org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class DashboardMaisVendidosMesIT {
 
