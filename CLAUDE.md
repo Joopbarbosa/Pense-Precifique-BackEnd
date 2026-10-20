@@ -272,6 +272,18 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   restringe o 400 à mensagem `Current request is not a multipart request`; outra falha multipart
   continua 500 com log — regressão em `UploadNaoMultipartIT`). Se o Spring mudar essa mensagem, o
   teste quebra antes de virar 500 silencioso.
+- **Entrada hostil nunca vira 500** (V0.17.0, #1016/#1026-#1029): corpo com tipo errado, multipart malformado
+  (`GlobalExceptionHandler.causaDeEntradaInvalida` percorre a cadeia de causas atrás de `FileUploadException`/
+  `InvalidFileNameException`), texto acima do limite da coluna (`@Size`, ex.: nome de método de pagamento 100,
+  nome de catálogo 255) e referência ausente respondem 400, não 500 nem 404 enganoso. Todo endpoint novo traz
+  teste HTTP de entrada hostil.
+- **Contrato OpenAPI estrito** (V0.17.0, #1021): `infra/config/OpenApiConfig` limita `page`/`size`/`busca` e
+  marca insumos obrigatórios; `ErroPadraoController` é `@Hidden`. Campo novo de request ganha limite no DTO e
+  o contrato é conferido em `OpenApiContratoIT`. O fuzzer roda com `schemathesis.toml` (3 verificações
+  desligadas, justificadas no arquivo) — achado de 500 vira tarefa, nunca entra na política.
+- **Faturamento do Início = vendas da RN-NOVA-12** (V0.17.0, #1022): `DashboardService` soma
+  `VendasService.Venda::faturamento` do mês de Brasília (`LocalDate.now(clock)`); não consultar orçamento
+  direto. Marca (RN-NOVA-36): `NomeMarca.chave()` compara sem acento/caixa, sem colapsar espaço interno.
 
 ---
 
