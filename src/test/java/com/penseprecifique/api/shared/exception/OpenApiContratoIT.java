@@ -97,7 +97,7 @@ class OpenApiContratoIT {
         assertEquals("local-date-time", datas.get("updatedAt").get("format").asString());
     }
 
-    /** #780 e #782 — consulta documentada como a API a trata: page/size reais, sem mínimos falsos; data vazia aceita. */
+    /** #780, #782 e #1021 — consulta documentada como a API a trata: page/size reais com os limites da #994; data vazia aceita. */
     @Test
     void parametrosDeConsultaSaoOsReaisEAceitamValorVazioNasDatas() throws Exception {
         JsonNode docs = docs();
@@ -107,8 +107,15 @@ class OpenApiContratoIT {
         assertTrue(nomes.containsAll(List.of("page", "size", "sort")) && !nomes.contains("pageable"), nomes.toString());
         for (JsonNode p : lista) {
             if ("page".equals(p.get("name").asString()) || "size".equals(p.get("name").asString())) {
-                assertTrue(!p.get("schema").has("minimum"), p.toString());
                 assertTrue(!p.path("required").asBoolean(false), p.toString());
+            }
+            // #1021 — limites reais da #994 (page >= 0; size de 1 a 100)
+            if ("page".equals(p.get("name").asString())) {
+                assertEquals(0, p.get("schema").get("minimum").asInt(), p.toString());
+            }
+            if ("size".equals(p.get("name").asString())) {
+                assertEquals(1, p.get("schema").get("minimum").asInt(), p.toString());
+                assertEquals(100, p.get("schema").get("maximum").asInt(), p.toString());
             }
         }
         for (JsonNode p : docs.get("paths").get("/compras/dashboard").get("get").get("parameters")) {
@@ -212,5 +219,48 @@ class OpenApiContratoIT {
     private static void assertAceitaNulo(JsonNode propriedade, String nome) {
         String texto = propriedade.toString();
         assertTrue(texto.contains("\"null\"") || texto.contains("\"nullable\":true"), nome + " não aceita nulo: " + texto);
+    }
+
+    /** #1021 — todo parâmetro page, size e busca do contrato traz o limite que o interceptor da #994 aplica. */
+    @Test
+    void todaListagemDeclaraLimitesDePaginacaoEBusca() throws Exception {
+        int paginados = 0;
+        for (var caminho : docs().get("paths").properties()) {
+            JsonNode get = caminho.getValue().get("get");
+            if (get == null || get.get("parameters") == null) continue;
+            for (JsonNode p : get.get("parameters")) {
+                String nome = p.get("name").asString();
+                JsonNode esquema = p.get("schema");
+                if (nome.equals("size")) {
+                    paginados++;
+                    assertEquals(1, esquema.get("minimum").asInt(), caminho.getKey());
+                    assertEquals(100, esquema.get("maximum").asInt(), caminho.getKey());
+                }
+                if (nome.equals("page")) {
+                    assertEquals(0, esquema.get("minimum").asInt(), caminho.getKey());
+                }
+                if (nome.equals("busca")) {
+                    assertEquals(255, esquema.get("maxLength").asInt(), caminho.getKey());
+                }
+            }
+        }
+        assertTrue(paginados >= 10, "esperava 10 ou mais listagens paginadas, achou " + paginados);
+    }
+
+    /** #1021 — evolução de preço exige ao menos um insumo, como a API (400 sem ele). */
+    @Test
+    void evolucaoDePrecoExigeAoMenosUmInsumo() throws Exception {
+        JsonNode paths = docs().get("paths");
+        for (String caminho : List.of("/compras/evolucao-preco", "/dashboard/cadastros/evolucao-preco-insumos")) {
+            boolean achou = false;
+            for (JsonNode p : paths.get(caminho).get("get").get("parameters")) {
+                if ("insumoIds".equals(p.get("name").asString())) {
+                    assertTrue(p.get("required").asBoolean(false), caminho + " " + p);
+                    assertEquals(1, p.get("schema").get("minItems").asInt(), caminho + " " + p);
+                    achou = true;
+                }
+            }
+            assertTrue(achou, caminho);
+        }
     }
 }

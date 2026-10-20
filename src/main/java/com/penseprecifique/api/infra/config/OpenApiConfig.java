@@ -89,6 +89,7 @@ public class OpenApiConfig {
                 adicionar(op, referencia);
                 ajustarParametros(op);
             }));
+            exigirInsumosNaEvolucaoDePreco(openApi);
         };
     }
 
@@ -108,16 +109,18 @@ public class OpenApiConfig {
         for (Parameter parametro : operacao.getParameters()) {
             if ("pageable".equals(parametro.getName())) {
                 ajustados.add(new Parameter().name("page").in("query").required(false)
-                        .description("Página, a partir de 0. Valor inválido (negativo) usa a página 0.")
-                        .schema(new Schema<Integer>().types(Set.of("integer"))));
+                        .description("Página, a partir de 0. Valor negativo ou não inteiro é recusado (400).")
+                        .schema(new Schema<Integer>().types(Set.of("integer")).minimum(java.math.BigDecimal.ZERO)));
                 ajustados.add(new Parameter().name("size").in("query").required(false)
-                        .description("Itens por página. Valor menor que 1 usa o padrão do endereço.")
-                        .schema(new Schema<Integer>().types(Set.of("integer"))));
+                        .description("Itens por página, de 1 a 100. Fora dessa faixa é recusado (400).")
+                        .schema(new Schema<Integer>().types(Set.of("integer"))
+                                .minimum(java.math.BigDecimal.ONE).maximum(java.math.BigDecimal.valueOf(100))));
                 ajustados.add(new Parameter().name("sort").in("query").required(false)
                         .description("Ordenação: campo,asc ou campo,desc. Campo desconhecido é recusado (400).")
                         .schema(new Schema<String>().types(Set.of("array")).items(new Schema<String>().types(Set.of("string")))));
                 continue;
             }
+            limitarPaginacaoEBusca(parametro);
             // #787: o Spring converte valor vazio de parâmetro opcional (boolean, UUID, lista, data, enum) em "ausente".
             if ("query".equals(parametro.getIn()) && !Boolean.TRUE.equals(parametro.getRequired())) {
                 parametro.setAllowEmptyValue(true);
@@ -129,6 +132,48 @@ public class OpenApiConfig {
             ajustados.add(parametro);
         }
         operacao.setParameters(ajustados);
+    }
+
+    /**
+     * #1021 — o contrato declara os limites que {@code ValidacaoPaginacaoInterceptor} (#994) aplica em toda listagem:
+     * {@code page} inteiro maior ou igual a 0, {@code size} de 1 a 100 e {@code busca} com até 255 caracteres.
+     */
+    private static void limitarPaginacaoEBusca(Parameter parametro) {
+        if (!"query".equals(parametro.getIn()) || parametro.getSchema() == null) {
+            return;
+        }
+        Schema<?> esquema = parametro.getSchema();
+        switch (parametro.getName()) {
+            case "page" -> esquema.setMinimum(java.math.BigDecimal.ZERO);
+            case "size" -> {
+                esquema.setMinimum(java.math.BigDecimal.ONE);
+                esquema.setMaximum(java.math.BigDecimal.valueOf(100));
+            }
+            case "busca" -> esquema.setMaxLength(255);
+            default -> { }
+        }
+    }
+
+    /**
+     * #1021 — as duas consultas de evolução de preço respondem 400 ("Escolha pelo menos um insumo") sem {@code insumoIds};
+     * o contrato passa a exigir ao menos um, em vez de declará-lo opcional.
+     */
+    private static void exigirInsumosNaEvolucaoDePreco(io.swagger.v3.oas.models.OpenAPI openApi) {
+        for (String caminho : List.of("/compras/evolucao-preco", "/dashboard/cadastros/evolucao-preco-insumos")) {
+            if (openApi.getPaths().get(caminho) == null || openApi.getPaths().get(caminho).getGet() == null
+                    || openApi.getPaths().get(caminho).getGet().getParameters() == null) {
+                continue;
+            }
+            for (Parameter parametro : openApi.getPaths().get(caminho).getGet().getParameters()) {
+                if ("insumoIds".equals(parametro.getName())) {
+                    parametro.setRequired(true);
+                    parametro.setAllowEmptyValue(false);
+                    if (parametro.getSchema() != null) {
+                        parametro.getSchema().setMinItems(1);
+                    }
+                }
+            }
+        }
     }
 
     private static void adicionar(Operation operacao, Schema<?> referencia) {
