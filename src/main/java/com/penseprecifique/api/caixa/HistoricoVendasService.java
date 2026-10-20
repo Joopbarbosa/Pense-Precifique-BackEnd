@@ -44,6 +44,9 @@ public class HistoricoVendasService {
     private final VendaCaixaPagamentoRepository pagamentosRepository;
     private final UsuarioRepository usuarioRepository;
 
+    private static final java.util.Set<String> STATUS_VALIDOS = java.util.Set.of("CONCLUIDA", "CANCELADA");
+    private static final int TAMANHO_MAXIMO_BUSCA = 255;
+
     public Page<HistoricoVendaResponse> listar(LocalDate de, LocalDate ate, Collection<String> status, String forma, String busca,
                                                String sort, int page, int size) {
         if (de != null && ate != null && de.isAfter(ate)) {
@@ -54,6 +57,12 @@ public class HistoricoVendasService {
         }
         if (size < 1 || size > TAMANHO_MAXIMO) {
             throw new BusinessException("Use uma página de 1 a 100 vendas.");
+        }
+        if (status != null && status.stream().anyMatch(st -> !STATUS_VALIDOS.contains(st))) {
+            throw new BusinessException("Status inválido. Use CONCLUIDA ou CANCELADA.");
+        }
+        if (busca != null && busca.length() > TAMANHO_MAXIMO_BUSCA) {
+            throw new BusinessException("A busca deve ter no máximo 255 caracteres.");
         }
         Ordenacao ordenacao = Ordenacao.de(sort);
         UUID usuarioId = usuarioId();
