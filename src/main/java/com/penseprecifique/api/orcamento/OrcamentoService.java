@@ -130,6 +130,7 @@ public class OrcamentoService {
                     + "ELSE 9 END, 9)"
     );
 
+    private final java.time.Clock clock;
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
@@ -1039,7 +1040,7 @@ public class OrcamentoService {
             case PAGO:
                 // #560/RN-NOVA-22 (V0.15.0) — evento pontual, gravado uma vez (DT-NOVA-10).
                 if (orcamento.getDataEntrega() == null) {
-                    orcamento.setDataEntrega(LocalDateTime.now());
+                    orcamento.setDataEntrega(LocalDateTime.now(clock)); // #999: relógio de Brasília
                 }
                 gravarCustoMaterial(orcamento);
                 orcamento.setStatus(StatusOrcamento.ENTREGUE);
