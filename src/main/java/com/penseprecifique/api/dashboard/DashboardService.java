@@ -100,8 +100,8 @@ public class DashboardService {
         for (VendasService.Venda v : vendasService.vendas(uid, primeiro, ultimo)) {
             for (VendasService.LinhaProduto l : v.linhas()) {
                 String chave = l.tipo() + "|" + (l.id() != null ? l.id() : l.nome());
-                soma.merge(chave, ProdutoVendidoDTO.builder().nomeProduto(l.nome()).quantidade(l.quantidade()).tipo(l.tipo()).id(l.id()).build(),
-                        (a, b) -> ProdutoVendidoDTO.builder().nomeProduto(a.getNomeProduto()).quantidade(a.getQuantidade().add(b.getQuantidade()))
+                soma.merge(chave, ProdutoVendidoDTO.builder().nomeProduto(l.nome()).marca(l.marca()).quantidade(l.quantidade()).tipo(l.tipo()).id(l.id()).build(),
+                        (a, b) -> ProdutoVendidoDTO.builder().nomeProduto(a.getNomeProduto()).marca(a.getMarca()).quantidade(a.getQuantidade().add(b.getQuantidade()))
                                 .tipo(a.getTipo()).id(a.getId()).build());
             }
         }

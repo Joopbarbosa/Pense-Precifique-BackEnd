@@ -296,7 +296,7 @@ public class VendaCaixaService {
                         .custoMaterialUnitario(custoMaterial.produto(cp.produto()))
                         .build());
                 customizacoesResponse.add(new VendaCaixaItemCustomizacaoResponseDTO(
-                        custSalva.getId(), cp.produto().getId(), cp.produto().getNome(),
+                        custSalva.getId(), cp.produto().getId(), com.penseprecifique.api.util.NomeMarca.rotulo(cp.produto().getNome(), cp.produto().getMarca()),
                         cp.quantidade(), cp.precoUnitario(), cp.subtotal(), DestinoCadastro.produto(cp.produto())));
             }
 
@@ -304,7 +304,7 @@ public class VendaCaixaService {
             // vendido" único; produtoId fica nulo pra origem Catálogo.
             UUID produtoIdResposta = item.itemCatalogo() == null ? item.produtoDireto().getId() : null;
             String nomeResposta = item.itemCatalogo() != null
-                    ? item.itemCatalogo().getNome() : item.produtoDireto().getNome();
+                    ? com.penseprecifique.api.util.NomeMarca.rotulo(item.itemCatalogo().getNome(), item.itemCatalogo().getMarca()) : com.penseprecifique.api.util.NomeMarca.rotulo(item.produtoDireto().getNome(), item.produtoDireto().getMarca());
             itensResponse.add(new VendaCaixaItemResponseDTO(
                     itemSalvo.getId(), produtoIdResposta, nomeResposta,
                     item.itemCatalogo() != null ? item.itemCatalogo().getId() : null,
@@ -551,7 +551,7 @@ public class VendaCaixaService {
         for (VendaCaixaItemCustomizacao c : vendaCaixaItemCustomizacaoRepository.findByVendaCaixaItemIdIn(itemIds)) {
             customizacoesPorItem.computeIfAbsent(c.getVendaCaixaItem().getId(), k -> new ArrayList<>())
                     .add(new VendaCaixaItemCustomizacaoResponseDTO(
-                            c.getId(), c.getProduto().getId(), c.getProduto().getNome(),
+                            c.getId(), c.getProduto().getId(), com.penseprecifique.api.util.NomeMarca.rotulo(c.getProduto().getNome(), c.getProduto().getMarca()),
                             c.getQuantidade(), c.getPrecoUnitario(), c.getSubtotal(), DestinoCadastro.produto(c.getProduto())));
         }
         // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio, sem "o produto vendido"
@@ -560,7 +560,7 @@ public class VendaCaixaService {
                 .map(item -> new VendaCaixaItemResponseDTO(
                         item.getId(),
                         item.getItemCatalogo() == null ? item.getProduto().getId() : null,
-                        item.getItemCatalogo() != null ? item.getItemCatalogo().getNome() : item.getProduto().getNome(),
+                        item.getItemCatalogo() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(item.getItemCatalogo().getNome(), item.getItemCatalogo().getMarca()) : com.penseprecifique.api.util.NomeMarca.rotulo(item.getProduto().getNome(), item.getProduto().getMarca()),
                         item.getItemCatalogo() != null ? item.getItemCatalogo().getId() : null,
                         item.getQuantidade(), item.getPrecoUnitario(), item.getSubtotal(),
                         customizacoesPorItem.getOrDefault(item.getId(), List.of()),

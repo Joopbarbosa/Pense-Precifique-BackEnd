@@ -11,6 +11,7 @@ import java.util.UUID;
 @Builder
 public class ProdutoVendidoDTO {
     private String nomeProduto;
+    private String marca;
     private BigDecimal quantidade;
     private String tipo;
     private UUID id;

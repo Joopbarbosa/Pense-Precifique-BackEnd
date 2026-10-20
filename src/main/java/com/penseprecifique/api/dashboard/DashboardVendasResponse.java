@@ -27,7 +27,7 @@ public record DashboardVendasResponse(
     public record Origem(String origem, BigDecimal faturamento, long quantidade) {}
 
     /** Produto (ou item de Catálogo) vendido no período: quantidade e faturamento das linhas. */
-    public record ProdutoVendido(UUID id, String tipo, String nome, BigDecimal quantidade, BigDecimal faturamento) {}
+    public record ProdutoVendido(UUID id, String tipo, String nome, String marca, BigDecimal quantidade, BigDecimal faturamento) {}
 
     /** Valor por forma de pagamento registrada na venda; "Não informada" quando a venda não tem forma. */
     public record FormaPagamento(String forma, BigDecimal valor, long quantidade) {}

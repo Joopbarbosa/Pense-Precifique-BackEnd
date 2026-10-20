@@ -166,8 +166,8 @@ public class DashboardVendasService {
         for (VendasService.Venda v : vendas) {
             for (VendasService.LinhaProduto l : v.linhas()) {
                 String chave = l.tipo() + "|" + (l.id() != null ? l.id() : l.nome());
-                soma.merge(chave, new DashboardVendasResponse.ProdutoVendido(l.id(), l.tipo(), l.nome(), l.quantidade(), l.faturamento()),
-                        (a, b) -> new DashboardVendasResponse.ProdutoVendido(a.id(), a.tipo(), a.nome(),
+                soma.merge(chave, new DashboardVendasResponse.ProdutoVendido(l.id(), l.tipo(), l.nome(), l.marca(), l.quantidade(), l.faturamento()),
+                        (a, b) -> new DashboardVendasResponse.ProdutoVendido(a.id(), a.tipo(), a.nome(), a.marca(),
                                 a.quantidade().add(b.quantidade()), a.faturamento().add(b.faturamento())));
             }
         }

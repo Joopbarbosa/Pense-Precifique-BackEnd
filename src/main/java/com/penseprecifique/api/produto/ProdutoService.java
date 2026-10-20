@@ -191,6 +191,19 @@ public class ProdutoService {
         return response;
     }
 
+    /**
+     * #1017 (RN-NOVA-36) — nome + marca únicos entre os produtos não excluídos da conta (ativos e inativos), sem maiúsculas, acentos
+     * e espaços das pontas. Chamado depois do bloqueio da conta ({@code lockPorId}), que serializa criações e edições simultâneas.
+     */
+    private void validarNomeMarcaUnicos(UUID usuarioId, UUID ignorarId, String nome, String marca, String campo) {
+        for (Object[] linha : produtoRepository.identidadesDaConta(usuarioId)) {
+            if (linha[0].equals(ignorarId)) continue;
+            if (com.penseprecifique.api.util.NomeMarca.mesmaIdentidade(nome, marca, (String) linha[1], (String) linha[2])) {
+                throw BusinessException.noCampo(campo, "Já existe um produto com este nome e esta marca");
+            }
+        }
+    }
+
     public ProdutoDetalheResponse cadastrar(ProdutoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         validarRendimento(request);
@@ -199,6 +212,7 @@ public class ProdutoService {
         Produto produto = produtoMapper.toEntity(request, usuario);
         // #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition.
         usuarioRepository.lockPorId(usuarioId);
+        validarNomeMarcaUnicos(usuarioId, null, produto.getNome(), produto.getMarca(), "nome");
         produto.setNumero(NumeroSequencialUtil.proximoNumero(
                 produtoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId).map(Produto::getNumero)));
         if (produto.getPrecoVenda() == null) {
@@ -258,6 +272,14 @@ public class ProdutoService {
         Boolean fracionavelAntigo = produto.getFracionavel();
         boolean fracionavelOverrideAntigo = Boolean.TRUE.equals(produto.getFracionavelOverride());
 
+        String marcaNova = com.penseprecifique.api.util.NomeMarca.limparMarca(request.getMarca());
+        boolean nomeMudou = !com.penseprecifique.api.util.NomeMarca.chave(request.getNome()).equals(com.penseprecifique.api.util.NomeMarca.chave(produto.getNome()));
+        boolean marcaMudou = !com.penseprecifique.api.util.NomeMarca.chave(marcaNova).equals(com.penseprecifique.api.util.NomeMarca.chave(produto.getMarca()));
+        if (nomeMudou || marcaMudou) {
+            // #1017 — só quando nome ou marca mudam; cadastro antigo repetido segue editável nos outros campos
+            usuarioRepository.lockPorId(usuarioId);
+            validarNomeMarcaUnicos(usuarioId, produto.getId(), request.getNome(), marcaNova, nomeMudou ? "nome" : "marca");
+        }
         produtoMapper.updateEntity(request, produto);
         // #661 — Hibernate 6.6 pode sincronizar a entidade antes do cálculo da ficha técnica.
         // Sem preço no request, mantenha o valor persistido também durante esse flush intermediário.

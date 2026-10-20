@@ -26,6 +26,10 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
      * {@code ItemCatalogoRepository} (bind de parâmetro nulo dentro de LOWER/CONCAT infere tipo
      * incompatível no Postgres).
      */
+    /** #1017 — id, nome e marca de todos os produtos não excluídos da conta, para a checagem de nome + marca. */
+    @Query("SELECT p.id, p.nome, p.marca FROM Produto p WHERE p.usuario.id = :usuarioId AND p.deletedAt IS NULL")
+    List<Object[]> identidadesDaConta(@Param("usuarioId") UUID usuarioId);
+
     @Query("""
         SELECT p FROM Produto p
         WHERE p.usuario.id = :usuarioId
@@ -52,7 +56,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, UUID> {
         AND (:semCatalogo = false OR
             NOT EXISTS (SELECT 1 FROM ItemCatalogoComponente icc WHERE icc.produtoBase = p AND icc.itemCatalogo.deletedAt IS NULL)
         )
-        AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%')))
+        AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%')) OR LOWER(COALESCE(p.marca, '')) LIKE LOWER(CONCAT('%', :busca, '%')))
     """)
     Page<Produto> buscarComBusca(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoProduto tipo,
                                   @Param("semCatalogo") boolean semCatalogo, @Param("busca") String busca,

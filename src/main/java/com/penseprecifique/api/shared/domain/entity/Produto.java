@@ -31,6 +31,10 @@ public class Produto {
     @Column(nullable = false)
     private String nome;
 
+    /** #1017 (RN-NOVA-36) — marca opcional (até 100); vazia vira nula. */
+    @Column(length = 100)
+    private String marca;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TipoProduto tipo;

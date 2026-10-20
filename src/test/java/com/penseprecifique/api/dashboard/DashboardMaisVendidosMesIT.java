@@ -261,4 +261,18 @@ class DashboardMaisVendidosMesIT {
         assertEquals(java.util.stream.Stream.of(sem.getId(), com.getId()).sorted(java.util.Comparator.comparing(UUID::toString)).toList(), ordem,
                 "empate total na normalização: desempata por tipo e id, como antes");
     }
+
+    @Test
+    void cen123RankingTrazAMarcaDeCadaCadastro() {
+        Produto pense = produtos.save(Produto.builder().usuario(usuario).numero(++numero).nome("Caderno").marca("Pense").tipo(TipoProduto.PRODUTO)
+                .rendimento(BigDecimal.ONE).tempoProducao(0).precoVenda(bd("10.00")).estoqueAtual(BigDecimal.ZERO).build());
+        Produto escolar = produtos.save(Produto.builder().usuario(usuario).numero(++numero).nome("Caderno").marca("Escolar").tipo(TipoProduto.PRODUTO)
+                .rendimento(BigDecimal.ONE).tempoProducao(0).precoVenda(bd("10.00")).estoqueAtual(BigDecimal.ZERO).build());
+        caixa(StatusVendaCaixa.CONCLUIDA, LocalDateTime.of(2026, 10, 8, 10, 0), pense, null, "3");
+        caixa(StatusVendaCaixa.CONCLUIDA, LocalDateTime.of(2026, 10, 9, 10, 0), escolar, null, "2");
+
+        List<ProdutoVendidoDTO> r = dashboard.getDashboard().getProdutosMaisVendidos();
+        assertEquals(List.of("Pense", "Escolar"), r.stream().map(ProdutoVendidoDTO::getMarca).toList());
+        assertEquals(List.of("Caderno", "Caderno"), r.stream().map(ProdutoVendidoDTO::getNomeProduto).toList());
+    }
 }

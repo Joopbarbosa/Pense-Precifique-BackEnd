@@ -16,6 +16,8 @@ public class ProdutoResponse {
     private Integer numero;
     private String identificador;
     private String nome;
+    /** #1017 (RN-NOVA-36) — marca opcional. */
+    private String marca;
     private TipoProduto tipo;
     /** #531 (DT-NOVA-5) — exibida no card da listagem, substitui o placeholder "Sem foto". */
     private String fotoUrl;

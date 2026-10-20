@@ -27,6 +27,10 @@ public class ItemCatalogo {
     @Column(nullable = false)
     private String nome;
 
+    /** #1017 (RN-NOVA-36) — marca opcional (até 100); vazia vira nula. */
+    @Column(length = 100)
+    private String marca;
+
     /** Tempo de producao do item inteiro, mesmo conceito de Produto.tempoProducao — RN-NOVA-2 */
     @Column(name = "tempo_producao", nullable = false)
     @Builder.Default
