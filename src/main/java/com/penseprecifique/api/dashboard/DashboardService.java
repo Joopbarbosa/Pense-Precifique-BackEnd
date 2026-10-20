@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,18 +40,19 @@ public class DashboardService {
     public DashboardResponse getDashboard() {
         UUID uid = getUsuarioIdAutenticado();
 
-        LocalDate hoje = LocalDate.now();
-        LocalDateTime inicioMes = hoje.withDayOfMonth(1).atStartOfDay();
-        LocalDateTime inicioProximoMes = inicioMes.plusMonths(1);
+        // #1022 (RN-NOVA-37) — o mês é o de Brasília (relógio da aplicação) e a fonte é a mesma do "Mais vendidos": as vendas da RN-NOVA-12.
+        LocalDate primeiro = LocalDate.now(clock).withDayOfMonth(1);
+        LocalDate ultimo = primeiro.plusMonths(1).minusDays(1);
+        List<VendasService.Venda> vendasDoMes = vendasService.vendas(uid, primeiro, ultimo);
 
         long totalOrcamentos = orcamentoRepository.countByUsuarioIdAndDeletedAtIsNull(uid);
         long pendentes = orcamentoRepository.countByUsuarioIdAndStatusInAndDeletedAtIsNull(uid, PENDENTES);
         // DT-NOVA-4 (V0.10.0, #466) — dataPagamento (não status = PAGO) já reflete "foi pago
         // alguma vez", correto mesmo depois do orçamento avançar pra ENTREGUE (RN-NOVA-10).
         BigDecimal receitaTotal = orcamentoRepository.sumTotalPago(uid);
-        BigDecimal receitaMes = orcamentoRepository.sumTotalPagoNoPeriodo(uid, inicioMes, inicioProximoMes);
+        BigDecimal receitaMes = vendasDoMes.stream().map(VendasService.Venda::faturamento).reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<ProdutoVendidoDTO> produtosMaisVendidos = maisVendidosDoMes(uid);
+        List<ProdutoVendidoDTO> produtosMaisVendidos = maisVendidosDoMes(vendasDoMes);
 
         List<OrcamentoResumoDTO> orcamentosRecentes = orcamentoRepository
                 .findTop5ByUsuarioIdAndDeletedAtIsNullOrderByCreatedAtDesc(uid)
@@ -93,11 +93,9 @@ public class DashboardService {
      * tipo e cadastro. Ordem: quantidade, nome sem maiúsculas e acentos, caracteres originais do nome, tipo (item de catálogo antes
      * de produto) e identificador. O comparador do Dashboard de Vendas não é alterado.
      */
-    private List<ProdutoVendidoDTO> maisVendidosDoMes(UUID uid) {
-        LocalDate primeiro = LocalDate.now(clock).withDayOfMonth(1);
-        LocalDate ultimo = primeiro.plusMonths(1).minusDays(1);
+    private List<ProdutoVendidoDTO> maisVendidosDoMes(List<VendasService.Venda> vendasDoMes) {
         java.util.Map<String, ProdutoVendidoDTO> soma = new java.util.LinkedHashMap<>();
-        for (VendasService.Venda v : vendasService.vendas(uid, primeiro, ultimo)) {
+        for (VendasService.Venda v : vendasDoMes) {
             for (VendasService.LinhaProduto l : v.linhas()) {
                 String chave = l.tipo() + "|" + (l.id() != null ? l.id() : l.nome());
                 soma.merge(chave, ProdutoVendidoDTO.builder().nomeProduto(l.nome()).marca(l.marca()).quantidade(l.quantidade()).tipo(l.tipo()).id(l.id()).build(),
