@@ -42,3 +42,4 @@ spring-shell.log
 
 # Python (scripts do portão)
 __pycache__/
+.schemathesis/
