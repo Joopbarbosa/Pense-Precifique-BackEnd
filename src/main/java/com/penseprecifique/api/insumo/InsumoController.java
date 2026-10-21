@@ -32,8 +32,10 @@ public class InsumoController {
             @RequestParam(required = false) Boolean ativo,
             // #616 (adendo 2) — seletores: ativos e inativos, ativos primeiro
             @RequestParam(defaultValue = "false") boolean incluirInativos,
+            // #994 — BAIXO, NEGATIVO ou POSITIVO
+            @RequestParam(required = false) String estoque,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
-        return ResponseEntity.ok(insumoService.listar(busca, ativo, incluirInativos, pageable));
+        return ResponseEntity.ok(insumoService.listar(busca, ativo, incluirInativos, estoque, pageable));
     }
 
     @GetMapping("/{id}")
@@ -93,9 +95,12 @@ public class InsumoController {
         return ResponseEntity.status(201).body(insumoService.baixaManual(id, request));
     }
 
+    /** V0.17.0 #971 — {@code somenteAtivos=true} é o que a modal do ranking "Em quantos produtos" usa (mesmo filtro do número). */
     @GetMapping("/{id}/produtos-relacionados")
-    public ResponseEntity<List<ProdutoRelacionadoResponse>> listarProdutosRelacionados(@PathVariable UUID id) {
-        return ResponseEntity.ok(insumoService.listarProdutosRelacionados(id));
+    public ResponseEntity<List<ProdutoRelacionadoResponse>> listarProdutosRelacionados(
+            @PathVariable UUID id,
+            @RequestParam(name = "somenteAtivos", defaultValue = "false") boolean somenteAtivos) {
+        return ResponseEntity.ok(insumoService.listarProdutosRelacionados(id, somenteAtivos));
     }
 
     @PostMapping("/{id}/resolver-vinculos")

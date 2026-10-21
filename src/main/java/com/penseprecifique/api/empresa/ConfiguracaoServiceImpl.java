@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.request.config.ConfiguracaoRequestDTO;
 import com.penseprecifique.api.shared.dto.response.config.ConfiguracaoResponseDTO;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.produto.CausaPrecoSugerido;
 import com.penseprecifique.api.produto.ProdutoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,14 +40,21 @@ public class ConfiguracaoServiceImpl implements ConfiguracaoService {
                 .orElse(ConfiguracaoPrecificacao.builder().usuarioId(usuarioId).build());
 
         BigDecimal valorHoraAntigo = configuracao.getValorHora();
+        boolean valorHoraMudou = request.valorHora() != null
+                && (valorHoraAntigo == null || valorHoraAntigo.compareTo(request.valorHora()) != 0);
+        // #672/DT-NOVA-6 — preço sugerido de antes (ao vivo, com o valor da hora anterior) de todos os produtos da conta
+        java.util.Map<UUID, BigDecimal> precoSugeridoAntes = valorHoraMudou
+                ? produtoService.capturarPrecosSugeridos(produtoService.idsDosProdutosDaConta(usuarioId)) : java.util.Map.of();
         configuracao.setValorHora(request.valorHora());
         configuracao.setMargemPadrao(request.margemPadrao());
 
         try {
             ConfiguracaoResponseDTO salvo = toResponse(configuracaoRepository.saveAndFlush(configuracao));
             // #580/RN-NOVA-31 (V0.15.0) — mão de obra mudou: custo gravado dos produtos acompanha.
-            if (request.valorHora() != null && (valorHoraAntigo == null || valorHoraAntigo.compareTo(request.valorHora()) != 0)) {
+            if (valorHoraMudou) {
                 produtoService.recalcularCustoDeTodos(usuarioId);
+                produtoService.registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes, CausaPrecoSugerido.VALOR_HORA,
+                        null, null, java.util.Map.of());
             }
             return salvo;
         } catch (DataIntegrityViolationException e) {

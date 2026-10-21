@@ -63,14 +63,9 @@ public interface OrcamentoRepository extends JpaRepository<Orcamento, UUID> {
     // orçamentos pagos. Com RN-NOVA-10 (PAGO deixa de ser terminal, ENTREGUE vem depois), isso
     // faria a receita cair assim que um orçamento avançasse pra ENTREGUE — troca por dataPagamento
     // IS NOT NULL, setado uma única vez na transição pra PAGO e nunca sobrescrito (mesmo motivo
-    // que já mudou o preview de documentos no frontend). sumTotalPagoNoPeriodo também troca
-    // updatedAt por dataPagamento — updatedAt muda de novo quando o orçamento avança pra ENTREGUE,
-    // o que atribuiria a receita ao mês errado.
+    // que já mudou o preview de documentos no frontend). (#1022: o cartão do mês saiu daqui e usa as vendas da RN-NOVA-12.)
     @Query("SELECT COALESCE(SUM(o.total), 0) FROM Orcamento o WHERE o.usuario.id = :uid AND o.dataPagamento IS NOT NULL AND o.deletedAt IS NULL")
     BigDecimal sumTotalPago(@Param("uid") UUID uid);
-
-    @Query("SELECT COALESCE(SUM(o.total), 0) FROM Orcamento o WHERE o.usuario.id = :uid AND o.dataPagamento >= :inicio AND o.dataPagamento < :fim AND o.deletedAt IS NULL")
-    BigDecimal sumTotalPagoNoPeriodo(@Param("uid") UUID uid, @Param("inicio") LocalDateTime inicio, @Param("fim") LocalDateTime fim);
 
     List<Orcamento> findTop5ByUsuarioIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID usuarioId);
 
@@ -80,4 +75,15 @@ public interface OrcamentoRepository extends JpaRepository<Orcamento, UUID> {
     /** #577/RN-NOVA-27 (V0.15.0) — vendas por orçamento no período do CMV (ENTREGUE pela data de entrega). */
     List<Orcamento> findByUsuarioIdAndStatusAndDeletedAtIsNullAndDataEntregaBetween(
             UUID usuarioId, StatusOrcamento status, LocalDateTime de, LocalDateTime ate);
+
+    /**
+     * #719/RN-NOVA-17 (V0.17.0) — orçamentos de qualquer status para a aba Vendas: ENTREGUE pela data de entrega e os demais
+     * pela data de criação.
+     */
+    @org.springframework.data.jpa.repository.Query("SELECT o FROM Orcamento o WHERE o.usuario.id = :usuarioId AND o.deletedAt IS NULL AND (" +
+            "(o.status = com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE AND o.dataEntrega BETWEEN :de AND :ate) OR " +
+            "(o.status <> com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE AND o.createdAt BETWEEN :de AND :ate))")
+    List<Orcamento> findParaListaVendas(@org.springframework.data.repository.query.Param("usuarioId") UUID usuarioId,
+                                        @org.springframework.data.repository.query.Param("de") LocalDateTime de,
+                                        @org.springframework.data.repository.query.Param("ate") LocalDateTime ate);
 }

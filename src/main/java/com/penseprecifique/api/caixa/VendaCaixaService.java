@@ -10,6 +10,7 @@ import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoTaxaParcelaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
+import com.penseprecifique.api.cliente.DestinoCadastro;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoTaxaParcela;
 import com.penseprecifique.api.produto.MovimentacaoProdutoRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
@@ -26,6 +27,7 @@ import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaItemCustomiza
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaItemResponseDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaPagamentoResponseDTO;
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaResponseDTO;
+import com.penseprecifique.api.shared.mapper.CompraMapper;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.util.IdentificadorFormatter;
@@ -53,6 +55,7 @@ public class VendaCaixaService {
 
     private static final BigDecimal CEM = new BigDecimal("100");
 
+    private final java.time.Clock clock;
     private final VendaCaixaRepository vendaCaixaRepository;
     private final CustoMaterialService custoMaterialService;
     private final VendaCaixaItemRepository vendaCaixaItemRepository;
@@ -239,7 +242,7 @@ public class VendaCaixaService {
                 .usuario(usuario)
                 .numero(numero)
                 .cliente(cliente)
-                .dataVenda(LocalDateTime.now())
+                .dataVenda(LocalDateTime.now(clock)) // #999: relógio de Brasília
                 .caixaTurno(turno)
                 .status(StatusVendaCaixa.CONCLUIDA)
                 .subtotal(subtotal)
@@ -293,19 +296,21 @@ public class VendaCaixaService {
                         .custoMaterialUnitario(custoMaterial.produto(cp.produto()))
                         .build());
                 customizacoesResponse.add(new VendaCaixaItemCustomizacaoResponseDTO(
-                        custSalva.getId(), cp.produto().getId(), cp.produto().getNome(),
-                        cp.quantidade(), cp.precoUnitario(), cp.subtotal()));
+                        custSalva.getId(), cp.produto().getId(), com.penseprecifique.api.util.NomeMarca.rotulo(cp.produto().getNome(), cp.produto().getMarca()),
+                        cp.quantidade(), cp.precoUnitario(), cp.subtotal(), DestinoCadastro.produto(cp.produto())));
             }
 
             // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio, sem "o produto
             // vendido" único; produtoId fica nulo pra origem Catálogo.
             UUID produtoIdResposta = item.itemCatalogo() == null ? item.produtoDireto().getId() : null;
             String nomeResposta = item.itemCatalogo() != null
-                    ? item.itemCatalogo().getNome() : item.produtoDireto().getNome();
+                    ? com.penseprecifique.api.util.NomeMarca.rotulo(item.itemCatalogo().getNome(), item.itemCatalogo().getMarca()) : com.penseprecifique.api.util.NomeMarca.rotulo(item.produtoDireto().getNome(), item.produtoDireto().getMarca());
             itensResponse.add(new VendaCaixaItemResponseDTO(
                     itemSalvo.getId(), produtoIdResposta, nomeResposta,
                     item.itemCatalogo() != null ? item.itemCatalogo().getId() : null,
-                    item.quantidade(), item.precoUnitario(), item.subtotal(), customizacoesResponse));
+                    item.quantidade(), item.precoUnitario(), item.subtotal(), customizacoesResponse,
+                    item.itemCatalogo() != null ? "CATALOGO" : "PRODUTO",
+                    item.itemCatalogo() != null ? DestinoCadastro.catalogoDoItem(item.itemCatalogo()) : DestinoCadastro.produto(item.produtoDireto())));
         }
 
         // RN-NOVA-14 — baixa de estoque (SAIDA, motivo/referencia_tipo CAIXA), acumulada por
@@ -350,7 +355,7 @@ public class VendaCaixaService {
                     .taxaPercentualAplicada(pagamento.taxaAplicada())
                     .build());
             pagamentosResponse.add(new VendaCaixaPagamentoResponseDTO(
-                    pagamentoSalvo.getId(), pagamento.metodo().getId(), pagamento.valor(),
+                    pagamentoSalvo.getId(), pagamento.metodo().getId(), CompraMapper.rotulo(pagamento.metodo()), pagamento.valor(),
                     pagamento.parcelas(), pagamento.taxaAplicada()));
         }
 
@@ -546,8 +551,8 @@ public class VendaCaixaService {
         for (VendaCaixaItemCustomizacao c : vendaCaixaItemCustomizacaoRepository.findByVendaCaixaItemIdIn(itemIds)) {
             customizacoesPorItem.computeIfAbsent(c.getVendaCaixaItem().getId(), k -> new ArrayList<>())
                     .add(new VendaCaixaItemCustomizacaoResponseDTO(
-                            c.getId(), c.getProduto().getId(), c.getProduto().getNome(),
-                            c.getQuantidade(), c.getPrecoUnitario(), c.getSubtotal()));
+                            c.getId(), c.getProduto().getId(), com.penseprecifique.api.util.NomeMarca.rotulo(c.getProduto().getNome(), c.getProduto().getMarca()),
+                            c.getQuantidade(), c.getPrecoUnitario(), c.getSubtotal(), DestinoCadastro.produto(c.getProduto())));
         }
         // V0.13.0 (#516, RN-NOVA-1) — item de Catálogo tem nome próprio, sem "o produto vendido"
         // único; produtoId fica nulo pra origem Catálogo.
@@ -555,16 +560,18 @@ public class VendaCaixaService {
                 .map(item -> new VendaCaixaItemResponseDTO(
                         item.getId(),
                         item.getItemCatalogo() == null ? item.getProduto().getId() : null,
-                        item.getItemCatalogo() != null ? item.getItemCatalogo().getNome() : item.getProduto().getNome(),
+                        item.getItemCatalogo() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(item.getItemCatalogo().getNome(), item.getItemCatalogo().getMarca()) : com.penseprecifique.api.util.NomeMarca.rotulo(item.getProduto().getNome(), item.getProduto().getMarca()),
                         item.getItemCatalogo() != null ? item.getItemCatalogo().getId() : null,
                         item.getQuantidade(), item.getPrecoUnitario(), item.getSubtotal(),
-                        customizacoesPorItem.getOrDefault(item.getId(), List.of())))
+                        customizacoesPorItem.getOrDefault(item.getId(), List.of()),
+                        item.getItemCatalogo() != null ? "CATALOGO" : "PRODUTO",
+                        item.getItemCatalogo() != null ? DestinoCadastro.catalogoDoItem(item.getItemCatalogo()) : DestinoCadastro.produto(item.getProduto())))
                 .toList();
     }
 
     private List<VendaCaixaPagamentoResponseDTO> pagamentosDe(VendaCaixa venda) {
         return vendaCaixaPagamentoRepository.findByVendaCaixaId(venda.getId()).stream()
-                .map(p -> new VendaCaixaPagamentoResponseDTO(p.getId(), p.getMetodoPagamento().getId(),
+                .map(p -> new VendaCaixaPagamentoResponseDTO(p.getId(), p.getMetodoPagamento().getId(), CompraMapper.rotulo(p.getMetodoPagamento()),
                         p.getValor(), p.getParcelas(), p.getTaxaPercentualAplicada()))
                 .toList();
     }
@@ -610,6 +617,7 @@ public class VendaCaixaService {
                 venda.getNumero(),
                 IdentificadorFormatter.formatar("CX", venda.getNumero()),
                 venda.getCliente() != null ? venda.getCliente().getId() : null,
+                venda.getCliente() != null ? venda.getCliente().getNome() : null,
                 venda.getDataVenda(),
                 venda.getCaixaTurno().getId(),
                 venda.getStatus(),

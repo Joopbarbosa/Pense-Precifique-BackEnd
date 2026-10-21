@@ -1,6 +1,7 @@
 package com.penseprecifique.api.auth;
 
 import com.penseprecifique.api.shared.dto.request.auth.AlterarSenhaRequestDTO;
+import com.penseprecifique.api.shared.dto.response.auth.AuthResponseDTO;
 import com.penseprecifique.api.shared.dto.response.auth.UsuarioResponseDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -31,5 +32,11 @@ public class UsuarioController {
     public ResponseEntity<Void> alterarSenha(@Valid @RequestBody AlterarSenhaRequestDTO request) {
         usuarioService.alterarSenha(request);
         return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/me/email")
+    @Operation(summary = "Altera o e-mail de acesso do usuário autenticado e devolve token novo")
+    public ResponseEntity<AuthResponseDTO> alterarEmail(@Valid @RequestBody AlterarEmailRequestDTO request) {
+        return ResponseEntity.ok(usuarioService.alterarEmail(request));
     }
 }

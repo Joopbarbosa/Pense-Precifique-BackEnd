@@ -15,6 +15,10 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
 
     List<ItemCatalogo> findByCatalogoIdAndDeletedAtIsNull(UUID catalogoId);
 
+    /** #1017 — id, nome e marca dos itens não excluídos do catálogo, para a checagem de nome + marca. */
+    @org.springframework.data.jpa.repository.Query("SELECT i.id, i.nome, i.marca FROM ItemCatalogo i WHERE i.catalogo.id = :catalogoId AND i.deletedAt IS NULL")
+    List<Object[]> identidadesDoCatalogo(@org.springframework.data.repository.query.Param("catalogoId") UUID catalogoId);
+
     Optional<ItemCatalogo> findByIdAndDeletedAtIsNull(UUID id);
 
     long countByCatalogoIdAndDeletedAtIsNull(UUID catalogoId);
@@ -87,7 +91,7 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
                   OR (compins IS NOT NULL AND (compins.ativo = false OR compins.deletedAt IS NOT NULL)))
             )))
         AND (:catalogoId IS NULL OR ic.catalogo.id = :catalogoId)
-        AND LOWER(ic.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
+        AND (LOWER(ic.nome) LIKE LOWER(CONCAT('%', :busca, '%')) OR LOWER(COALESCE(ic.marca, '')) LIKE LOWER(CONCAT('%', :busca, '%')))
         ORDER BY CASE WHEN ic.catalogo.ativo = true
                 AND NOT EXISTS (
                     SELECT 1 FROM ItemCatalogoComponente comp2 LEFT JOIN comp2.produtoBase comp2pb LEFT JOIN comp2.insumo comp2ins WHERE comp2.itemCatalogo = ic
@@ -105,7 +109,7 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
                   OR (compins IS NOT NULL AND (compins.ativo = false OR compins.deletedAt IS NOT NULL)))
             )))
         AND (:catalogoId IS NULL OR ic.catalogo.id = :catalogoId)
-        AND LOWER(ic.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
+        AND (LOWER(ic.nome) LIKE LOWER(CONCAT('%', :busca, '%')) OR LOWER(COALESCE(ic.marca, '')) LIKE LOWER(CONCAT('%', :busca, '%')))
     """)
     Page<ItemCatalogo> buscarDisponiveisParaOrcamentoComBusca(@Param("usuarioId") UUID usuarioId,
                                                                  @Param("catalogoId") UUID catalogoId,

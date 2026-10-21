@@ -40,6 +40,10 @@ public class CompraItem {
     @JoinColumn(name = "fornecedor_id")
     private Cliente fornecedor;
 
+    /** Quantidade pedida só é guardada na entrada da compra pendente; {@code quantidade} passa a ser a recebida. */
+    @Column(name = "quantidade_pedida", precision = 15, scale = 4)
+    private BigDecimal quantidadePedida;
+
     @Column(precision = 15, scale = 4)
     private BigDecimal quantidade;
 

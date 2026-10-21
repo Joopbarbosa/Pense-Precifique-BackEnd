@@ -103,7 +103,10 @@ public class InsumoMapper {
                 mov.getReferenciaTipo(),
                 referencia,
                 mov.getEstornada(),
-                mov.getCreatedAt()
+                mov.getCreatedAt(),
+                mov.getDataReferencia(),
+                "MOVIMENTACAO",
+                null
         );
     }
 
@@ -116,6 +119,7 @@ public class InsumoMapper {
         response.setId(produto.getId());
         response.setIdentificador(IdentificadorFormatter.formatar("PRO", produto.getNumero()));
         response.setNome(produto.getNome());
+        response.setMarca(produto.getMarca());
         response.setTipo(produto.getTipo());
         return response;
     }

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.auth;
 
+import com.penseprecifique.api.empresa.EmpresaService;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelService;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaService;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
@@ -23,6 +24,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final MetodoPagamentoConfiguravelService metodoPagamentoService;
     private final UnidadeMedidaService unidadeMedidaService;
+    private final EmpresaService empresaService;
 
     @Value("${jwt.expiration-ms}")
     private long expirationMs;
@@ -48,6 +50,11 @@ public class AuthServiceImpl implements AuthService {
         // Caixa exige pelo menos 1 método existente na primeira venda.
         metodoPagamentoService.seedMetodosPadrao(usuario);
         unidadeMedidaService.seedUnidadesPadrao(usuario); // #605 — unidades básicas do sistema
+        // #339 (DT-NOVA-14) — a Empresa nasce no cadastro, na mesma transação, só com o nome; contas
+        // antigas sem Empresa continuam válidas (criação preguiçosa no upsert permanece).
+        if (request.nomeEmpresa() != null && !request.nomeEmpresa().isBlank()) {
+            empresaService.criarEmpresaInicial(usuario.getId(), request.nomeEmpresa().trim());
+        }
 
         String token = jwtTokenProvider.generateToken(usuario);
         return new AuthResponseDTO(token, usuario.getId(), usuario.getEmail(), expirationMs);

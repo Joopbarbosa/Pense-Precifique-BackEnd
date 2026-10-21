@@ -109,7 +109,7 @@ public class ProducaoMapper {
         response.setTipoEvento(historico.getTipoEvento());
         if (historico.getProduto() != null) {
             response.setProdutoId(historico.getProduto().getId());
-            response.setNomeProduto(historico.getProduto().getNome());
+            response.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(historico.getProduto().getNome(), historico.getProduto().getMarca()));
         }
         response.setQuantidade(historico.getQuantidade());
         if (historico.getReferenciaOrcamento() != null) {
@@ -124,7 +124,7 @@ public class ProducaoMapper {
                                                                List<FichaTecnicaItem> fichaTecnicaProduto) {
         ProducaoProdutoResponse response = new ProducaoProdutoResponse();
         response.setProdutoId(producaoProduto.getProduto().getId());
-        response.setNomeProduto(producaoProduto.getProduto().getNome());
+        response.setNomeProduto(com.penseprecifique.api.util.NomeMarca.rotulo(producaoProduto.getProduto().getNome(), producaoProduto.getProduto().getMarca()));
         response.setTipoProduto(producaoProduto.getProduto().getTipo());
         response.setQuantidade(producaoProduto.getQuantidade());
         response.setQuantidadePerdida(producaoProduto.getQuantidadePerdida());

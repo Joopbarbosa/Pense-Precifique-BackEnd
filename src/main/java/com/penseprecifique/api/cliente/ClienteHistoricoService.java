@@ -1,5 +1,6 @@
 package com.penseprecifique.api.cliente;
 
+import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.caixa.VendaCaixaItemRepository;
 import com.penseprecifique.api.caixa.VendaCaixaRepository;
@@ -121,6 +122,7 @@ public class ClienteHistoricoService {
 
     /** Aba Histórico, seção Cliente: todos os orçamentos (qualquer status) e vendas do Caixa. */
     public Page<PedidoClienteResponse> historicoPedidos(UUID clienteId, Pageable pageable) {
+        PageableOrdenacaoResolver.exigirSemOrdenacao(pageable, "o mais recente primeiro");
         UUID usuarioId = validarCadastro(clienteId);
         List<PedidoClienteResponse> todos = new ArrayList<>();
         orcamentoRepository.findByClienteIdAndUsuarioIdAndDeletedAtIsNull(clienteId, usuarioId)
@@ -340,10 +342,10 @@ public class ClienteHistoricoService {
         Map<UUID, ItemCompradoResponse> porInsumo = new LinkedHashMap<>();
         linhasDoFornecedor(fornecedorId, usuarioId).forEach((compra, linhas) -> {
             if (compra.getStatus() != StatusCompra.CONFIRMADA
-                    || compra.getDataCompra().isBefore(inicio) || compra.getDataCompra().isAfter(fim)) {
+                    || compra.dataParaContagem().isBefore(inicio) || compra.dataParaContagem().isAfter(fim)) {
                 return;
             }
-            porMes.merge(YearMonth.from(compra.getDataCompra()), CompraMapper.total(linhas), BigDecimal::add);
+            porMes.merge(YearMonth.from(compra.dataParaContagem()), CompraMapper.total(linhas), BigDecimal::add);
             for (CompraItem l : linhas) {
                 BigDecimal qtd = l.getQuantidade() != null ? l.getQuantidade() : BigDecimal.ZERO;
                 BigDecimal valor = l.getPrecoTotal() != null ? l.getPrecoTotal() : BigDecimal.ZERO;
@@ -390,17 +392,17 @@ public class ClienteHistoricoService {
 
     private static LinhaItem linha(OrcamentoItem i) {
         return linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
-                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
+                i.getItemCatalogo() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getItemCatalogo().getNome(), i.getItemCatalogo().getMarca()) : null,
                 i.getProduto() != null ? i.getProduto().getId() : null,
-                i.getProduto() != null ? i.getProduto().getNome() : null,
+                i.getProduto() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getProduto().getNome(), i.getProduto().getMarca()) : null,
                 BigDecimal.valueOf(i.getQuantidade()), i.getSubtotal());
     }
 
     private static LinhaItem linha(VendaCaixaItem i) {
         return linha(i.getItemCatalogo() != null ? i.getItemCatalogo().getId() : null,
-                i.getItemCatalogo() != null ? i.getItemCatalogo().getNome() : null,
+                i.getItemCatalogo() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getItemCatalogo().getNome(), i.getItemCatalogo().getMarca()) : null,
                 i.getProduto() != null ? i.getProduto().getId() : null,
-                i.getProduto() != null ? i.getProduto().getNome() : null,
+                i.getProduto() != null ? com.penseprecifique.api.util.NomeMarca.rotulo(i.getProduto().getNome(), i.getProduto().getMarca()) : null,
                 i.getQuantidade(), i.getSubtotal());
     }
 
@@ -491,7 +493,7 @@ public class ClienteHistoricoService {
         BigDecimal total = porCompra.values().stream().map(CompraMapper::total).reduce(BigDecimal.ZERO, BigDecimal::add);
         long n = porCompra.size();
         Compra ultima = porCompra.keySet().stream()
-                .max(Comparator.comparing(Compra::getDataCompra).thenComparing(Compra::getNumero)).orElseThrow();
+                .max(Comparator.comparing(Compra::dataParaContagem).thenComparing(Compra::getNumero)).orElseThrow();
 
         Map<UUID, IndicadoresFornecedorResponse.InsumoCompradoResponse> porInsumo = new LinkedHashMap<>();
         porCompra.values().stream().flatMap(List::stream).filter(i -> i.getQuantidade() != null)
@@ -511,7 +513,7 @@ public class ClienteHistoricoService {
 
         return new IndicadoresFornecedorResponse(
                 new IndicadoresFornecedorResponse.UltimaCompraFornecedor(ultima.getId(),
-                        IdentificadorFormatter.formatar("COM", ultima.getNumero()), ultima.getDataCompra()),
+                        IdentificadorFormatter.formatar("COM", ultima.getNumero()), ultima.dataParaContagem()),
                 total,
                 total.divide(BigDecimal.valueOf(n), 2, RoundingMode.HALF_UP),
                 n,
@@ -523,6 +525,7 @@ public class ClienteHistoricoService {
 
     /** Aba Histórico, seção Fornecedor: todas as compras (qualquer status, sem excluídas). */
     public Page<CompraFornecedorResponse> historicoCompras(UUID fornecedorId, Pageable pageable) {
+        PageableOrdenacaoResolver.exigirSemOrdenacao(pageable, "a mais recente primeiro");
         UUID usuarioId = validarCadastro(fornecedorId);
         List<CompraFornecedorResponse> todas = linhasDoFornecedor(fornecedorId, usuarioId).entrySet().stream()
                 .sorted(Comparator.comparing((Map.Entry<Compra, List<CompraItem>> e) -> e.getKey().getDataCompra())

@@ -23,6 +23,7 @@ public class VendaCaixaController {
 
     private final VendaCaixaService vendaCaixaService;
     private final ItemCatalogoService itemCatalogoService;
+    private final HistoricoVendasService historicoVendasService;
 
     /**
      * RN-NOVA-1 reaberta (V0.12.0, achado do teste manual) — busca de itens de Catálogo
@@ -55,6 +56,23 @@ public class VendaCaixaController {
     public ResponseEntity<VendaCaixaResponseDTO> cancelarVenda(
             @PathVariable UUID id, @Valid @RequestBody CancelarVendaCaixaRequestDTO request) {
         return ResponseEntity.ok(vendaCaixaService.cancelarVenda(id, request));
+    }
+
+    /**
+     * V0.17.0 #973 (RN-NOVA-26) — histórico das vendas do Caixa de todos os turnos (concluídas e canceladas). Filtros: período,
+     * status, forma de pagamento e busca; ordenação por coluna ({@code sort=campo,asc|desc}); 20 por página, de 1 a 100.
+     */
+    @GetMapping("/vendas/historico")
+    public ResponseEntity<Page<HistoricoVendaResponse>> historico(
+            @RequestParam(required = false) java.time.LocalDate de,
+            @RequestParam(required = false) java.time.LocalDate ate,
+            @RequestParam(required = false) List<String> status,
+            @RequestParam(required = false) String forma,
+            @RequestParam(required = false) String busca,
+            @RequestParam(required = false) String sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(historicoVendasService.listar(de, ate, status, forma, busca, sort, page, size));
     }
 
     @GetMapping("/turnos/{id}/vendas")

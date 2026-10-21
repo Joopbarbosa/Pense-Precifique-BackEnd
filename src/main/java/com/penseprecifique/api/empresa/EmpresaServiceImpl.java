@@ -53,7 +53,8 @@ public class EmpresaServiceImpl implements EmpresaService {
         empresa.setEmail(request.email());
         empresa.setWhatsapp(request.whatsapp());
         empresa.setEndereco(request.endereco());
-        empresa.setLogoUrl(request.logoUrl());
+        // #982 (RN-NOVA-27, DT-NOVA-22): o logo só muda pelo envio ou pela remoção; salvar o perfil mantém o gravado
+        // (perfil novo fica sem logo) e ignora o logoUrl da requisição, que a tela nunca envia.
 
         Empresa salva;
         try {
@@ -154,6 +155,12 @@ public class EmpresaServiceImpl implements EmpresaService {
             empresa = empresaRepository.save(empresa);
         }
         return toResponse(empresa);
+    }
+
+    @Override
+    @Transactional
+    public void criarEmpresaInicial(UUID usuarioId, String nome) {
+        empresaRepository.save(Empresa.builder().usuarioId(usuarioId).nome(nome).build());
     }
 
     private UUID getUsuarioIdAutenticado() {

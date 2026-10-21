@@ -23,4 +23,7 @@ public interface VendaCaixaRepository extends JpaRepository<VendaCaixa, UUID> {
     /** #577/RN-NOVA-27 (V0.15.0) — vendas do Caixa no período do CMV. */
     List<VendaCaixa> findByUsuarioIdAndStatusAndDataVendaBetween(
             UUID usuarioId, StatusVendaCaixa status, LocalDateTime de, LocalDateTime ate);
+
+    /** #719/RN-NOVA-17 (V0.17.0) — vendas do Caixa de qualquer status no período (aba Vendas). */
+    List<VendaCaixa> findByUsuarioIdAndDataVendaBetween(UUID usuarioId, LocalDateTime de, LocalDateTime ate);
 }

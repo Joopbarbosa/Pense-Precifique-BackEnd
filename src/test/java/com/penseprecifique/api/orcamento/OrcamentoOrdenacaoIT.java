@@ -124,6 +124,25 @@ class OrcamentoOrdenacaoIT {
     }
 
     @Test
+    void ordenaPeloCicloDeVidaComDesempatePeloNumero() {
+        seed();
+        // #994: RASCUNHO (A, 100) < ENVIADO (C, 102) < APROVADO (B, 101) — a ordem do ciclo de vida, não a alfabética
+        Sort asc = Sort.by(Sort.Order.asc("cicloDeVida"), Sort.Order.asc("numero"));
+        assertEquals(List.of(oAId, oCId, oBId), idsNaOrdem(asc));
+        Sort desc = Sort.by(Sort.Order.desc("cicloDeVida"), Sort.Order.asc("numero"));
+        assertEquals(List.of(oBId, oCId, oAId), idsNaOrdem(desc));
+    }
+
+    @Test
+    void ordemPorColunaNaoUnicaDesempataPeloNumero() {
+        seed();
+        // dois orçamentos com o mesmo total (100,00): o número desempata, para a página numerada não repetir nem perder registros
+        UUID oDId = novoOrcamento(novoCliente("Delta", 4), 99, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.RASCUNHO);
+        assertEquals(List.of(oAId, oDId, oCId, oBId), idsNaOrdem(Sort.by(Sort.Direction.ASC, "total")));
+    }
+
+    @Test
     void campoForaDaAllowlistLancaBusinessException() {
         seed();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "identificador"));

@@ -45,7 +45,14 @@ public record CompraResponse(
         String chaveAcesso,
         ComprovanteTipo comprovanteTipo,
         String comprovanteNome,
-        String comprovanteUrl
+        String comprovanteUrl,
+        /** #957/RN-NOVA-4 (V0.17.0) — nulo nas compras antigas (não se aplica). */
+        Boolean entregaImediata,
+        LocalDate previsaoEntrega,
+        /** #957/DT-NOVA-1 — data em que a compra passou a contar nos números. */
+        LocalDate dataEntrada,
+        /** #958/RN-NOVA-6 — dias inteiros de atraso da pendente (previsão anterior a hoje); nulo nos demais casos. */
+        Integer diasAtraso
 ) {
     public record ListaCompraRef(UUID id, String identificador) {}
 }

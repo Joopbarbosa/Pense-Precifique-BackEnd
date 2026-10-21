@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
-                null,
+                ex.getCampo() != null ? Map.of(ex.getCampo(), ex.getMessage()) : null,
                 ex.getTitulo(),
                 ex.getMotivo(),
                 ex.getComoResolver(),
@@ -104,6 +104,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponseDTO> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
         String mensagem = "Corpo da requisição inválido.";
+        Map<String, String> campos = null;
+
+        if (ex.getCause() instanceof tools.jackson.databind.exc.MismatchedInputException mismatched) {
+            // #1016 — tipo errado (ex.: número ou booleano em campo de texto): o campo vai em fieldErrors, como nas demais validações
+            String campoErrado = mismatched.getPath().stream()
+                    .map(JacksonException.Reference::getPropertyName)
+                    .filter(Objects::nonNull)
+                    .reduce((primeiro, ultimo) -> ultimo)
+                    .orElse(null);
+            if (campoErrado != null) {
+                campos = Map.of(campoErrado, "Valor inválido.");
+            }
+        }
 
         if (ex.getCause() instanceof InvalidFormatException invalidFormatException) {
             String campo = invalidFormatException.getPath().stream()
@@ -125,7 +138,7 @@ public class GlobalExceptionHandler {
                 mensagem,
                 HttpStatus.BAD_REQUEST.value(),
                 LocalDateTime.now(),
-                null
+                campos
         ));
     }
 
@@ -276,7 +289,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ErrorResponseDTO> handleMultipartException(MultipartException ex) {
         boolean naoMultipart = "Current request is not a multipart request".equals(ex.getMessage());
-        if (!naoMultipart && !(ex.getCause() instanceof FileUploadException)) {
+        if (!naoMultipart && !causaDeEntradaInvalida(ex)) {
             return handleGenericException(ex);
         }
         log.warn("Multipart inválido: {}", ex.getMessage());
@@ -284,6 +297,20 @@ public class GlobalExceptionHandler {
                 naoMultipart ? "Arquivo não enviado corretamente. Envie o arquivo como formulário multipart."
                         : "Arquivo não enviado corretamente. Tente novamente.",
                 HttpStatus.BAD_REQUEST.value(), LocalDateTime.now(), null));
+    }
+
+    /**
+     * #1026 — o Tomcat embrulha a recusa do cliente em níveis (ex.: {@code ServletException} -> {@code InvalidFileNameException} para
+     * nome de arquivo com caractere de controle); qualquer nível da cadeia que seja recusa de upload do cliente é entrada inválida.
+     */
+    private static boolean causaDeEntradaInvalida(Throwable ex) {
+        Throwable causa = ex.getCause();
+        for (int nivel = 0; causa != null && nivel < 10; nivel++, causa = causa.getCause()) {
+            if (causa instanceof FileUploadException || causa instanceof org.apache.tomcat.util.http.fileupload.InvalidFileNameException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** #762 — parâmetro de consulta com nome vazio (ex.: {@code ?=1}): o Tomcat recusa; é entrada inválida (400). */

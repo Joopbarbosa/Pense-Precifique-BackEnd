@@ -1,0 +1,15 @@
+# Política de conformidade do contrato OpenAPI (#1021, opção B do Gestor).
+# Mantidas e exigidas com 0 falha: resposta 5xx, status e corpo conforme o contrato, cabeçalhos, método não suportado, e o resto.
+# Desligadas de propósito: aceitar o que o esquema aceita (positive_data_acceptance) e recusar o que o esquema recusa
+# (negative_data_rejection). A API valida regras de negócio e de estado acima do esquema (nome repetido, status da compra,
+# turno de caixa aberto, ordenação permitida por tela) e responde 400 com mensagem explicada por desenho; nenhum contrato
+# OpenAPI descreve isso sem mudar o código de resposta para 409 em todos os clientes.
+# Gerar PDF (Chrome frio) passa de 10 s, o padrão do Schemathesis; o limite é do teste, não do produto. Rode também com --request-timeout 60.
+request-timeout = 60
+
+[checks]
+positive_data_acceptance.enabled = false
+negative_data_rejection.enabled = false
+# O 404 de "POST /catalogos/{id}/itens" com insumo inexistente é do insumo citado no corpo, não do catálogo recém-criado:
+# o fuzzer o confunde com "recurso criado e indisponível".
+ensure_resource_availability.enabled = false

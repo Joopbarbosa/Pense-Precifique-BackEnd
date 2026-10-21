@@ -112,6 +112,7 @@ public class ItemCatalogoService {
 
         BigDecimal custoComponentes = BigDecimal.ZERO;
         for (ItemCatalogoComponenteRequest req : request.getComponentes()) {
+            exigirUmaReferencia(req);
             BigDecimal custoUnitario = resolverCustoUnitarioComponente(req, usuarioId);
             custoComponentes = custoComponentes.add(req.getQuantidade().multiply(custoUnitario));
         }
@@ -127,11 +128,23 @@ public class ItemCatalogoService {
     // Escrita
     // ---------------------------------------------------------------
 
+    /** #1017 (RN-NOVA-36) — nome + marca únicos entre os itens não excluídos do mesmo catálogo, sem maiúsculas, acentos e espaços das pontas. */
+    private void validarNomeMarcaUnicos(UUID catalogoId, UUID ignorarId, String nome, String marca, String campo) {
+        for (Object[] linha : itemCatalogoRepository.identidadesDoCatalogo(catalogoId)) {
+            if (linha[0].equals(ignorarId)) continue;
+            if (com.penseprecifique.api.util.NomeMarca.mesmaIdentidade(nome, marca, (String) linha[1], (String) linha[2])) {
+                throw BusinessException.noCampo(campo, "Já existe um item neste catálogo com este nome e esta marca");
+            }
+        }
+    }
+
     public ItemCatalogoResponse adicionar(UUID catalogoId, ItemCatalogoRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Catalogo catalogo = catalogoRepository.findByIdAndUsuarioId(catalogoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Catálogo não encontrado"));
 
+        usuarioRepository.lockPorId(usuarioId);
+        validarNomeMarcaUnicos(catalogoId, null, request.getNome(), com.penseprecifique.api.util.NomeMarca.limparMarca(request.getMarca()), "nome");
         ItemCatalogo item = itemCatalogoMapper.toEntity(request, catalogo);
         if (item.getMargemLucro() == null) {
             item.setMargemLucro(buscarMargemPadrao(usuarioId));
@@ -156,7 +169,16 @@ public class ItemCatalogoService {
         BigDecimal precoVendaAntigo = item.getPrecoVenda();
         BigDecimal margemLucroAntigo = item.getMargemLucro();
 
+        String marcaNova = com.penseprecifique.api.util.NomeMarca.limparMarca(request.getMarca());
+        boolean nomeMudou = !com.penseprecifique.api.util.NomeMarca.chave(request.getNome()).equals(com.penseprecifique.api.util.NomeMarca.chave(item.getNome()));
+        boolean marcaMudou = !com.penseprecifique.api.util.NomeMarca.chave(marcaNova).equals(com.penseprecifique.api.util.NomeMarca.chave(item.getMarca()));
+        if (nomeMudou || marcaMudou) {
+            // #1017 — só quando nome ou marca mudam; item antigo repetido segue editável nos outros campos
+            usuarioRepository.lockPorId(usuarioId);
+            validarNomeMarcaUnicos(item.getCatalogo().getId(), item.getId(), request.getNome(), marcaNova, nomeMudou ? "nome" : "marca");
+        }
         item.setNome(request.getNome());
+        item.setMarca(marcaNova);
         item.setTempoProducao(request.getTempoProducao());
         item.setMargemLucro(request.getMargemLucro() != null ? request.getMargemLucro() : margemLucroAntigo);
         item.setDescricao(request.getDescricao());
@@ -291,14 +313,17 @@ public class ItemCatalogoService {
     // Helpers — componentes
     // ---------------------------------------------------------------
 
+    /** #1029 — a prévia de preço recusa o componente sem referência (ou com as duas) com a mesma mensagem do cadastro do item. */
+    private static void exigirUmaReferencia(ItemCatalogoComponenteRequest req) {
+        if ((req.getInsumoId() != null) == (req.getProdutoBaseId() != null)) {
+            throw new BusinessException("Cada componente do item de catálogo deve referenciar exatamente um insumo ou um produto.");
+        }
+    }
+
     private List<ItemCatalogoComponente> salvarComponentes(ItemCatalogo item, List<ItemCatalogoComponenteRequest> requests, UUID usuarioId) {
         return requests.stream().map(req -> {
+            exigirUmaReferencia(req);
             boolean temInsumo = req.getInsumoId() != null;
-            boolean temProdutoBase = req.getProdutoBaseId() != null;
-            if (temInsumo == temProdutoBase) {
-                throw new BusinessException(
-                        "Cada componente do item de catálogo deve referenciar exatamente um insumo ou um produto.");
-            }
 
             Insumo insumo = null;
             Produto produtoBase = null;

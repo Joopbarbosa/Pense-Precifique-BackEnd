@@ -33,7 +33,7 @@ public class Empresa {
     @Column
     private String email;
 
-    @Column
+    @Column(length = 25)
     private String whatsapp;
 
     @Column(columnDefinition = "TEXT")

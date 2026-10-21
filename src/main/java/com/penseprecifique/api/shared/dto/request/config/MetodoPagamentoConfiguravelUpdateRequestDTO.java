@@ -3,6 +3,7 @@ package com.penseprecifique.api.shared.dto.request.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.List;
 public record MetodoPagamentoConfiguravelUpdateRequestDTO(
         Boolean ativo,
         BigDecimal taxaMaquininha,
+        @Size(max = 100, message = "O nome do método de pagamento pode ter no máximo 100 caracteres")
         String nome,
 
         /** #491 (V0.12.0) — parcelamento, só aceito em CARTAO_CREDITO. */

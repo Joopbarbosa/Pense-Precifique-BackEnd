@@ -13,6 +13,8 @@ public record VendaCaixaResponseDTO(
         Integer numero,
         String identificador,
         UUID clienteId,
+        /** #993 (RN-NOVA-30) — nome do cliente, mesmo se ele foi excluído depois; nulo = sem cliente (a tela mostra "Consumidor final"). */
+        String clienteNome,
         LocalDateTime dataVenda,
         UUID caixaTurnoId,
         StatusVendaCaixa status,

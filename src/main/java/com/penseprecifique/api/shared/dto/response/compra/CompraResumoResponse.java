@@ -22,5 +22,9 @@ public record CompraResumoResponse(
         BigDecimal total,
         int quantidadeItens,
         /** DT-NOVA-19 (V0.15.0) — "Fita de cetim ×10 m, Cola ×3 un" para a modal de listagem (RN-NOVA-24). */
-        String resumoItens
+        String resumoItens,
+        /** #958/RN-NOVA-6 — só nas pendentes de recebimento. */
+        LocalDate previsaoEntrega,
+        /** Dias inteiros de atraso (previsão anterior a hoje); nulo quando não está atrasada. */
+        Integer diasAtraso
 ) {}

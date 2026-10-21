@@ -17,6 +17,8 @@ public class ProdutoDetalheResponse {
     private Integer numero;
     private String identificador;
     private String nome;
+    /** #1017 (RN-NOVA-36) — marca opcional. */
+    private String marca;
     private TipoProduto tipo;
     private String descricao;
     /** #531 (DT-NOVA-5) — exibida na aba Dados Básicos, editável via POST/DELETE /produtos/{id}/foto. */

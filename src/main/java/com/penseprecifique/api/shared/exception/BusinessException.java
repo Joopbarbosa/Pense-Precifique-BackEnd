@@ -14,6 +14,7 @@ public class BusinessException extends RuntimeException {
     private final String motivo;
     private final String comoResolver;
     private final List<String> itens;
+    private String campo;
 
     public BusinessException(String message) {
         this(message, null, null, null, null);
@@ -35,6 +36,15 @@ public class BusinessException extends RuntimeException {
     public BusinessException comItens(List<String> itens) {
         return new BusinessException(getMessage(), titulo, motivo, comoResolver, itens == null ? null : List.copyOf(itens));
     }
+
+    /** #1017 — bloqueio que pertence a um campo do formulário: sai também em {@code fieldErrors}. */
+    public static BusinessException noCampo(String campo, String mensagem) {
+        BusinessException e = new BusinessException(mensagem);
+        e.campo = campo;
+        return e;
+    }
+
+    public String getCampo() { return campo; }
 
     public String getTitulo() { return titulo; }
     public String getMotivo() { return motivo; }

@@ -56,7 +56,21 @@ public class CompraMapper {
                 compra.getChaveAcesso(),
                 compra.getComprovanteTipo(),
                 compra.getComprovanteNome(),
-                compra.getComprovanteUrl());
+                compra.getComprovanteUrl(),
+                compra.getEntregaImediata(),
+                compra.getPrevisaoEntrega(),
+                compra.getDataEntrada(),
+                diasAtraso(compra));
+    }
+
+    /** #958/RN-NOVA-6 — dias inteiros entre a previsão e hoje; previsão igual a hoje não é atraso. */
+    public static Integer diasAtraso(Compra compra) {
+        if (compra.getStatus() != com.penseprecifique.api.shared.domain.enums.StatusCompra.PENDENTE_RECEBIMENTO
+                || compra.getPrevisaoEntrega() == null) {
+            return null;
+        }
+        long dias = java.time.temporal.ChronoUnit.DAYS.between(compra.getPrevisaoEntrega(), java.time.LocalDate.now());
+        return dias > 0 ? (int) dias : null;
     }
 
     /** #576 — soma dos descontos de linha e das partes da nota. */
@@ -95,7 +109,9 @@ public class CompraMapper {
                 Boolean.TRUE.equals(compra.getPago()),
                 total(itens),
                 itens.size(),
-                resumoItens(itens));
+                resumoItens(itens),
+                compra.getPrevisaoEntrega(),
+                diasAtraso(compra));
     }
 
     public CompraItemResponse toItemResponse(CompraItem item) {
@@ -106,7 +122,7 @@ public class CompraMapper {
                 toRef(item.getFornecedor()),
                 item.getQuantidade(),
                 item.getPrecoTotal(),
-                precoUnitario(item.getPrecoTotal(), item.getQuantidade()),
+                precoUnitarioExibido(item),
                 item.getPrecoUnitarioPago(),
                 item.getCustoUnitarioAnterior(),
                 item.getCustoUnitarioPosterior(),
@@ -114,7 +130,18 @@ public class CompraMapper {
                 item.getDescontoTipo(),
                 item.getDescontoInformado(),
                 item.getDescontoLinha(),
-                item.getDescontoNota());
+                item.getDescontoNota(),
+                item.getQuantidadePedida(),
+                com.penseprecifique.api.cliente.DestinoCadastro.insumo(item.getInsumo()));
+    }
+
+    /**
+     * #959/DT-NOVA-2 — depois da entrada o preço unitário pago gravado é a única fonte (nunca se divide o total
+     * de volta); em rascunho e pendente ele ainda não existe e vale preço total ÷ quantidade.
+     */
+    public static BigDecimal precoUnitarioExibido(CompraItem item) {
+        return item.getPrecoUnitarioPago() != null ? item.getPrecoUnitarioPago()
+                : precoUnitario(item.getPrecoTotal(), item.getQuantidade());
     }
 
     /** Preço total ÷ quantidade, 4 casas (mesma escala do custo do insumo); nulo se faltar um dos dois. */

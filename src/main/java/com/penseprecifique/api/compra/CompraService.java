@@ -7,6 +7,7 @@ import com.penseprecifique.api.insumo.CustoMedioPonderado;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.MovimentacaoInsumoRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.produto.CausaPrecoSugerido;
 import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.CompraItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -125,7 +126,7 @@ public class CompraService {
                                              UUID insumoId, String busca, Boolean pago, boolean comDesconto,
                                              Pageable pageable) {
         return listarComFiltros(statuses, fornecedorId == null ? List.of() : List.of(fornecedorId), de, ate,
-                insumoId == null ? List.of() : List.of(insumoId), busca, pago, comDesconto, pageable);
+                insumoId == null ? List.of() : List.of(insumoId), busca, pago, comDesconto, false, pageable);
     }
 
     /**
@@ -138,6 +139,14 @@ public class CompraService {
     public Page<CompraResumoResponse> listarComFiltros(Collection<StatusCompra> statuses, Collection<UUID> fornecedorIds, LocalDate de,
                                              LocalDate ate, Collection<UUID> insumoIds, String busca, Boolean pago,
                                              boolean comDesconto, Pageable pageable) {
+        return listarComFiltros(statuses, fornecedorIds, de, ate, insumoIds, busca, pago, comDesconto, false, pageable);
+    }
+
+    /** #958/RN-NOVA-6 — {@code somenteAtrasadas}: pendentes de recebimento com previsão anterior a hoje. */
+    @Transactional(readOnly = true)
+    public Page<CompraResumoResponse> listarComFiltros(Collection<StatusCompra> statuses, Collection<UUID> fornecedorIds, LocalDate de,
+                                             LocalDate ate, Collection<UUID> insumoIds, String busca, Boolean pago,
+                                             boolean comDesconto, boolean somenteAtrasadas, Pageable pageable) {
         boolean filtrarFornecedor = fornecedorIds != null && !fornecedorIds.isEmpty();
         boolean filtrarInsumo = insumoIds != null && !insumoIds.isEmpty();
         UUID usuarioId = getUsuarioAutenticado().getId();
@@ -153,7 +162,7 @@ public class CompraService {
                 comDesconto, filtrarFornecedor,
                 filtrarFornecedor ? fornecedorIds : List.of(new UUID(0, 0)), de, ate,
                 filtrarInsumo, filtrarInsumo ? insumoIds : List.of(new UUID(0, 0)),
-                !termo.isEmpty(), numeroBusca, "%" + termo + "%", ordenado);
+                !termo.isEmpty(), numeroBusca, "%" + termo + "%", somenteAtrasadas, LocalDate.now(), ordenado);
 
         Map<UUID, List<CompraItem>> itensPorCompra = pagina.isEmpty() ? Map.of()
                 : compraItemRepository.findByCompraIdIn(pagina.map(Compra::getId).getContent()).stream()
@@ -210,7 +219,7 @@ public class CompraService {
     public CompraResponse atualizarRascunho(UUID id, CompraRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         Compra compra = buscarEntidade(id, usuario.getId());
-        exigirRascunho(compra, "Só é possível editar uma compra em Rascunho.");
+        exigirEditavel(compra, "Só é possível editar uma compra em Rascunho ou Pendente de recebimento.");
         aplicarRequest(compra, request, usuario.getId(), compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
         return compraMapper.toResponse(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
     }
@@ -218,7 +227,7 @@ public class CompraService {
     /** Soft delete: o COM-N do rascunho excluído nunca volta à sequência (RN-053). */
     public void excluirRascunho(UUID id) {
         Compra compra = buscarEntidade(id, getUsuarioAutenticado().getId());
-        exigirRascunho(compra, "Só é possível excluir uma compra em Rascunho.");
+        exigirEditavel(compra, "Só é possível excluir uma compra em Rascunho ou Pendente de recebimento.");
         compra.setDeletedAt(LocalDateTime.now());
         compraRepository.save(compra);
     }
@@ -244,9 +253,23 @@ public class CompraService {
         return confirmarEntidade(compra, usuario);
     }
 
+    /**
+     * #958/DT-NOVA-2 — duas etapas: (1) valida e decide o estado; (2) {@link #aplicarEntrada}. Entrega imediata
+     * "não" deixa a compra PENDENTE_RECEBIMENTO sem tocar estoque, custo, vínculo, lista nem impacto.
+     */
     private CompraConfirmacaoResponse confirmarEntidade(Compra compra, Usuario usuario) {
         List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
         validarParaConfirmar(compra, itens);
+        if (Boolean.FALSE.equals(compra.getEntregaImediata())) {
+            compra.setStatus(StatusCompra.PENDENTE_RECEBIMENTO);
+            compraRepository.saveAndFlush(compra);
+            return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), ImpactoCompraResponse.semAlteracao());
+        }
+        return aplicarEntrada(compra, itens, usuario, compra.getDataCompra());
+    }
+
+    /** #958/DT-NOVA-2 — rotina única de entrada no estoque; {@code dataEntrada} é a data em que a compra passa a contar. */
+    private CompraConfirmacaoResponse aplicarEntrada(Compra compra, List<CompraItem> itens, Usuario usuario, LocalDate dataEntrada) {
         // #543 — custo de cada insumo antes da compra (primeira linha dele) → comparado ao final.
         Map<UUID, BigDecimal> custoAntes = new LinkedHashMap<>();
         itens.forEach(i -> custoAntes.putIfAbsent(i.getInsumo().getId(), i.getInsumo().getCustoUnitario()));
@@ -254,9 +277,15 @@ public class CompraService {
         for (CompraItem item : itens) {
             Insumo insumo = item.getInsumo();
             BigDecimal custoAnterior = insumo.getCustoUnitario();
+            // #959/DT-NOVA-2 — sem divergência de quantidade o cálculo recebe exatamente o que recebia (quantidade e
+            // total pago original); com divergência, quantidade recebida × preço unitário pago gravado.
+            boolean divergente = item.getQuantidadePedida() != null && item.getPrecoUnitarioPago() != null
+                    && item.getQuantidadePedida().compareTo(item.getQuantidade()) != 0;
+            BigDecimal valorParaCusto = divergente ? item.getQuantidade().multiply(item.getPrecoUnitarioPago()) : item.getPrecoTotal();
             BigDecimal novoCusto = CustoMedioPonderado.calcular(insumo.getEstoqueAtual(), custoAnterior,
-                    item.getQuantidade(), item.getPrecoTotal());
-            BigDecimal precoPago = CompraMapper.precoUnitario(item.getPrecoTotal(), item.getQuantidade());
+                    item.getQuantidade(), valorParaCusto);
+            BigDecimal precoPago = divergente ? item.getPrecoUnitarioPago()
+                    : CompraMapper.precoUnitario(item.getPrecoTotal(), item.getQuantidade());
 
             insumo.setCustoUnitario(novoCusto);
             insumo.setEstoqueAtual(insumo.getEstoqueAtual().add(item.getQuantidade()));
@@ -270,6 +299,7 @@ public class CompraService {
                     .custoUnitario(novoCusto)
                     .referenciaId(compra.getId())
                     .referenciaTipo(ReferenciaMovimentacaoTipo.COMPRA)
+                    .dataReferencia(dataEntrada) // #959/DT-NOVA-4 — só exibição
                     .estornada(false)
                     .build());
 
@@ -280,6 +310,7 @@ public class CompraService {
         }
 
         compra.setStatus(StatusCompra.CONFIRMADA);
+        compra.setDataEntrada(dataEntrada); // #957/DT-NOVA-1 — entrega imediata: a data da compra
         compra.setConfirmadaEm(LocalDateTime.now());
         compraRepository.saveAndFlush(compra);
 
@@ -293,8 +324,121 @@ public class CompraService {
             }
         }
 
-        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes));
+        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes),
+                new ImpactoCompraService.EventoPreco(CausaPrecoSugerido.COMPRA_ENTRADA, compra.getId(), identificador(compra)));
         return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), impacto);
+    }
+
+    // --------------------------------------------------------------------------------- entrada (#959)
+
+    /**
+     * #959/RN-NOVA-7, DT-NOVA-2 — entrada da compra pendente: sempre a compra inteira, síncrona e numa transação
+     * (tudo ou nada). A quantidade recebida (maior que zero) pode diferir da pedida; o preço unitário pago é
+     * calculado sobre a quantidade pedida, gravado, e o valor da linha passa a ser recebida × esse preço.
+     */
+    public CompraConfirmacaoResponse darEntrada(UUID id, EntradaCompraRequest request) {
+        Usuario usuario = getUsuarioAutenticado();
+        Compra compra = buscarEntidade(id, usuario.getId());
+        if (compra.getStatus() != StatusCompra.PENDENTE_RECEBIMENTO) {
+            throw BusinessException.explicado("Entrada não permitida", "Só é possível dar entrada em uma compra pendente de recebimento.",
+                    "A entrada move para o estoque a mercadoria de uma compra que ainda não chegou; as demais compras já tiveram, ou nunca terão, entrada.",
+                    "Abra Minhas compras e escolha uma compra pendente de recebimento.");
+        }
+        List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
+        LocalDate recebimento = request.dataRecebimento();
+        if (recebimento.isAfter(LocalDate.now()) || recebimento.isBefore(compra.getDataCompra())) {
+            throw BusinessException.explicado("Data do recebimento",
+                    recebimento.isAfter(LocalDate.now()) ? "A data do recebimento não pode ser futura"
+                            : "A data do recebimento não pode ser anterior à data da compra",
+                    "A entrada registra uma mercadoria que já chegou, depois de a compra ter sido feita.",
+                    "Use a data de hoje ou a data em que a mercadoria chegou.");
+        }
+
+        Map<UUID, BigDecimal> recebidas = new LinkedHashMap<>();
+        Set<UUID> idsDaCompra = itens.stream().map(CompraItem::getId).collect(Collectors.toSet());
+        for (EntradaCompraRequest.ItemEntrada linha : request.itens()) {
+            if (!idsDaCompra.contains(linha.itemId())) {
+                throw new ResourceNotFoundException("Linha não encontrada na compra: " + linha.itemId());
+            }
+            recebidas.put(linha.itemId(), linha.quantidadeRecebida());
+        }
+
+        List<String> problemas = new ArrayList<>();
+        for (int i = 0; i < itens.size(); i++) {
+            CompraItem item = itens.get(i);
+            BigDecimal recebida = recebidas.getOrDefault(item.getId(), item.getQuantidade());
+            List<String> daLinha = new ArrayList<>();
+            if (recebida == null || recebida.signum() <= 0) {
+                daLinha.add("informe uma quantidade maior que zero; para tirar o item, edite a compra pendente");
+            }
+            if (!Boolean.TRUE.equals(item.getInsumo().getAtivo()) || item.getInsumo().getDeletedAt() != null) {
+                daLinha.add("insumo inativo");
+            }
+            if (!daLinha.isEmpty()) {
+                problemas.add(item.getInsumo().getNome() + ": " + String.join("; ", daLinha));
+            }
+        }
+        if (!problemas.isEmpty()) {
+            throw BusinessException.explicado("Entrada bloqueada", "Corrija as linhas abaixo para dar entrada na compra.",
+                    "A entrada vale para a compra inteira: se uma linha estiver inválida, nada entra no estoque.",
+                    "Informe a quantidade recebida maior que zero e reative os insumos inativos. Item que não veio: edite a compra pendente e remova a linha antes da entrada.")
+                    .comItens(problemas);
+        }
+
+        for (int i = 0; i < itens.size(); i++) {
+            CompraItem item = itens.get(i);
+            BigDecimal recebida = recebidas.getOrDefault(item.getId(), item.getQuantidade());
+            escalarLinha(item, recebida, i);
+        }
+        compra.setDescontoNota(itens.stream().map(CompraItem::getDescontoNota).reduce(BigDecimal.ZERO, BigDecimal::add));
+        if (compra.getDescontoNotaTipo() == com.penseprecifique.api.shared.domain.enums.TipoDesconto.VALOR
+                && compra.getDescontoNotaInformado() != null) {
+            compra.setDescontoNotaInformado(compra.getDescontoNota());
+        }
+        compraItemRepository.saveAll(itens);
+        return aplicarEntrada(compra, itens, usuario, recebimento);
+    }
+
+    /**
+     * #959/DT-NOVA-2 — grava o preço unitário pago (valor líquido ÷ quantidade pedida, 4 casas) e a quantidade pedida;
+     * se a recebida difere, a linha vira recebida × esse preço (2 casas), com preço cheio e desconto da linha na mesma
+     * razão. A diferença de centavos dos descontos vai para a parte do desconto da nota.
+     */
+    private static void escalarLinha(CompraItem item, BigDecimal recebida, int indice) {
+        BigDecimal pedida = item.getQuantidade();
+        BigDecimal unitario = CompraMapper.precoUnitario(item.getPrecoTotal(), pedida);
+        item.setPrecoUnitarioPago(unitario);
+        item.setQuantidadePedida(pedida);
+        if (recebida.compareTo(pedida) == 0) {
+            return;
+        }
+        BigDecimal razao = recebida.divide(pedida, 12, java.math.RoundingMode.HALF_UP);
+        BigDecimal total = recebida.multiply(unitario).setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal cheio = item.getPrecoCheio().multiply(razao).setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal descontoLinha = item.getDescontoLinha().multiply(razao).setScale(2, java.math.RoundingMode.HALF_UP);
+        if (total.signum() <= 0) {
+            throw BusinessException.explicado("Entrada bloqueada",
+                    "Linha " + (indice + 1) + " (" + item.getInsumo().getNome() + "): a quantidade recebida é pequena demais para o preço pago.",
+                    "O valor da linha é a quantidade recebida vezes o preço unitário pago e não pode zerar.",
+                    "Informe uma quantidade recebida maior.");
+        }
+        BigDecimal descontoNota = cheio.subtract(descontoLinha).subtract(total);
+        if (descontoNota.signum() < 0) {
+            descontoLinha = cheio.subtract(total);
+            descontoNota = BigDecimal.ZERO;
+            if (descontoLinha.signum() < 0) {
+                descontoLinha = BigDecimal.ZERO;
+                cheio = total;
+            }
+        }
+        item.setQuantidade(recebida);
+        item.setPrecoTotal(total);
+        item.setPrecoCheio(cheio);
+        item.setDescontoLinha(descontoLinha);
+        item.setDescontoNota(descontoNota);
+        if (item.getDescontoTipo() == com.penseprecifique.api.shared.domain.enums.TipoDesconto.VALOR && item.getDescontoInformado() != null) {
+            item.setDescontoInformado(descontoLinha);
+        }
     }
 
     private static List<ImpactoCompraService.MudancaCusto> mudancas(List<CompraItem> itens, Map<UUID, BigDecimal> custoAntes) {
@@ -316,6 +460,14 @@ public class CompraService {
                     "Busque o insumo em \"Adicionar insumo à compra…\", informe quantidade e preço e confirme de novo.");
         }
         validarData(compra.getDataCompra());
+        if (Boolean.FALSE.equals(compra.getEntregaImediata())) {
+            if (compra.getPrevisaoEntrega() == null) {
+                throw BusinessException.explicado("Previsão de entrega", "Informe a previsão de entrega",
+                        "Sem entrega imediata, a previsão diz quando a mercadoria deve chegar e permite avisar o atraso.",
+                        "Preencha a data prevista para a entrega ou marque Entrega imediata como Sim.");
+            }
+            validarPrevisaoInformada(compra.getPrevisaoEntrega(), compra.getDataCompra());
+        }
         List<String> problemas = new ArrayList<>();
         for (int i = 0; i < itens.size(); i++) {
             CompraItem item = itens.get(i);
@@ -348,7 +500,10 @@ public class CompraService {
     @Transactional(readOnly = true)
     public SimulacaoCancelamentoResponse simularCancelamento(UUID id) {
         Compra compra = buscarEntidade(id, getUsuarioAutenticado().getId());
-        exigirConfirmada(compra);
+        exigirCancelavel(compra);
+        if (compra.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO) {
+            return new SimulacaoCancelamentoResponse(true, List.of(), List.of()); // #958 — nada entrou, nada a estornar
+        }
         return simular(compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
     }
 
@@ -363,8 +518,16 @@ public class CompraService {
     public CompraConfirmacaoResponse cancelar(UUID id, CancelarCompraRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         Compra compra = buscarEntidade(id, usuario.getId());
-        exigirConfirmada(compra);
+        exigirCancelavel(compra);
         List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
+        if (compra.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO) {
+            // #958/RN-NOVA-5 — pendente não deu entrada: cancela sem estorno de estoque, custo ou movimentação.
+            compra.setStatus(StatusCompra.CANCELADA);
+            compra.setCanceladaEm(LocalDateTime.now());
+            compra.setObservacaoCancelamento(request.observacao());
+            compraRepository.saveAndFlush(compra);
+            return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), ImpactoCompraResponse.semAlteracao());
+        }
 
         SimulacaoCancelamentoResponse simulacao = simular(itens);
         if (!simulacao.bloqueios().isEmpty()) {
@@ -433,7 +596,8 @@ public class CompraService {
         itens.stream().filter(i -> i.getFornecedor() != null)
                 .forEach(i -> fornecedorInsumoService.recalcular(i.getFornecedor(), i.getInsumo()));
 
-        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes));
+        ImpactoCompraResponse impacto = impactoCompraService.aplicar(usuario.getId(), mudancas(itens, custoAntes),
+                new ImpactoCompraService.EventoPreco(CausaPrecoSugerido.COMPRA_CANCELAMENTO, compra.getId(), identificador(compra)));
         return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), impacto);
     }
 
@@ -484,7 +648,11 @@ public class CompraService {
         long rascunhos = compraRepository.countByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.RASCUNHO);
         long confirmadas = compraRepository.countByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.CONFIRMADA);
         long canceladas = compraRepository.countByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.CANCELADA);
-        return new CompraContagensResponse(rascunhos + confirmadas + canceladas, rascunhos, confirmadas, canceladas);
+        long pendentes = compraRepository.countByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.PENDENTE_RECEBIMENTO);
+        long atrasadas = compraRepository.countByUsuarioIdAndStatusAndPrevisaoEntregaBeforeAndDeletedAtIsNull(
+                usuarioId, StatusCompra.PENDENTE_RECEBIMENTO, LocalDate.now());
+        return new CompraContagensResponse(rascunhos + pendentes + confirmadas + canceladas, rascunhos, confirmadas, canceladas,
+                pendentes, atrasadas);
     }
 
     // --------------------------------------------------------------------------------- duplicar
@@ -505,13 +673,14 @@ public class CompraService {
     public CompraResponse duplicar(UUID id, boolean manterDescontos) {
         Usuario usuario = getUsuarioAutenticado();
         Compra origem = buscarEntidade(id, usuario.getId());
-        if (origem.getStatus() == StatusCompra.RASCUNHO) {
+        if (origem.getStatus() == StatusCompra.RASCUNHO || origem.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO) {
             throw BusinessException.explicado("Rascunho não é duplicado", "Só é possível duplicar uma compra confirmada ou cancelada.",
                     "O rascunho ainda pode ser editado, então não precisa de cópia.",
                     "Abra o rascunho e edite, ou confirme a compra antes de duplicar.");
         }
         Compra copia = novaCompra(usuario);
         copia.setDataCompra(LocalDate.now());
+        copia.setEntregaImediata(true); // #957/RN-NOVA-4 — duplicar volta para Sim e não copia a previsão
         copia.setMultiplosFornecedores(origem.getMultiplosFornecedores());
         copia.setFornecedor(origem.getFornecedor());
         copia.setObservacoes(origem.getObservacoes());
@@ -534,9 +703,9 @@ public class CompraService {
         return compraMapper.toResponse(copia, compraItemRepository.findByCompraIdOrderByOrdemAsc(copia.getId()));
     }
 
-    private static void exigirConfirmada(Compra compra) {
-        if (compra.getStatus() != StatusCompra.CONFIRMADA) {
-            throw BusinessException.explicado("Esta compra não pode ser cancelada", "Só é possível cancelar uma compra confirmada.",
+    private static void exigirCancelavel(Compra compra) {
+        if (compra.getStatus() != StatusCompra.CONFIRMADA && compra.getStatus() != StatusCompra.PENDENTE_RECEBIMENTO) {
+            throw BusinessException.explicado("Esta compra não pode ser cancelada", "Só é possível cancelar uma compra confirmada ou pendente de recebimento.",
                     "Só a compra confirmada mexeu no estoque e no custo; rascunho é excluído e compra cancelada já foi desfeita.",
                     "Para um rascunho, use Excluir.");
         }
@@ -549,8 +718,8 @@ public class CompraService {
         UUID usuarioId = getUsuarioAutenticado().getId();
         Compra compra = buscarEntidade(id, usuarioId);
         if (compra.getStatus() != StatusCompra.CONFIRMADA) {
-            throw compra.getStatus() == StatusCompra.RASCUNHO
-                    ? BusinessException.explicado("Pagamento do rascunho", "Em rascunho, o pagamento é alterado junto com a compra.",
+            throw compra.getStatus() == StatusCompra.RASCUNHO || compra.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO
+                    ? BusinessException.explicado("Pagamento da compra", "Em rascunho ou pendente de recebimento, o pagamento é alterado junto com a compra.",
                             "Enquanto a compra é rascunho, todos os campos são editados no formulário.",
                             "Abra o rascunho em Editar e altere o pagamento lá.")
                     : BusinessException.explicado("Compra cancelada", "Compra cancelada não pode ter o pagamento alterado.",
@@ -594,6 +763,19 @@ public class CompraService {
         boolean multiplos = Boolean.TRUE.equals(request.multiplosFornecedores());
         Cliente fornecedorCabecalho = resolverFornecedor(request.fornecedorId(), usuarioId, fornecedoresSalvos);
 
+        // #958/RN-NOVA-5 — a pendente continua sem entrega imediata e sempre com previsão; previsão já atrasada
+        // pode ser mantida como está (editar a quantidade de uma compra atrasada não obriga a mudar a data).
+        boolean pendente = compra.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO;
+        boolean entregaImediata = !pendente && !Boolean.FALSE.equals(request.entregaImediata());
+        if (pendente && request.previsaoEntrega() == null) {
+            throw BusinessException.explicado("Previsão de entrega", "Informe a previsão de entrega",
+                    "A compra pendente precisa da previsão para acompanhar a chegada e o atraso.",
+                    "Preencha a data prevista para a entrega.");
+        }
+        validarPrevisaoInformada(entregaImediata ? null : request.previsaoEntrega(), request.dataCompra(),
+                pendente ? compra.getPrevisaoEntrega() : null);
+        compra.setEntregaImediata(entregaImediata);
+        compra.setPrevisaoEntrega(entregaImediata ? null : request.previsaoEntrega());
         compra.setDataCompra(request.dataCompra());
         compra.setMultiplosFornecedores(multiplos);
         compra.setFornecedor(fornecedorCabecalho);
@@ -716,6 +898,35 @@ public class CompraService {
             throw BusinessException.explicado("Data no futuro", "A data da compra não pode ser futura",
                     "A compra registra algo que já aconteceu: dá entrada no estoque e muda o custo hoje.",
                     "Use a data de hoje ou a data em que a compra foi feita.");
+        }
+    }
+
+    /** #957/RN-NOVA-4 — previsão informada não pode ser anterior à data da compra nem a hoje. */
+    private static void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra) {
+        validarPrevisaoInformada(previsao, dataCompra, null);
+    }
+
+    private static void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra, LocalDate previsaoMantida) {
+        if (previsao == null) {
+            return;
+        }
+        if (dataCompra != null && previsao.isBefore(dataCompra)) {
+            throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior à data da compra",
+                    "A mercadoria só pode chegar depois de ser comprada.",
+                    "Escolha uma data igual ou posterior à data da compra.");
+        }
+        if (previsao.isBefore(LocalDate.now()) && !previsao.equals(previsaoMantida)) {
+            throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior a hoje",
+                    "A previsão aponta uma entrega que ainda vai acontecer; uma data passada já a marcaria como atrasada.",
+                    "Escolha a data de hoje ou uma data futura.");
+        }
+    }
+
+    private static void exigirEditavel(Compra compra, String mensagem) {
+        if (compra.getStatus() != StatusCompra.RASCUNHO && compra.getStatus() != StatusCompra.PENDENTE_RECEBIMENTO) {
+            throw BusinessException.explicado("Compra fora de rascunho", mensagem,
+                    "Só o rascunho e a compra pendente de recebimento são editados ou excluídos: a confirmada já mexeu no estoque e no custo, e a cancelada já foi desfeita.",
+                    "Para corrigir uma compra confirmada, cancele e use Duplicar para registrar de novo.");
         }
     }
 
