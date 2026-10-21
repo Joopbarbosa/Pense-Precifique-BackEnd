@@ -75,15 +75,16 @@ class CompromissosCompraIT {
         assertEquals(c.getId(), r.get(0).referenciaId());
     }
 
-    /** CEN-NOVO-50 — compra atrasada sobe para hoje. */
+    /** CEN-NOVO-50 (v2) — compra atrasada fica no dia original e segue até hoje. */
     @Test
-    void compraAtrasadaSobeParaHoje() {
+    void compraAtrasadaContinuaAteHoje() {
         seed();
         pendente(-3);
         CompromissoResponse c = compras(1).get(0);
         assertTrue(c.atrasado());
         assertEquals(3, c.diasAtraso());
-        assertEquals(hoje, c.dataExibicao());
+        assertEquals(hoje.minusDays(3), c.dataExibicao());
+        assertEquals(hoje, c.dataFim());
     }
 
     /** RN-NOVA-5 — confirmada, cancelada ou excluída sai da Agenda. */
