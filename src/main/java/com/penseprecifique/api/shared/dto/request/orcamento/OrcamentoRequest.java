@@ -36,7 +36,7 @@ public class OrcamentoRequest {
     @NotNull(message = "É obrigatório informar se o orçamento vai ter prazo de produção")
     private Boolean temPrazoProducao;
 
-    @Min(value = 1, message = "O prazo deve ser de pelo menos 1 dia útil")
+    @Min(value = 1, message = "O prazo deve ser de pelo menos 1 dia")
     private Integer prazoProducaoDias;
 
     private boolean inicioAssimQueAprovado = true;
