@@ -170,6 +170,27 @@ class OrcamentoFinalizarComVinculoIT {
         assertTrue(ex.getMessage().contains("Produções"), "plural quando há mais de uma pendente");
     }
 
+    /** CEN-NOVO-76 (#398) — a lista de produções pendentes sai pelo número, do menor para o maior, mesmo que
+     * a de número maior tenha sido vinculada primeiro. */
+    @Test
+    void mensagemListaProducoesPendentesPeloNumeroCrescente() {
+        seedUsuarioECliente();
+        Produto produto = novoProduto(1, new BigDecimal("100"));
+        UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 5);
+        Producao menor = producaoRepository.save(Producao.builder().usuario(usuario).numero(13).build());
+        Producao maior = producaoRepository.save(Producao.builder().usuario(usuario).numero(14).build());
+        vincular(orcamentoId, maior);
+        vincular(orcamentoId, menor);
+        maior.setEstado(EstadoProducao.TRAVADA);
+        producaoRepository.save(maior);
+        menor.setEstado(EstadoProducao.EM_ANDAMENTO);
+        producaoRepository.save(menor);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
+        assertEquals("Produções PRD-13 (EM_ANDAMENTO), PRD-14 (TRAVADA) ainda não foram finalizadas.", ex.getMessage());
+    }
+
     /** RN-NOVA-19 — mesmo com 1 dos 2 vínculos já FINALIZADA (caso feliz parcial), o outro ainda
      * não-terminal continua bloqueando — não basta 1 dos 2 estar pronto. */
     @Test
