@@ -1,6 +1,7 @@
 package com.penseprecifique.api.produto;
 
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,33 @@ public class PrecoSugeridoHistoricoService {
     private final MudancaPrecoSugeridoRepository mudancaRepository;
     private final MudancaPrecoSugeridoInsumoRepository insumoRepository;
     private final InsumoRepository insumos;
+
+    /**
+     * V0.18.0 (#961, DT-NOVA-13) — o mesmo registro para o item de Catálogo: origem exclusiva (item, nunca produto), mesma
+     * regra de centavos e mesma transação do evento.
+     *
+     * @return true se gravou (o preço sugerido do item mudou em centavos).
+     */
+    public boolean registrarItemSeMudou(UUID usuarioId, ItemCatalogo item, BigDecimal antes, BigDecimal depois,
+                                        CausaPrecoSugerido causa, UUID referenciaId, String referenciaTexto,
+                                        Collection<UUID> insumosOrigem) {
+        if (antes == null || depois == null || antes.setScale(2, java.math.RoundingMode.HALF_UP)
+                .compareTo(depois.setScale(2, java.math.RoundingMode.HALF_UP)) == 0) {
+            return false;
+        }
+        MudancaPrecoSugerido mudanca = mudancaRepository.save(MudancaPrecoSugerido.builder()
+                .usuarioId(usuarioId).itemCatalogo(item)
+                .valorAnterior(antes.setScale(2, java.math.RoundingMode.HALF_UP))
+                .valorNovo(depois.setScale(2, java.math.RoundingMode.HALF_UP))
+                .causa(causa).referenciaId(referenciaId).referenciaTexto(referenciaTexto).build());
+        if (insumosOrigem != null) {
+            for (UUID insumoId : insumosOrigem) {
+                insumoRepository.save(MudancaPrecoSugeridoInsumo.builder()
+                        .mudanca(mudanca).insumo(insumos.getReferenceById(insumoId)).build());
+            }
+        }
+        return true;
+    }
 
     /** @return true se gravou (o preço sugerido mudou em centavos). */
     public boolean registrarSeMudou(UUID usuarioId, Produto produto, BigDecimal antes, BigDecimal depois,

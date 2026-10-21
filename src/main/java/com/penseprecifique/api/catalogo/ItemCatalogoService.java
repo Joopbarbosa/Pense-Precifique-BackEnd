@@ -35,6 +35,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.penseprecifique.api.produto.CausaPrecoSugerido;
+import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -61,6 +64,8 @@ public class ItemCatalogoService {
     private final UsuarioRepository usuarioRepository;
     private final R2StorageClient r2StorageClient;
     private final ValidadorArquivoImagem validadorArquivoImagem;
+    private final com.penseprecifique.api.produto.PrecoSugeridoHistoricoService precoSugeridoHistoricoService;
+    private final com.penseprecifique.api.produto.MudancaPrecoSugeridoRepository mudancaPrecoSugeridoRepository;
 
     // ---------------------------------------------------------------
     // Consultas
@@ -168,6 +173,9 @@ public class ItemCatalogoService {
 
         BigDecimal precoVendaAntigo = item.getPrecoVenda();
         BigDecimal margemLucroAntigo = item.getMargemLucro();
+        // #961/RN-NOVA-28 — preço sugerido de antes (ao vivo), capturado antes de qualquer alteração da edição
+        BigDecimal custoTotalAntes = calcularCustoTotal(componenteRepository.findByItemCatalogoId(item.getId()), item.getTempoProducao(), usuarioId);
+        BigDecimal precoSugeridoAntes = calcularPrecoSugerido(custoTotalAntes, margemLucroAntigo);
 
         String marcaNova = com.penseprecifique.api.util.NomeMarca.limparMarca(request.getMarca());
         boolean nomeMudou = !com.penseprecifique.api.util.NomeMarca.chave(request.getNome()).equals(com.penseprecifique.api.util.NomeMarca.chave(item.getNome()));
@@ -192,6 +200,12 @@ public class ItemCatalogoService {
         BigDecimal precoSugerido = calcularPrecoSugerido(custoTotal, item.getMargemLucro());
         aplicarPrecoVendaEdicao(item, request.getPrecoVenda(), precoSugerido, precoVendaAntigo);
         item = itemCatalogoRepository.save(item);
+
+        // #961 — a edição do próprio item entra no histórico; é "mudança de margem" quando só a margem mexeu no preço
+        boolean soMargem = margemLucroAntigo != null && item.getMargemLucro() != null
+                && margemLucroAntigo.compareTo(item.getMargemLucro()) != 0 && custoTotalAntes.compareTo(custoTotal) == 0;
+        precoSugeridoHistoricoService.registrarItemSeMudou(usuarioId, item, precoSugeridoAntes, precoSugerido,
+                soMargem ? CausaPrecoSugerido.ITEM_MARGEM : CausaPrecoSugerido.ITEM_EDICAO, item.getId(), null, java.util.List.of());
 
         return montarResponse(item, componentes, custoTotal, precoSugerido);
     }
@@ -409,6 +423,92 @@ public class ItemCatalogoService {
             Produto p = c.getProdutoBase();
             return !Boolean.TRUE.equals(p.getAtivo()) || p.getDeletedAt() != null;
         });
+    }
+
+    // ---------------------------------------------------------------
+    // #961/RN-NOVA-28 — histórico do preço sugerido do item (mesmo mecanismo do Produto, DT-NOVA-13)
+    // ---------------------------------------------------------------
+
+    /** Preço sugerido ao vivo do item (custo dos componentes ao vivo e tempo de produção × margem do item). */
+    @Transactional(readOnly = true)
+    public BigDecimal precoSugeridoAoVivo(ItemCatalogo item) {
+        List<ItemCatalogoComponente> componentes = componenteRepository.findByItemCatalogoId(item.getId());
+        return calcularPrecoSugerido(calcularCustoTotal(componentes, item.getTempoProducao(), getUsuarioIdDoItem(item)), item.getMargemLucro());
+    }
+
+    /**
+     * Preço sugerido do item com custos substitutos (insumo e produto/customização componentes) — o "antes" de um evento de
+     * compra, calculado com os custos de antes enquanto os de agora já estão gravados.
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal precoSugeridoSimulado(UUID itemId, Map<UUID, BigDecimal> custoInsumo, Map<UUID, BigDecimal> custoProduto) {
+        return itemCatalogoRepository.findByIdAndDeletedAtIsNull(itemId).map(item -> {
+            BigDecimal componentes = BigDecimal.ZERO;
+            for (ItemCatalogoComponente c : componenteRepository.findByItemCatalogoId(item.getId())) {
+                BigDecimal unitario = c.getInsumo() != null
+                        ? custoInsumo.getOrDefault(c.getInsumo().getId(), c.getInsumo().getCustoUnitario())
+                        : custoProduto.getOrDefault(c.getProdutoBase().getId(), c.getProdutoBase().getPrecoCusto());
+                componentes = componentes.add(c.getQuantidade().multiply(unitario));
+            }
+            BigDecimal custoTotal = componentes.add(calcularCustoMaoDeObra(item.getTempoProducao(), buscarValorHora(getUsuarioIdDoItem(item))));
+            return calcularPrecoSugerido(custoTotal, item.getMargemLucro());
+        }).orElse(null);
+    }
+
+    /** Preço sugerido (ao vivo) de cada item informado; ignora os excluídos. */
+    @Transactional(readOnly = true)
+    public Map<UUID, BigDecimal> capturarPrecosSugeridos(java.util.Collection<UUID> itemIds) {
+        Map<UUID, BigDecimal> precos = new java.util.LinkedHashMap<>();
+        for (UUID id : itemIds) {
+            itemCatalogoRepository.findByIdAndDeletedAtIsNull(id).ifPresent(i -> precos.put(id, precoSugeridoAoVivo(i)));
+        }
+        return precos;
+    }
+
+    /** Depois do evento, compara com o preço sugerido ao vivo de agora e grava só quem mudou em centavos. */
+    public void registrarMudancasPrecoSugerido(UUID usuarioId, Map<UUID, BigDecimal> antes, CausaPrecoSugerido causa,
+                                               UUID referenciaId, String referenciaTexto,
+                                               Map<UUID, ? extends java.util.Collection<UUID>> insumosPorItem) {
+        for (Map.Entry<UUID, BigDecimal> e : antes.entrySet()) {
+            java.util.Collection<UUID> origem = insumosPorItem.get(e.getKey());
+            itemCatalogoRepository.findByIdAndDeletedAtIsNull(e.getKey()).ifPresent(i ->
+                    precoSugeridoHistoricoService.registrarItemSeMudou(usuarioId, i, e.getValue(), precoSugeridoAoVivo(i), causa,
+                            referenciaId, referenciaTexto, origem != null ? origem : List.<UUID>of()));
+        }
+    }
+
+    /** Itens que têm algum dos insumos como componente direto. */
+    @Transactional(readOnly = true)
+    public Set<UUID> itensComInsumos(java.util.Collection<UUID> insumoIds) {
+        return insumoIds.isEmpty() ? Set.of() : new java.util.LinkedHashSet<>(componenteRepository.findItemIdsByInsumoIds(insumoIds));
+    }
+
+    /** Itens que têm algum dos produtos ou customizações como componente. */
+    @Transactional(readOnly = true)
+    public Set<UUID> itensComProdutos(java.util.Collection<UUID> produtoIds) {
+        return produtoIds.isEmpty() ? Set.of() : new java.util.LinkedHashSet<>(componenteRepository.findItemIdsByProdutoBaseIds(produtoIds));
+    }
+
+    /** Todos os itens da conta (o valor da hora alcança todos). */
+    @Transactional(readOnly = true)
+    public Set<UUID> idsDosItensDaConta(UUID usuarioId) {
+        return new java.util.LinkedHashSet<>(itemCatalogoRepository.idsDaConta(usuarioId));
+    }
+
+    /** Histórico do item, da mudança mais recente para a mais antiga, paginado (RN-086). Item de outra conta: não encontrado. */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<com.penseprecifique.api.shared.dto.response.catalogo.HistoricoPrecoItemResponse> historicoPreco(
+            UUID catalogoId, UUID itemId, org.springframework.data.domain.Pageable pageable) {
+        ItemCatalogo item = buscarItemDoUsuario(itemId, getUsuarioIdAutenticado());
+        if (!item.getCatalogo().getId().equals(catalogoId)) {
+            throw new ResourceNotFoundException("Item do catálogo não encontrado");
+        }
+        int tamanho = Math.min(Math.max(pageable.getPageSize(), 1), 100);
+        return mudancaPrecoSugeridoRepository.findDoItem(item.getId(),
+                        org.springframework.data.domain.PageRequest.of(Math.max(pageable.getPageNumber(), 0), tamanho))
+                .map(m -> new com.penseprecifique.api.shared.dto.response.catalogo.HistoricoPrecoItemResponse(
+                        m.getId(), m.getValorAnterior(), m.getValorNovo(), m.getCausa().name(), m.getReferenciaTexto(),
+                        m.getReferenciaId(), m.getCreatedAt()));
     }
 
     /**

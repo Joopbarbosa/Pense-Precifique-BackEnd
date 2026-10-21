@@ -23,6 +23,10 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, UUID
 
     long countByCatalogoIdAndDeletedAtIsNull(UUID catalogoId);
 
+    /** V0.18.0 (#961) — ids dos itens (não excluídos) da conta, para o valor da hora, que alcança todos. */
+    @org.springframework.data.jpa.repository.Query("SELECT i.id FROM ItemCatalogo i WHERE i.catalogo.usuario.id = :usuarioId AND i.deletedAt IS NULL")
+    List<UUID> idsDaConta(@org.springframework.data.repository.query.Param("usuarioId") UUID usuarioId);
+
     /**
      * RN-044/045/046 — busca para a Seção Itens do orçamento: exclui itens de catálogo desativado
      * (RN-046) e itens com qualquer componente inativo/excluído (RN-NOVA-4, V0.13.0 — generaliza

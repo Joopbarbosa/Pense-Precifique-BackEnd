@@ -23,6 +23,7 @@ public class ConfiguracaoServiceImpl implements ConfiguracaoService {
     private final ConfiguracaoPrecificacaoRepository configuracaoRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProdutoService produtoService;
+    private final com.penseprecifique.api.catalogo.ItemCatalogoService itemCatalogoService;
 
     @Override
     public ConfiguracaoResponseDTO getConfiguracao() {
@@ -45,6 +46,9 @@ public class ConfiguracaoServiceImpl implements ConfiguracaoService {
         // #672/DT-NOVA-6 — preço sugerido de antes (ao vivo, com o valor da hora anterior) de todos os produtos da conta
         java.util.Map<UUID, BigDecimal> precoSugeridoAntes = valorHoraMudou
                 ? produtoService.capturarPrecosSugeridos(produtoService.idsDosProdutosDaConta(usuarioId)) : java.util.Map.of();
+        // #961/RN-NOVA-28 — o mesmo para todos os itens de Catálogo da conta
+        java.util.Map<UUID, BigDecimal> precoSugeridoItensAntes = valorHoraMudou
+                ? itemCatalogoService.capturarPrecosSugeridos(itemCatalogoService.idsDosItensDaConta(usuarioId)) : java.util.Map.of();
         configuracao.setValorHora(request.valorHora());
         configuracao.setMargemPadrao(request.margemPadrao());
 
@@ -54,6 +58,8 @@ public class ConfiguracaoServiceImpl implements ConfiguracaoService {
             if (valorHoraMudou) {
                 produtoService.recalcularCustoDeTodos(usuarioId);
                 produtoService.registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes, CausaPrecoSugerido.VALOR_HORA,
+                        null, null, java.util.Map.of());
+                itemCatalogoService.registrarMudancasPrecoSugerido(usuarioId, precoSugeridoItensAntes, CausaPrecoSugerido.VALOR_HORA,
                         null, null, java.util.Map.of());
             }
             return salvo;
