@@ -25,6 +25,7 @@ import com.penseprecifique.api.shared.domain.enums.TipoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.dto.request.compra.CancelarCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraItemRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
+import com.penseprecifique.api.shared.dto.request.compra.AdiarPrevisaoCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.PagamentoCompraRequest;
 import com.penseprecifique.api.shared.dto.response.compra.CompraConfirmacaoResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraContagensResponse;
@@ -709,6 +710,26 @@ public class CompraService {
                     "Só a compra confirmada mexeu no estoque e no custo; rascunho é excluído e compra cancelada já foi desfeita.",
                     "Para um rascunho, use Excluir.");
         }
+    }
+
+    // --------------------------------------------------------------------------------- previsão
+
+    /**
+     * V0.18.0 (#549, RN-NOVA-18) — "Adiar" da Agenda: só a compra pendente de recebimento, e só a previsão muda, com a mesma
+     * validação do registro (COM-043: não anterior a hoje nem à data da compra). A compra continua pendente.
+     */
+    public CompraResponse adiarPrevisao(UUID id, AdiarPrevisaoCompraRequest request) {
+        UUID usuarioId = getUsuarioAutenticado().getId();
+        Compra compra = buscarEntidade(id, usuarioId);
+        if (compra.getStatus() != StatusCompra.PENDENTE_RECEBIMENTO) {
+            throw BusinessException.explicado("Previsão de entrega", "Só a compra pendente de recebimento tem previsão para adiar.",
+                    "A previsão de entrega acompanha a compra enquanto a mercadoria não chegou.",
+                    "Abra uma compra pendente de recebimento para adiar a previsão.");
+        }
+        validarPrevisaoInformada(request.previsaoEntrega(), compra.getDataCompra());
+        compra.setPrevisaoEntrega(request.previsaoEntrega());
+        compraRepository.save(compra);
+        return compraMapper.toResponse(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
     }
 
     // --------------------------------------------------------------------------------- pagamento

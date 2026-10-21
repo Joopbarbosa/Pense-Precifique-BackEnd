@@ -16,6 +16,10 @@ import java.util.UUID;
 
 public interface CompraRepository extends JpaRepository<Compra, UUID> {
 
+    /** V0.18.0 (DT-NOVA-1) — compras pendentes de recebimento da conta, para o compromisso da Agenda (RN-NOVA-18). */
+    @EntityGraph(attributePaths = {"fornecedor"})
+    List<Compra> findByUsuarioIdAndStatusAndDeletedAtIsNull(UUID usuarioId, StatusCompra status);
+
     /** RN-053 — inclui excluídas (soft delete): o COM-N de um rascunho excluído nunca volta. */
     Optional<Compra> findTopByUsuarioIdOrderByNumeroDesc(UUID usuarioId);
 
