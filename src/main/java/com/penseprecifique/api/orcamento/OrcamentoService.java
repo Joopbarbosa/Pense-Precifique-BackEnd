@@ -169,10 +169,13 @@ public class OrcamentoService {
 
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolverMisto(pageable, CAMPOS_ORDENACAO_ORCAMENTO,
                 EXPRESSOES_ORDENACAO_ORCAMENTO, "total, createdAt, status, cicloDeVida, cliente.nome, numero");
-        // #994: página numerada exige ordem total — o número do orçamento desempata qualquer coluna não única
-        if (pageableOrdenado.getSort().isSorted() && pageableOrdenado.getSort().getOrderFor("numero") == null) {
+        // #380: a lista sem ordenação escolhida abre pelo número desc; qualquer outra coluna desempata pelo número desc.
+        if (pageableOrdenado.getSort().isUnsorted()) {
             pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
-                    pageableOrdenado.getSort().and(Sort.by(Sort.Direction.ASC, "numero")));
+                    Sort.by(Sort.Direction.DESC, "numero"));
+        } else if (pageableOrdenado.getSort().getOrderFor("numero") == null) {
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    pageableOrdenado.getSort().and(Sort.by(Sort.Direction.DESC, "numero")));
         }
         Page<Orcamento> page = orcamentoRepository.buscar(
                 usuarioId, status, buscaNormalizada, dataCriacaoDeInicio, dataCriacaoAteFim, pageableOrdenado);
