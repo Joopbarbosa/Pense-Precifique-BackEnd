@@ -121,7 +121,7 @@ public class AgendaService {
         int diasAtraso = atrasado ? (int) ChronoUnit.DAYS.between(base.data(), hoje) : 0;
         OrigemCompromisso origem = base.tipo().origem();
         return new CompromissoResponse(
-                base.chave(), base.tipo(), origem, base.situacao(), base.titulo(), base.data(),
+                base.chave(), base.tipo(), origem, base.situacao(), base.titulo(), base.data(), base.dataOriginalOcorrencia(),
                 atrasado ? hoje : base.data(), base.horario(), base.horario() == null, atrasado, diasAtraso,
                 base.marcacoes() == null ? List.of() : base.marcacoes(),
                 base.avisos() == null ? List.of() : base.avisos(),
