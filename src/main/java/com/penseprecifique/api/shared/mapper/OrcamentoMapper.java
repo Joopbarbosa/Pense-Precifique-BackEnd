@@ -15,13 +15,21 @@ import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoProducaoRe
 import com.penseprecifique.api.shared.dto.response.orcamento.OrcamentoResponse;
 import com.penseprecifique.api.shared.dto.response.orcamento.ReciboPagamentoResponse;
 import com.penseprecifique.api.util.IdentificadorFormatter;
+import com.penseprecifique.api.orcamento.EntregaEstimadaCalculadora;
+import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class OrcamentoMapper {
+
+    private final EntregaEstimadaCalculadora entregaEstimadaCalculadora;
+    private final Clock clock;
 
     public OrcamentoResponse toResponse(Orcamento orcamento) {
         OrcamentoResponse response = new OrcamentoResponse();
@@ -32,6 +40,7 @@ public class OrcamentoMapper {
         response.setStatus(orcamento.getStatus());
         response.setTotal(orcamento.getTotal());
         response.setDataValidade(orcamento.getDataValidade());
+        response.setVencido(estaVencido(orcamento));
         response.setCreatedAt(orcamento.getCreatedAt());
         response.setUpdatedAt(orcamento.getUpdatedAt());
         return response;
@@ -70,7 +79,8 @@ public class OrcamentoMapper {
         response.setValorDevolvidoMulta(orcamento.getValorDevolvidoMulta());
         response.setEstornoSinal(orcamento.getEstornoSinal());
         response.setDataEstornoSinal(orcamento.getDataEstornoSinal());
-        response.setDataEntregaEstimada(calcularDataEntregaEstimada(orcamento));
+        response.setDataEntregaEstimada(entregaEstimadaCalculadora.calcular(orcamento));
+        response.setVencido(estaVencido(orcamento));
         response.setItens(itens.stream().map(this::toItemResponse).toList());
         response.setCreatedAt(orcamento.getCreatedAt());
         response.setUpdatedAt(orcamento.getUpdatedAt());
@@ -186,23 +196,24 @@ public class OrcamentoMapper {
         response.setIdentificadorProducao(IdentificadorFormatter.formatar("PRD", vinculo.getProducao().getNumero()));
         LocalDate dataTerminoPrevista = vinculo.getProducao().getDataTerminoPrevista();
         response.setDataTerminoPrevista(dataTerminoPrevista);
-        response.setEstouroPrazo(estouraPrazo(calcularDataEntregaEstimada(vinculo.getOrcamento()), dataTerminoPrevista));
+        response.setEstouroPrazo(estouraPrazo(entregaEstimadaCalculadora.calcular(vinculo.getOrcamento()), dataTerminoPrevista));
         response.setCreatedAt(vinculo.getCreatedAt());
         return response;
     }
 
     /**
-     * RN-ORC-VINC-04 (V0.8.2, #320) — data prometida ao cliente na proposta do orçamento, soma direta
-     * de dias corridos (sem lógica de dias úteis — decisão registrada em {@code decisoes-orcamento.md},
-     * não há precedente de cálculo de dias úteis reaproveitável no projeto). Nulo quando falta
-     * {@code dataAprovacao} ou {@code prazoProducaoDias} (orçamento ainda não aprovado, ou sem prazo
-     * de produção informado — RN-NOVA-3/ORC-018).
+     * RN-NOVA-11 (V0.18.0, DT-NOVA-3) — vencido só em RASCUNHO ou ENVIADO, a partir do dia seguinte à data
+     * de validade (fuso de Brasília pelo {@code Clock}). De APROVADO em diante e em CANCELADO nunca vence.
      */
-    private LocalDate calcularDataEntregaEstimada(Orcamento orcamento) {
-        if (orcamento.getDataAprovacao() == null || orcamento.getPrazoProducaoDias() == null) {
-            return null;
+    private boolean estaVencido(Orcamento orcamento) {
+        if (orcamento.getDataValidade() == null) {
+            return false;
         }
-        return orcamento.getDataAprovacao().toLocalDate().plusDays(orcamento.getPrazoProducaoDias());
+        StatusOrcamento status = orcamento.getStatus();
+        if (status != StatusOrcamento.RASCUNHO && status != StatusOrcamento.ENVIADO) {
+            return false;
+        }
+        return LocalDate.now(clock).isAfter(orcamento.getDataValidade().toLocalDate());
     }
 
     /** RN-ORC-VINC-04 — estoura quando o término real previsto da produção vinculada ultrapassa a

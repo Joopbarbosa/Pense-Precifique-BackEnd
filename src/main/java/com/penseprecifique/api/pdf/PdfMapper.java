@@ -478,7 +478,7 @@ public class PdfMapper {
         if (dias == null) {
             return "—";
         }
-        return dias + (dias == 1 ? " dia útil" : " dias úteis");
+        return dias + (dias == 1 ? " dia" : " dias");
     }
 
     /**

@@ -19,6 +19,8 @@ public class OrcamentoResponse {
     private StatusOrcamento status;
     private BigDecimal total;
     private LocalDateTime dataValidade;
+    /** RN-NOVA-11 (V0.18.0) — RASCUNHO ou ENVIADO com a data de validade já passada; calculado no servidor. */
+    private boolean vencido;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
