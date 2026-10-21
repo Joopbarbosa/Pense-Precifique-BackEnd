@@ -37,6 +37,7 @@ public class OrcamentoController {
 
     private final OrcamentoService orcamentoService;
     private final PdfService pdfService;
+    private final OrcamentoComentarioService comentarioService;
     private final ItemCatalogoService itemCatalogoService;
 
     @GetMapping
@@ -89,6 +90,21 @@ public class OrcamentoController {
     }
 
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
+    /** V0.18.0 (#1038, RN-NOVA-22) — conversa de comentários do orçamento (a mesma na Agenda e no Detalhe); página 0 = mais recentes. */
+    @GetMapping("/{id}/comentarios")
+    public ResponseEntity<org.springframework.data.domain.Page<com.penseprecifique.api.shared.dto.response.orcamento.ComentarioOrcamentoResponse>> comentarios(
+            @PathVariable UUID id,
+            @org.springframework.data.web.PageableDefault(size = OrcamentoComentarioService.TAMANHO_PAGINA_PADRAO) org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(comentarioService.listar(id, pageable));
+    }
+
+    @PostMapping("/{id}/comentarios")
+    public ResponseEntity<com.penseprecifique.api.shared.dto.response.orcamento.ComentarioOrcamentoResponse> comentar(
+            @PathVariable UUID id,
+            @Valid @RequestBody com.penseprecifique.api.shared.dto.request.orcamento.ComentarioOrcamentoRequest request) {
+        return ResponseEntity.status(201).body(comentarioService.comentar(id, request));
+    }
+
     @PostMapping("/{id}/duplicar")
     public ResponseEntity<OrcamentoDetalheResponse> duplicar(@PathVariable UUID id) {
         return ResponseEntity.status(201).body(orcamentoService.duplicar(id));
