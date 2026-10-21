@@ -43,6 +43,8 @@ public class OrcamentoRequest {
     private LocalDate dataInicioEstimada;
 
     private boolean sinalAtivo = false;
+    /** RN-NOVA-12 (V0.18.0) — "Sinal até"; só com sinal ativo e não anterior a hoje (salvo o valor já gravado). */
+    private LocalDate sinalAte;
     private BigDecimal percentualSinal;
     private BigDecimal valorSinal;
 
