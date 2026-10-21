@@ -9,6 +9,14 @@ import java.util.UUID;
 
 public interface HistoricoStatusProducaoRepository extends JpaRepository<HistoricoStatusProducao, UUID> {
 
+    /** V0.18.0 (RN-NOVA-16) — das produções informadas, as que já estiveram EM_ANDAMENTO alguma vez (começaram de fato). */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT DISTINCT h.producao.id FROM HistoricoStatusProducao h
+            WHERE h.producao.id IN :producaoIds AND h.tipoEvento = com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao.STATUS
+            AND h.statusNovo = com.penseprecifique.api.shared.domain.enums.EstadoProducao.EM_ANDAMENTO
+            """)
+    List<UUID> findIdsQueJaEstiveramEmAndamento(@org.springframework.data.repository.query.Param("producaoIds") java.util.Collection<UUID> producaoIds);
+
     // Ordem cronológica (mais antiga primeiro) — exibida como linha do tempo em ProducaoDetalheResponse.
     List<HistoricoStatusProducao> findByProducaoIdOrderByDataTransicaoAsc(UUID producaoId);
 

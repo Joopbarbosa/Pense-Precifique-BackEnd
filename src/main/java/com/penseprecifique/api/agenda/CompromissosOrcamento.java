@@ -48,10 +48,8 @@ public class CompromissosOrcamento implements FonteCompromissos {
         return resultado;
     }
 
-    /** Entra o que cai no período e o pendente atrasado (a Agenda sobe este para hoje). */
     private void adicionar(List<CompromissoBase> destino, CompromissoBase c, LocalDate de, LocalDate ate, LocalDate hoje) {
-        boolean noPeriodo = !c.data().isBefore(de) && !c.data().isAfter(ate);
-        if (noPeriodo || c.data().isBefore(hoje)) {
+        if (relevante(c, de, ate, hoje)) {
             destino.add(c);
         }
     }
