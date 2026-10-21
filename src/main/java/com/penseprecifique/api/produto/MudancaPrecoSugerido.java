@@ -1,5 +1,6 @@
 package com.penseprecifique.api.produto;
 
+import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import jakarta.persistence.*;
 import lombok.*;
@@ -28,9 +29,14 @@ public class MudancaPrecoSugerido {
     @Column(name = "usuario_id", nullable = false)
     private UUID usuarioId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "produto_id", nullable = false)
+    /** Origem exclusiva (V0.18.0, DT-NOVA-13): o produto ou o item de Catálogo, nunca os dois (restrição no banco). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "produto_id")
     private Produto produto;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "item_catalogo_id")
+    private ItemCatalogo itemCatalogo;
 
     @Column(name = "valor_anterior", nullable = false, precision = 15, scale = 2)
     private BigDecimal valorAnterior;

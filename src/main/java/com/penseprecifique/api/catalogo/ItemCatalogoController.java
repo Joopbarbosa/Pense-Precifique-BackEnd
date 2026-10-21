@@ -49,6 +49,14 @@ public class ItemCatalogoController {
         return ResponseEntity.noContent().build();
     }
 
+    /** V0.18.0 (#961, RN-NOVA-28) — histórico do preço sugerido do item, da mais recente para a mais antiga, paginado. */
+    @GetMapping("/{itemId}/historico-preco")
+    public ResponseEntity<org.springframework.data.domain.Page<com.penseprecifique.api.shared.dto.response.catalogo.HistoricoPrecoItemResponse>> historicoPreco(
+            @PathVariable UUID catalogoId, @PathVariable UUID itemId,
+            @org.springframework.data.web.PageableDefault(size = 20) org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(itemCatalogoService.historicoPreco(catalogoId, itemId, pageable));
+    }
+
     @PostMapping("/preview-preco")
     public ResponseEntity<ItemCatalogoPrecoSugeridoResponse> previewPreco(
             @PathVariable UUID catalogoId,

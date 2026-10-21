@@ -349,6 +349,8 @@ public class InsumoService {
         // #672/DT-NOVA-6 — preço sugerido de antes (ao vivo) dos produtos vinculados e dos que os usam como componente
         Set<UUID> afetados = produtoService.comAncestrais(produtoIdsVinculados);
         Map<UUID, BigDecimal> precoSugeridoAntes = produtoService.capturarPrecosSugeridos(afetados);
+        // #961/RN-NOVA-28 — o mesmo para os itens de Catálogo que usam esses produtos ou customizações como componente
+        Map<UUID, BigDecimal> precoItensAntes = itemCatalogoService.capturarPrecosSugeridos(itemCatalogoService.itensComProdutos(afetados));
 
         for (SubstituicaoInsumoRequestDTO substituicao : lista) {
             if (!produtoIdsVinculados.contains(substituicao.produtoId())) {
@@ -365,13 +367,21 @@ public class InsumoService {
         Insumo substituido = insumoRepository.findById(insumoId).orElseThrow();
         produtoService.registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes, CausaPrecoSugerido.INSUMO_SUBSTITUICAO,
                 insumoId, IdentificadorFormatter.formatar("INS", substituido.getNumero()), Map.of());
+        itemCatalogoService.registrarMudancasPrecoSugerido(usuarioId, precoItensAntes, CausaPrecoSugerido.INSUMO_SUBSTITUICAO,
+                insumoId, IdentificadorFormatter.formatar("INS", substituido.getNumero()), Map.of());
     }
 
     /** V0.13.0 (#516, DT-NOVA-1) — vínculo novo: Insumo usado como componente de Item de Catálogo. */
     private void resolverVinculoCatalogo(UUID usuarioId, List<ItemCatalogoComponente> vinculados,
                                           ResolucaoVinculoCatalogoInsumoRequestDTO request) {
+        // #961/RN-NOVA-28 — preço sugerido de antes dos itens de Catálogo que usam o insumo como componente
+        Set<UUID> itensAfetados = vinculados.stream().map(c -> c.getItemCatalogo().getId()).collect(Collectors.toSet());
+        Map<UUID, BigDecimal> precoItensAntes = itemCatalogoService.capturarPrecosSugeridos(itensAfetados);
+        Insumo original = vinculados.isEmpty() ? null : vinculados.get(0).getInsumo();
         if (request.acao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
             itemCatalogoComponenteRepository.deleteAll(vinculados);
+            itemCatalogoComponenteRepository.flush();
+            registrarMudancaDosItens(usuarioId, precoItensAntes, CausaPrecoSugerido.ITEM_EDICAO, original);
             return;
         }
         List<SubstituicaoVinculoCatalogoInsumoRequestDTO> lista = request.substituicoes() != null
@@ -393,6 +403,16 @@ public class InsumoService {
             itemCatalogoComponenteRepository.save(componente);
             itemCatalogoService.recalcularAposSubstituicaoComponente(componente.getItemCatalogo().getId());
         }
+        itemCatalogoComponenteRepository.flush();
+        registrarMudancaDosItens(usuarioId, precoItensAntes, CausaPrecoSugerido.INSUMO_SUBSTITUICAO, original);
+    }
+
+    private void registrarMudancaDosItens(UUID usuarioId, Map<UUID, BigDecimal> antes, CausaPrecoSugerido causa, Insumo original) {
+        if (original == null) {
+            return;
+        }
+        itemCatalogoService.registrarMudancasPrecoSugerido(usuarioId, antes, causa, original.getId(),
+                IdentificadorFormatter.formatar("INS", original.getNumero()), Map.of());
     }
 
     /** INS-010 — reverte a inativação: {@code ativo=true}. Idempotente, sem validação adicional. */
