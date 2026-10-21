@@ -54,7 +54,7 @@ public class CompromissoUsuaria {
     private RecorrenciaCompromisso recorrencia = RecorrenciaCompromisso.NENHUMA;
 
     /** Dias da semana da recorrência semanal, separados por vírgula (MONDAY,THURSDAY). */
-    @Column(name = "dias_semana", length = 30)
+    @Column(name = "dias_semana", length = 60)
     private String diasSemana;
 
     /** Vazia = série indefinida. */

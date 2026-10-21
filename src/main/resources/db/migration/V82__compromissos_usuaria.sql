@@ -10,7 +10,7 @@ CREATE TABLE compromissos_usuaria (
   orcamento_id           UUID REFERENCES orcamentos(id),
   insumo_id              UUID REFERENCES insumos(id),
   recorrencia            VARCHAR(10) NOT NULL DEFAULT 'NENHUMA',
-  dias_semana            VARCHAR(30),
+  dias_semana            VARCHAR(60),
   quantidade_ocorrencias INTEGER,
   situacao               VARCHAR(10) NOT NULL DEFAULT 'PENDENTE',
   observacao_cancelamento VARCHAR(500),
