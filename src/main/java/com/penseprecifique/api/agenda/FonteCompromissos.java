@@ -18,4 +18,10 @@ public interface FonteCompromissos {
      * seu dia.
      */
     List<CompromissoBase> listar(UUID usuarioId, LocalDate de, LocalDate ate, LocalDate hoje);
+
+    /** Entra na resposta o que cai no período e o pendente atrasado (a Agenda sobe este para hoje). */
+    default boolean relevante(CompromissoBase c, LocalDate de, LocalDate ate, LocalDate hoje) {
+        boolean noPeriodo = !c.data().isBefore(de) && !c.data().isAfter(ate);
+        return noPeriodo || (c.pendente() && c.data().isBefore(hoje));
+    }
 }

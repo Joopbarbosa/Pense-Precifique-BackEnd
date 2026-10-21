@@ -15,6 +15,11 @@ import java.util.UUID;
 
 public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
 
+    /** V0.18.0 (DT-NOVA-1) — produções da conta que ainda geram compromisso na Agenda (nem finalizadas, nem canceladas, nem não realizadas). */
+    @Query("SELECT p FROM Producao p WHERE p.usuario.id = :usuarioId AND p.deletedAt IS NULL AND p.estado IN :estados")
+    List<Producao> findEmAberto(@Param("usuarioId") UUID usuarioId,
+                                @Param("estados") java.util.Collection<com.penseprecifique.api.shared.domain.enums.EstadoProducao> estados);
+
     Page<Producao> findByUsuarioIdOrderByNumeroDesc(UUID usuarioId, Pageable pageable);
 
     Optional<Producao> findByIdAndUsuarioId(UUID id, UUID usuarioId);
