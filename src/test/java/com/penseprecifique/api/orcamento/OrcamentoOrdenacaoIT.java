@@ -135,11 +135,17 @@ class OrcamentoOrdenacaoIT {
         seed();
         UUID oDId = novoOrcamento(novoCliente("Delta", 4), 99, new BigDecimal("100.00"),
                 LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.RASCUNHO);
-        // #994: RASCUNHO (A, 100) < ENVIADO (C, 102) < APROVADO (B, 101) — a ordem do ciclo de vida, não a alfabética
+        UUID oFinalizadoId = novoOrcamento(novoCliente("Finalizado", 5), 105, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.FINALIZADO);
+        UUID oPagoId = novoOrcamento(novoCliente("Pago", 6), 106, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.PAGO);
+        UUID oEntregueId = novoOrcamento(novoCliente("Entregue", 7), 107, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.ENTREGUE);
+        // #994/#447: ordenação asc segue o ciclo de vida e coloca PAGO antes de ENTREGUE.
         Sort asc = Sort.by(Sort.Order.asc("cicloDeVida"));
-        assertEquals(List.of(oAId, oDId, oCId, oBId), idsNaOrdem(asc));
+        assertEquals(List.of(oAId, oDId, oCId, oBId, oFinalizadoId, oPagoId, oEntregueId), idsNaOrdem(asc));
         Sort desc = Sort.by(Sort.Order.desc("cicloDeVida"));
-        assertEquals(List.of(oBId, oCId, oAId, oDId), idsNaOrdem(desc));
+        assertEquals(List.of(oEntregueId, oPagoId, oFinalizadoId, oBId, oCId, oAId, oDId), idsNaOrdem(desc));
     }
 
     @Test
