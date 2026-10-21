@@ -60,6 +60,18 @@ public class Orcamento {
     @Column(name = "data_aprovacao")
     private LocalDateTime dataAprovacao;
 
+    /** RN-NOVA-12 (V0.18.0, #1035) — data limite combinada para o sinal; só com sinal ativo. */
+    @Column(name = "sinal_ate")
+    private LocalDate sinalAte;
+
+    /** RN-NOVA-14 (V0.18.0) — setado uma única vez na transição RASCUNHO → ENVIADO, nunca sobrescrito. */
+    @Column(name = "data_envio")
+    private LocalDateTime dataEnvio;
+
+    /** RN-NOVA-14 (V0.18.0) — setado uma única vez ao chegar em FINALIZADO (inclusive pelo atalho de aprovação). */
+    @Column(name = "data_finalizacao")
+    private LocalDateTime dataFinalizacao;
+
     @Column(name = "sinal_ativo", nullable = false)
     @Builder.Default
     private Boolean sinalAtivo = false;

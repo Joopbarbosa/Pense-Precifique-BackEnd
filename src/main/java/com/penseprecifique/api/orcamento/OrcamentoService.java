@@ -283,6 +283,7 @@ public class OrcamentoService {
                 PapelCadastro.CLIENTE, null);
 
         validarRegras(request);
+        validarSinalAte(request, null);
 
         TipoDesconto tipoDesconto = parseTipoDesconto(request.getTipoDesconto());
 
@@ -296,6 +297,7 @@ public class OrcamentoService {
                 .prazoProducaoDias(request.getPrazoProducaoDias())
                 .inicioAssimQueAprovado(request.isInicioAssimQueAprovado())
                 .dataInicioEstimada(request.getDataInicioEstimada())
+                .sinalAte(request.getSinalAte())
                 .sinalAtivo(request.isSinalAtivo())
                 .percentualSinal(request.getPercentualSinal())
                 .descontoTipo(tipoDesconto)
@@ -358,6 +360,7 @@ public class OrcamentoService {
                 PapelCadastro.CLIENTE, orcamento.getCliente() != null ? orcamento.getCliente().getId() : null);
 
         validarRegras(request);
+        validarSinalAte(request, orcamento.getSinalAte());
         for (OrcamentoItemRequest itemReq : request.getItens()) {
             validarOrigemItem(itemReq);
         }
@@ -405,6 +408,7 @@ public class OrcamentoService {
         orcamento.setPrazoProducaoDias(request.getPrazoProducaoDias());
         orcamento.setInicioAssimQueAprovado(request.isInicioAssimQueAprovado());
         orcamento.setDataInicioEstimada(request.getDataInicioEstimada());
+        orcamento.setSinalAte(request.getSinalAte());
         orcamento.setSinalAtivo(request.isSinalAtivo());
         orcamento.setPercentualSinal(request.getPercentualSinal());
         orcamento.setDescontoTipo(tipoDesconto);
@@ -475,6 +479,7 @@ public class OrcamentoService {
         request.setDescontoValor(original.getDescontoValor());
         request.setObservacoes(original.getObservacoes());
         request.setDataValidade(null);
+        request.setSinalAte(null);
 
         List<OrcamentoItemRequest> itensRequest = new ArrayList<>();
         for (OrcamentoItem itemOriginal : orcamentoItemRepository.findByOrcamentoId(original.getId())) {
@@ -896,6 +901,9 @@ public class OrcamentoService {
         switch (atual) {
             case RASCUNHO:
                 orcamento.setStatus(StatusOrcamento.ENVIADO);
+                if (orcamento.getDataEnvio() == null) {
+                    orcamento.setDataEnvio(LocalDateTime.now());
+                }
                 break;
 
             case ENVIADO:
@@ -922,6 +930,9 @@ public class OrcamentoService {
                         orcamento.setDataAprovacao(LocalDateTime.now());
                         baixarEstoque(orcamento, itensAtalho);
                         orcamento.setStatus(StatusOrcamento.FINALIZADO);
+                        if (orcamento.getDataFinalizacao() == null) {
+                            orcamento.setDataFinalizacao(LocalDateTime.now());
+                        }
                         break;
                     }
                     // bloqueio duro (produto sem permitirEstoqueNegativo e insuficiente) — atalho não
@@ -1016,6 +1027,9 @@ public class OrcamentoService {
                 }
                 baixarEstoque(orcamento, itensParaBaixa);
                 orcamento.setStatus(StatusOrcamento.FINALIZADO);
+                if (orcamento.getDataFinalizacao() == null) {
+                    orcamento.setDataFinalizacao(LocalDateTime.now());
+                }
                 break;
 
             case FINALIZADO:
@@ -1820,6 +1834,23 @@ public class OrcamentoService {
                 throw new BusinessException(
                         "Quando o sinal está ativo, o percentual ou o valor do sinal deve ser maior que zero");
             }
+        }
+    }
+
+    /**
+     * RN-NOVA-12 (V0.18.0, DT-NOVA-4) — "Sinal até" só existe com sinal ativo e não pode ser anterior a hoje; editar
+     * um orçamento cujo "Sinal até" já passou mantém o valor gravado sem bloquear.
+     */
+    private void validarSinalAte(OrcamentoRequest request, LocalDate sinalAteGravado) {
+        LocalDate sinalAte = request.getSinalAte();
+        if (sinalAte == null) {
+            return;
+        }
+        if (!request.isSinalAtivo()) {
+            throw new BusinessException("A data do sinal só vale quando o sinal está ativo");
+        }
+        if (sinalAte.isBefore(LocalDate.now(clock)) && !sinalAte.equals(sinalAteGravado)) {
+            throw BusinessException.noCampo("sinalAte", "A data do sinal não pode ser anterior a hoje");
         }
     }
 

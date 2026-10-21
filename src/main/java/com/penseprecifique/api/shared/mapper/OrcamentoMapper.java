@@ -80,6 +80,10 @@ public class OrcamentoMapper {
         response.setEstornoSinal(orcamento.getEstornoSinal());
         response.setDataEstornoSinal(orcamento.getDataEstornoSinal());
         response.setDataEntregaEstimada(entregaEstimadaCalculadora.calcular(orcamento));
+        response.setSinalAte(orcamento.getSinalAte());
+        response.setDataEnvio(orcamento.getDataEnvio());
+        response.setDataFinalizacao(orcamento.getDataFinalizacao());
+        response.setDataCancelamento(orcamento.getDataCancelamento());
         response.setVencido(estaVencido(orcamento));
         response.setItens(itens.stream().map(this::toItemResponse).toList());
         response.setCreatedAt(orcamento.getCreatedAt());

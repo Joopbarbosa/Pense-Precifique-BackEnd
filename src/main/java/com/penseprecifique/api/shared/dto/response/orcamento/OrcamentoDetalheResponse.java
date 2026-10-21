@@ -27,6 +27,12 @@ public class OrcamentoDetalheResponse {
     private boolean inicioAssimQueAprovado;
     private LocalDate dataInicioEstimada;
     private LocalDateTime dataAprovacao;
+    /** RN-NOVA-12 (V0.18.0) — data limite combinada para o sinal. */
+    private LocalDate sinalAte;
+    /** RN-NOVA-14 (V0.18.0) — passos do histórico; nulos nos orçamentos anteriores (sem registro retroativo). */
+    private LocalDateTime dataEnvio;
+    private LocalDateTime dataFinalizacao;
+    private LocalDateTime dataCancelamento;
     /** RN-NOVA-8 (V0.18.0, #444) — entrega estimada em dias corridos a partir do sinal pago (com sinal) ou da
      * aprovação (sem sinal), com a data de início estimada como piso; nulo sem prazo de produção ou com sinal
      * ainda não pago. Usada também contra {@code Producao.dataTerminoPrevista} (RN-ORC-VINC-04). */

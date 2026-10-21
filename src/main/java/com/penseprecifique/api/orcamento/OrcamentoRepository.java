@@ -17,6 +17,17 @@ import java.util.UUID;
 public interface OrcamentoRepository extends JpaRepository<Orcamento, UUID> {
 
     /**
+     * V0.18.0 (DT-NOVA-1) — orçamentos da conta que ainda geram compromisso na Agenda (fora de ENTREGUE e
+     * CANCELADO), já com o cliente, para o título. A Agenda calcula as datas em memória a partir deles.
+     */
+    @Query("""
+            SELECT o FROM Orcamento o JOIN FETCH o.cliente
+            WHERE o.usuario.id = :usuarioId AND o.deletedAt IS NULL AND o.status NOT IN :encerrados
+            """)
+    List<Orcamento> findEmAbertoComCliente(@Param("usuarioId") UUID usuarioId,
+                                           @Param("encerrados") java.util.Collection<StatusOrcamento> encerrados);
+
+    /**
      * Frente 3/P-BE-CONSOLIDADO-001 — substitui as 4 combinações antigas de derived query
      * (status x busca) por uma única query com condições opcionais, já incluindo o filtro novo de
      * intervalo de createdAt (dataCriacaoDe/dataCriacaoAte). Mesmo padrão de
