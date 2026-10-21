@@ -149,6 +149,15 @@ class CompromissosUsuariaIT {
         assertTrue(avulsos(terca, terca.plusDays(40)).stream().allMatch(c -> c.situacao() == SituacaoCompromisso.PENDENTE));
     }
 
+    /** Os sete dias da semana cabem na série (achado do E2E: a coluna dos dias era curta e a criação dava erro). */
+    @Test
+    void recorrenciaSemanalComOsSeteDiasDaSemana() {
+        seed();
+        LocalDate inicio = proximo(DayOfWeek.MONDAY, 1);
+        service.criar(serie("Todo dia", inicio, RecorrenciaCompromisso.SEMANAL, List.of(DayOfWeek.values()), 10));
+        assertEquals(10, avulsos(inicio, inicio.plusDays(20)).size());
+    }
+
     /** CEN-NOVO-55 — mensal no dia 31 cai no último dia dos meses curtos (31/01, 28/02, 31/03 de 2027). */
     @Test
     void recorrenciaMensalNoDia31() {

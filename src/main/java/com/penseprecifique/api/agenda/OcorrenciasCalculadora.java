@@ -1,7 +1,6 @@
 package com.penseprecifique.api.agenda;
 
 import com.penseprecifique.api.shared.domain.entity.CompromissoUsuaria;
-import com.penseprecifique.api.shared.domain.enums.RecorrenciaCompromisso;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
