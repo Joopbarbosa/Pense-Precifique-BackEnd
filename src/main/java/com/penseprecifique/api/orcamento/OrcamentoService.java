@@ -965,7 +965,10 @@ public class OrcamentoService {
                 // já usado por RN-NOVA-6 (ver DECISOES_V0.8.3.md).
                 List<ProducaoResumoResponse> vinculosOrfaos = new ArrayList<>();
                 List<String> producoesPendentes = new ArrayList<>();
-                for (OrcamentoProducao vinculo : orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId())) {
+                // ORC-047 (#398) — a lista de produções (pendentes e canceladas) sai sempre pelo número, do menor para o maior.
+                List<OrcamentoProducao> vinculosDoOrcamento = new ArrayList<>(orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()));
+                vinculosDoOrcamento.sort(java.util.Comparator.comparing(v -> v.getProducao().getNumero()));
+                for (OrcamentoProducao vinculo : vinculosDoOrcamento) {
                     Producao producaoVinculada = vinculo.getProducao();
                     EstadoProducao estadoVinculado = producaoVinculada.getEstado();
                     String identificadorVinculado = IdentificadorFormatter.formatar("PRD", producaoVinculada.getNumero());
