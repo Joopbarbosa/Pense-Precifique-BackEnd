@@ -24,6 +24,8 @@ public record CompromissoResponse(
         SituacaoCompromisso situacao,
         String titulo,
         LocalDate dataOrigem,
+        /** Só nas ocorrências do compromisso da usuária: identifica a ocorrência nas ações (concluir, editar, cancelar). */
+        LocalDate dataOriginalOcorrencia,
         LocalDate dataExibicao,
         @JsonFormat(pattern = "HH:mm") LocalTime horario,
         boolean diaInteiro,
