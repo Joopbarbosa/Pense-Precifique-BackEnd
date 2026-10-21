@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -63,13 +64,13 @@ public class AgendaService {
             .thenComparing(i -> i.base().dataOriginalOcorrencia(), Comparator.nullsLast(Comparator.naturalOrder()))
             .thenComparing(i -> i.resposta().chave());
 
-    /** Compromissos cuja data de exibição cai no período, na ordem da Agenda. */
+    /** Compromissos cujo trecho (da data de origem até a data final, que no atrasado é hoje) toca o período, na ordem da Agenda. */
     @Transactional(readOnly = true)
     public List<CompromissoResponse> compromissos(LocalDate de, LocalDate ate) {
         validarPeriodo(de, ate);
         LocalDate hoje = LocalDate.now(clock);
         return coletar(getUsuarioIdAutenticado(), de, ate, hoje).stream()
-                .filter(i -> !i.resposta().dataExibicao().isBefore(de) && !i.resposta().dataExibicao().isAfter(ate))
+                .filter(i -> !i.resposta().dataFim().isBefore(de) && !i.resposta().dataExibicao().isAfter(ate))
                 .sorted(Comparator.comparing((Item i) -> i.resposta().dataExibicao()).thenComparing(ORDEM_DO_DIA))
                 .map(Item::resposta)
                 .toList();
@@ -116,13 +117,23 @@ public class AgendaService {
         return resultado;
     }
 
+    /**
+     * RN-NOVA-4 v2 — atrasado é o pendente de data anterior a hoje ou, tendo horário, de hoje com a hora já passada
+     * (minuto a minuto, Brasília). O atrasado fica no dia original e segue até hoje ({@code dataFim}).
+     */
     private CompromissoResponse paraResposta(CompromissoBase base, LocalDate hoje) {
-        boolean atrasado = base.pendente() && base.data().isBefore(hoje);
-        int diasAtraso = atrasado ? (int) ChronoUnit.DAYS.between(base.data(), hoje) : 0;
+        LocalTime agora = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES);
+        boolean atrasoPorData = base.pendente() && base.data().isBefore(hoje);
+        boolean atrasoPorHorario = base.pendente() && base.data().equals(hoje) && base.horario() != null
+                && base.horario().isBefore(agora);
+        boolean atrasado = atrasoPorData || atrasoPorHorario;
+        int diasAtraso = atrasoPorData ? (int) ChronoUnit.DAYS.between(base.data(), hoje) : 0;
+        int minutosAtraso = atrasoPorHorario ? (int) ChronoUnit.MINUTES.between(base.horario(), agora) : 0;
         OrigemCompromisso origem = base.tipo().origem();
         return new CompromissoResponse(
                 base.chave(), base.tipo(), origem, base.situacao(), base.titulo(), base.data(), base.dataOriginalOcorrencia(),
-                atrasado ? hoje : base.data(), base.horario(), base.horario() == null, atrasado, diasAtraso,
+                base.data(), base.horario(), base.horario() == null, atrasado, diasAtraso,
+                atrasado ? hoje : base.data(), minutosAtraso,
                 base.marcacoes() == null ? List.of() : base.marcacoes(),
                 base.avisos() == null ? List.of() : base.avisos(),
                 base.referenciaId(), base.identificador(), base.valor());

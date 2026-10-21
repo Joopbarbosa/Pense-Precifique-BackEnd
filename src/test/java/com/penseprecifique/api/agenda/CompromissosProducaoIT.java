@@ -146,7 +146,8 @@ class CompromissosProducaoIT {
         CompromissoResponse c = doTipo(janela(3), TipoCompromisso.TERMINO_PRODUCAO).get(0);
         assertTrue(c.atrasado());
         assertEquals(3, c.diasAtraso());
-        assertEquals(hoje, c.dataExibicao());
+        assertEquals(hoje.minusDays(3), c.dataExibicao());
+        assertEquals(hoje, c.dataFim());
         mudarEstado(p, EstadoProducao.FINALIZADA);
         assertTrue(doTipo(janela(3), TipoCompromisso.TERMINO_PRODUCAO).isEmpty());
     }

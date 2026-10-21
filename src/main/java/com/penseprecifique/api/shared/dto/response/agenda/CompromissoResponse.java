@@ -12,9 +12,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * V0.18.0 (DT-NOVA-2) — compromisso da Agenda já pronto para exibir. O atraso (RN-NOVA-4) é calculado no servidor:
- * o frontend só mostra {@code atrasado} e {@code diasAtraso}. {@code dataExibicao} é a data da origem, ou hoje
- * quando o compromisso está atrasado.
+ * V0.18.0 (DT-NOVA-2) — compromisso da Agenda já pronto para exibir. O atraso (RN-NOVA-4 v2) é calculado no servidor:
+ * o frontend só mostra {@code atrasado}, {@code diasAtraso} e {@code minutosAtraso}. {@code dataExibicao} é o primeiro dia
+ * do compromisso (a data da origem); {@code dataFim} é o último: hoje quando está atrasado (a barra de continuidade
+ * vai de um ao outro) e a própria data da origem nos demais.
  */
 public record CompromissoResponse(
         /** Identificador estável do compromisso (tipo + origem, e a data original nas ocorrências de série). */
@@ -31,6 +32,10 @@ public record CompromissoResponse(
         boolean diaInteiro,
         boolean atrasado,
         int diasAtraso,
+        /** Último dia em que o compromisso aparece: hoje se atrasado, senão a data da origem. */
+        LocalDate dataFim,
+        /** Atraso por horário (compromisso de hoje com a hora já passada): minutos desde o horário; zero no atraso por data. */
+        int minutosAtraso,
         /** Marcações curtas ("Travada"); a tela só as exibe. */
         List<String> marcacoes,
         /** Avisos do compromisso (o de estouro de entrega da produção, RN-NOVA-17). */
