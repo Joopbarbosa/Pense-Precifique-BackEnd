@@ -112,8 +112,7 @@ public class OrcamentoService {
     );
 
     /**
-     * #994 (RN-NOVA-31 item 3) — a coluna Status ordena pelo ciclo de vida do orçamento (rascunho até pago/cancelado), não
-     * pela ordem alfabética (a mesma dos filtros da tela: ... Finalizado, Entregue, Pago, Cancelado); no servidor, para valer em todas as páginas (antes era reordenada na tela, só na página carregada).
+     * #994/#447 — a coluna Status ordena pelo ciclo de vida do orçamento, não pela ordem alfabética; no servidor, para valer em todas as páginas.
      */
     // O COALESCE faz o Spring Data tratar a expressão como função, sem prefixar o alias da consulta.
     private static final Map<String, String> EXPRESSOES_ORDENACAO_ORCAMENTO = Map.of(
@@ -125,8 +124,8 @@ public class OrcamentoService {
                     + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.SINAL_PAGO THEN 4 "
                     + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.EM_PRODUCAO THEN 5 "
                     + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.FINALIZADO THEN 6 "
-                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE THEN 7 "
-                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.PAGO THEN 8 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.PAGO THEN 7 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE THEN 8 "
                     + "ELSE 9 END, 9)"
     );
 
