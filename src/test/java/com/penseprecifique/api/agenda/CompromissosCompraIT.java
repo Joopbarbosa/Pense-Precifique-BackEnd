@@ -59,7 +59,7 @@ class CompromissosCompraIT {
     }
 
     private List<CompromissoResponse> compras(int dias) {
-        return agendaService.compromissos(hoje, hoje.plusDays(dias)).stream()
+        return agendaService.compromissos(hoje.minusDays(5), hoje.plusDays(dias)).stream()
                 .filter(c -> c.tipo() == TipoCompromisso.RECEBIMENTO_COMPRA).toList();
     }
 
@@ -84,7 +84,6 @@ class CompromissosCompraIT {
         assertTrue(c.atrasado());
         assertEquals(3, c.diasAtraso());
         assertEquals(hoje.minusDays(3), c.dataExibicao());
-        assertEquals(hoje, c.dataFim());
     }
 
     /** RN-NOVA-5 — confirmada, cancelada ou excluída sai da Agenda. */

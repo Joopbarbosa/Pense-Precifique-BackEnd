@@ -288,14 +288,15 @@ class CompromissosUsuariaIT {
         assertNull(service.detalhe(d.id(), terca.plusDays(14)).insumo(), "a que herda segue o mestre, agora sem insumo");
     }
 
-    /** CEN-NOVO-62 — pendente vencido fica atrasado e sobe para hoje; ao concluir, fica riscado em hoje. */
+    /** CEN-NOVO-62 (v3) — pendente vencido fica atrasado no dia original; ao concluir, fica riscado nele. */
     @Test
     void vencidoFicaAtrasadoEConcluirRiscaEmHoje() {
         seed();
         var d = service.criar(simples("Levar encomenda à transportadora", hoje.minusDays(3)));
-        CompromissoResponse c = avulsos(hoje, hoje).get(0);
+        CompromissoResponse c = avulsos(hoje.minusDays(3), hoje).get(0);
         assertTrue(c.atrasado());
         assertEquals(3, c.diasAtraso());
+        assertTrue(avulsos(hoje, hoje).isEmpty(), "o atrasado não sobe para hoje (#1060)");
         service.concluir(d.id(), d.dataOriginal());
         // concluído no passado não é mais atrasado: continua no dia original, riscado
         CompromissoResponse concluido = avulsos(hoje.minusDays(3), hoje.minusDays(3)).get(0);

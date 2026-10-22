@@ -175,12 +175,11 @@ class CompromissosOrcamentoIT {
         Orcamento o = orcamentoRepository.findById(id).orElseThrow();
         o.setSinalAte(hoje.minusDays(3)); // o tempo passou: a data combinada ficou para trás
         orcamentoRepository.save(o);
-        List<CompromissoResponse> sinais = doTipo(agenda(hoje, hoje), TipoCompromisso.SINAL_A_RECEBER);
+        List<CompromissoResponse> sinais = doTipo(agenda(hoje.minusDays(3), hoje), TipoCompromisso.SINAL_A_RECEBER);
         assertEquals(1, sinais.size());
         assertTrue(sinais.get(0).atrasado());
         assertEquals(3, sinais.get(0).diasAtraso());
         assertEquals(hoje.minusDays(3), sinais.get(0).dataExibicao());
-        assertEquals(hoje, sinais.get(0).dataFim());
     }
 
     /** CEN-NOVO-30 — "Sinal até" no passado bloqueia ao criar; sem sinal ativo também bloqueia; editar mantendo o gravado passa. */

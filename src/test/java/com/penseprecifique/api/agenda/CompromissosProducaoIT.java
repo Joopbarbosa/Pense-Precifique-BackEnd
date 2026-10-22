@@ -105,7 +105,7 @@ class CompromissosProducaoIT {
     }
 
     private List<CompromissoResponse> janela(int dias) {
-        return agendaService.compromissos(hoje.minusDays(0), hoje.plusDays(dias));
+        return agendaService.compromissos(hoje.minusDays(5), hoje.plusDays(dias)); // o atrasado fica no dia original (#1060)
     }
 
     private List<CompromissoResponse> doTipo(List<CompromissoResponse> l, TipoCompromisso t) {
@@ -147,7 +147,6 @@ class CompromissosProducaoIT {
         assertTrue(c.atrasado());
         assertEquals(3, c.diasAtraso());
         assertEquals(hoje.minusDays(3), c.dataExibicao());
-        assertEquals(hoje, c.dataFim());
         mudarEstado(p, EstadoProducao.FINALIZADA);
         assertTrue(doTipo(janela(3), TipoCompromisso.TERMINO_PRODUCAO).isEmpty());
     }

@@ -64,13 +64,13 @@ public class AgendaService {
             .thenComparing(i -> i.base().dataOriginalOcorrencia(), Comparator.nullsLast(Comparator.naturalOrder()))
             .thenComparing(i -> i.resposta().chave());
 
-    /** Compromissos cujo trecho (da data de origem até a data final, que no atrasado é hoje) toca o período, na ordem da Agenda. */
+    /** Compromissos cuja data de origem cai no período, na ordem da Agenda. */
     @Transactional(readOnly = true)
     public List<CompromissoResponse> compromissos(LocalDate de, LocalDate ate) {
         validarPeriodo(de, ate);
         LocalDate hoje = LocalDate.now(clock);
         return coletar(getUsuarioIdAutenticado(), de, ate, hoje).stream()
-                .filter(i -> !i.resposta().dataFim().isBefore(de) && !i.resposta().dataExibicao().isAfter(ate))
+                .filter(i -> !i.resposta().dataExibicao().isBefore(de) && !i.resposta().dataExibicao().isAfter(ate))
                 .sorted(Comparator.comparing((Item i) -> i.resposta().dataExibicao()).thenComparing(ORDEM_DO_DIA))
                 .map(Item::resposta)
                 .toList();
@@ -119,7 +119,7 @@ public class AgendaService {
 
     /**
      * RN-NOVA-4 v2 — atrasado é o pendente de data anterior a hoje ou, tendo horário, de hoje com a hora já passada
-     * (minuto a minuto, Brasília). O atrasado fica no dia original e segue até hoje ({@code dataFim}).
+     * (minuto a minuto, Brasília). O atrasado fica no dia original, como um compromisso normal.
      */
     private CompromissoResponse paraResposta(CompromissoBase base, LocalDate hoje) {
         LocalTime agora = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES);
@@ -133,7 +133,7 @@ public class AgendaService {
         return new CompromissoResponse(
                 base.chave(), base.tipo(), origem, base.situacao(), base.titulo(), base.data(), base.dataOriginalOcorrencia(),
                 base.data(), base.horario(), base.horario() == null, atrasado, diasAtraso,
-                atrasado ? hoje : base.data(), minutosAtraso,
+                minutosAtraso,
                 base.marcacoes() == null ? List.of() : base.marcacoes(),
                 base.avisos() == null ? List.of() : base.avisos(),
                 base.referenciaId(), base.identificador(), base.valor());
