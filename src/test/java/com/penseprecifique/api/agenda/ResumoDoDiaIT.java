@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** V0.18.0 (#1071, RN-NOVA-27) — Resumo do dia: contagens, "a pagar" indisponível e insumos que as produções do dia precisam. CEN-NOVO-107 a 111. */
+/** V0.18.0 (#1071, RN-NOVA-27) — Resumo do dia: contagens, "a pagar" indisponível e insumos que as produções do dia precisam. CEN-NOVO-107 a 112. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ResumoDoDiaIT {
 
