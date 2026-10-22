@@ -2,6 +2,7 @@ package com.penseprecifique.api.agenda;
 
 import com.penseprecifique.api.shared.dto.response.agenda.AgendaResumoResponse;
 import com.penseprecifique.api.shared.dto.response.agenda.CompromissoResponse;
+import com.penseprecifique.api.shared.dto.response.agenda.ResumoDoDiaResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +36,7 @@ public class AgendaController {
 
     private final AgendaService agendaService;
     private final CompromissoUsuariaService compromissoUsuariaService;
+    private final ResumoDoDiaService resumoDoDiaService;
 
     @GetMapping("/compromissos")
     public ResponseEntity<List<CompromissoResponse>> compromissos(
@@ -46,6 +48,11 @@ public class AgendaController {
     @GetMapping("/resumo")
     public ResponseEntity<AgendaResumoResponse> resumo() {
         return ResponseEntity.ok(agendaService.resumo());
+    }
+
+    @GetMapping("/resumo-do-dia")
+    public ResponseEntity<ResumoDoDiaResponse> resumoDoDia() {
+        return ResponseEntity.ok(resumoDoDiaService.resumo());
     }
 
     @GetMapping("/atrasados")

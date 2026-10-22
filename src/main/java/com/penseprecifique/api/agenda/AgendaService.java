@@ -89,6 +89,17 @@ public class AgendaService {
         return new AgendaResumoResponse(atrasados, deHoje);
     }
 
+    /** #1071 — pendentes de hoje e atrasados (qualquer período), do mais antigo ao mais recente, na ordem da Agenda. */
+    @Transactional(readOnly = true)
+    public List<CompromissoResponse> pendentesAteHoje() {
+        LocalDate hoje = LocalDate.now(clock);
+        return coletar(getUsuarioIdAutenticado(), hoje, hoje, hoje).stream()
+                .filter(i -> i.resposta().situacao() == SituacaoCompromisso.PENDENTE && !i.resposta().dataOrigem().isAfter(hoje))
+                .sorted(Comparator.comparing((Item i) -> i.resposta().dataOrigem()).thenComparing(ORDEM_DO_DIA))
+                .map(Item::resposta)
+                .toList();
+    }
+
     /** RN-NOVA-3 — lista de atrasados, do mais antigo para o mais recente, paginada (RN-086). */
     @Transactional(readOnly = true)
     public Page<CompromissoResponse> atrasados(Pageable pageable) {

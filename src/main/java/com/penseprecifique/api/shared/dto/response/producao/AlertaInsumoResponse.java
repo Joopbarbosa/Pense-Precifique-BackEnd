@@ -11,6 +11,8 @@ import java.math.BigDecimal;
 public class AlertaInsumoResponse {
 
     private String nomeInsumo;
+    /** V0.18.0 (#1071) — sigla da unidade do insumo, para o Resumo do dia; nula para produto base. */
+    private String siglaUnidade;
     private BigDecimal estoqueAtual;
     private BigDecimal quantidadeNecessaria;
     private SituacaoAlertaInsumo situacao;

@@ -1640,12 +1640,30 @@ public class ProducaoService {
 
             AlertaInsumoResponse alerta = new AlertaInsumoResponse();
             alerta.setNomeInsumo(nome);
+            Insumo insumoDoAlerta = insumosPorId.get(componenteId);
+            if (insumoDoAlerta != null && insumoDoAlerta.getUnidadeMedida() != null) {
+                alerta.setSiglaUnidade(insumoDoAlerta.getUnidadeMedida().getSigla());
+            }
             alerta.setEstoqueAtual(estoqueAtual);
             alerta.setQuantidadeNecessaria(necessaria);
             alerta.setSituacao(situacao);
             alertas.add(alerta);
         }
         return alertas;
+    }
+
+    /**
+     * V0.18.0 (#1071, RN-NOVA-27) — o que as produções informadas precisam, somado por componente e comparado com o estoque
+     * de agora, para o Resumo do dia. Só considera produções da própria usuária; id de outra conta é ignorado.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertaInsumoResponse> alertasDeInsumosDasProducoes(UUID usuarioId, java.util.Collection<UUID> producaoIds) {
+        List<ProducaoProduto> produtos = new ArrayList<>();
+        for (UUID id : producaoIds) {
+            producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                    .ifPresent(producao -> produtos.addAll(producaoProdutoRepository.findByProducaoId(producao.getId())));
+        }
+        return calcularAlertasAoVivo(produtos);
     }
 
     /**
@@ -1709,6 +1727,10 @@ public class ProducaoService {
 
             AlertaInsumoResponse alerta = new AlertaInsumoResponse();
             alerta.setNomeInsumo(nome);
+            Insumo insumoDoAlerta = insumosPorId.get(componenteId);
+            if (insumoDoAlerta != null && insumoDoAlerta.getUnidadeMedida() != null) {
+                alerta.setSiglaUnidade(insumoDoAlerta.getUnidadeMedida().getSigla());
+            }
             alerta.setEstoqueAtual(estoqueAtual);
             alerta.setQuantidadeNecessaria(necessaria);
             alerta.setSituacao(situacao);
