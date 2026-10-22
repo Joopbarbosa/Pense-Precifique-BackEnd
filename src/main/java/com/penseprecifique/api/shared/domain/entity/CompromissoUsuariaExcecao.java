@@ -48,6 +48,10 @@ public class CompromissoUsuariaExcecao {
 
     private LocalTime horario;
 
+    /** Término da ocorrência quando o horário é próprio (#1063). */
+    @Column(name = "horario_fim")
+    private LocalTime horarioFim;
+
     /** true quando o horário (inclusive "sem horário") é próprio da ocorrência; false herda o do mestre. */
     @Column(name = "horario_proprio", nullable = false)
     @Builder.Default

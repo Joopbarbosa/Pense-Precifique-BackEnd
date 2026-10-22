@@ -22,9 +22,16 @@ public record CompromissoUsuariaRequest(
         @NotNull(message = "Informe a data")
         LocalDate data,
         LocalTime horario,
+        /** Hora de término opcional (#1063); exige horário e deve ser posterior a ele. */
+        LocalTime horarioFim,
         UUID orcamentoId,
         UUID insumoId,
         RecorrenciaCompromisso recorrencia,
         List<DayOfWeek> diasSemana,
         Integer quantidadeOcorrencias
-) {}
+) {
+    public CompromissoUsuariaRequest(String titulo, LocalDate data, LocalTime horario, UUID orcamentoId, UUID insumoId,
+                                     RecorrenciaCompromisso recorrencia, List<DayOfWeek> diasSemana, Integer quantidadeOcorrencias) {
+        this(titulo, data, horario, null, orcamentoId, insumoId, recorrencia, diasSemana, quantidadeOcorrencias);
+    }
+}

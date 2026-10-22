@@ -40,6 +40,10 @@ public class CompromissoUsuaria {
 
     private LocalTime horario;
 
+    /** Hora de término opcional (#1063); exige horário e é posterior a ele. */
+    @Column(name = "horario_fim")
+    private LocalTime horarioFim;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "orcamento_id")
     private Orcamento orcamento;

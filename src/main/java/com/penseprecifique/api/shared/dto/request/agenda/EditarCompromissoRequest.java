@@ -22,6 +22,12 @@ public record EditarCompromissoRequest(
         String titulo,
         LocalDate data,
         LocalTime horario,
+        /** Hora de término opcional (#1063); exige horário e deve ser posterior a ele. */
+        LocalTime horarioFim,
         UUID orcamentoId,
         UUID insumoId
-) {}
+) {
+    public EditarCompromissoRequest(EscopoEdicaoCompromisso escopo, String titulo, LocalDate data, LocalTime horario, UUID orcamentoId, UUID insumoId) {
+        this(escopo, titulo, data, horario, null, orcamentoId, insumoId);
+    }
+}

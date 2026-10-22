@@ -117,6 +117,47 @@ class CompromissosUsuariaIT {
         assertFalse(d.insumo().removido());
     }
 
+    /** CEN-NOVO-92 (#1063) — hora de término grava, volta na Agenda e na resposta do detalhe; sem término segue nulo. */
+    @Test
+    void horaDeTerminoGravaEVolta() {
+        seed();
+        var d = service.criar(new CompromissoUsuariaRequest("Reunião", hoje.plusDays(1), LocalTime.of(14, 0), LocalTime.of(15, 30),
+                null, null, null, null, null));
+        assertEquals(LocalTime.of(15, 30), d.horarioFim());
+        CompromissoResponse r = avulsos(hoje.plusDays(1), hoje.plusDays(1)).get(0);
+        assertEquals(LocalTime.of(14, 0), r.horario());
+        assertEquals(LocalTime.of(15, 30), r.horarioFim());
+        service.criar(simples("Sem término", hoje.plusDays(1)));
+        assertEquals(1, avulsos(hoje.plusDays(1), hoje.plusDays(1)).stream().filter(c -> c.horarioFim() == null).count());
+    }
+
+    /** CEN-NOVO-93 (#1063, BLOQUEIO) — término igual ou anterior ao início, ou sem início, não grava. */
+    @Test
+    void terminoInvalidoBloqueia() {
+        seed();
+        assertThrows(BusinessException.class, () -> service.criar(new CompromissoUsuariaRequest("A", hoje, LocalTime.of(14, 0), LocalTime.of(13, 0), null, null, null, null, null)));
+        assertThrows(BusinessException.class, () -> service.criar(new CompromissoUsuariaRequest("B", hoje, LocalTime.of(14, 0), LocalTime.of(14, 0), null, null, null, null, null)));
+        assertThrows(BusinessException.class, () -> service.criar(new CompromissoUsuariaRequest("C", hoje, null, LocalTime.of(14, 0), null, null, null, null, null)));
+        assertTrue(avulsos(hoje.minusDays(1), hoje.plusDays(1)).isEmpty());
+    }
+
+    /** CEN-NOVO-97 (#1063) — esticar muda só o término; em série vale para a ocorrência ou para a série, como a edição. */
+    @Test
+    void editarTerminoPorOcorrenciaESerie() {
+        seed();
+        LocalDate terca = proximo(DayOfWeek.TUESDAY, 3);
+        var d = service.criar(new CompromissoUsuariaRequest("Aula", terca, LocalTime.of(14, 0), LocalTime.of(15, 0), null, null,
+                RecorrenciaCompromisso.SEMANAL, List.of(DayOfWeek.TUESDAY), 3));
+        service.editar(d.id(), terca.plusDays(7), new EditarCompromissoRequest(EscopoEdicaoCompromisso.OCORRENCIA, "Aula", null,
+                LocalTime.of(14, 0), LocalTime.of(16, 0), null, null));
+        var r = avulsos(terca, terca.plusDays(14));
+        assertEquals(List.of(LocalTime.of(15, 0), LocalTime.of(16, 0), LocalTime.of(15, 0)), r.stream().map(CompromissoResponse::horarioFim).toList());
+        service.editar(d.id(), terca, new EditarCompromissoRequest(EscopoEdicaoCompromisso.SERIE, "Aula", null,
+                LocalTime.of(14, 0), LocalTime.of(17, 0), null, null));
+        var r2 = avulsos(terca, terca.plusDays(14));
+        assertEquals(List.of(LocalTime.of(17, 0), LocalTime.of(16, 0), LocalTime.of(17, 0)), r2.stream().map(CompromissoResponse::horarioFim).toList());
+    }
+
     /** CEN-NOVO-52 — título vazio ou data ausente bloqueiam; título com mais de 120 caracteres também. */
     @Test
     void tituloOuDataVaziosBloqueiam() {
