@@ -28,6 +28,8 @@ public record CompromissoResponse(
         LocalDate dataOriginalOcorrencia,
         LocalDate dataExibicao,
         @JsonFormat(pattern = "HH:mm") LocalTime horario,
+        /** Hora de término do compromisso avulso (#1063); nula = o bloco dura 1 hora na grade. */
+        @JsonFormat(pattern = "HH:mm") LocalTime horarioFim,
         boolean diaInteiro,
         boolean atrasado,
         int diasAtraso,

@@ -19,6 +19,7 @@ public record CompromissoUsuariaDetalheResponse(
         /** Data em que a ocorrência está hoje (muda quando ela foi movida). */
         LocalDate data,
         @JsonFormat(pattern = "HH:mm") LocalTime horario,
+        @JsonFormat(pattern = "HH:mm") LocalTime horarioFim,
         SituacaoCompromisso situacao,
         String observacaoCancelamento,
         boolean serie,

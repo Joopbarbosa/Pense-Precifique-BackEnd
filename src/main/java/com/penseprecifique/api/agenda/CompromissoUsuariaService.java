@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -59,6 +60,7 @@ public class CompromissoUsuariaService {
     public CompromissoUsuariaDetalheResponse criar(CompromissoUsuariaRequest request) {
         Usuario usuario = getUsuarioAutenticado();
         validarData(request.data());
+        validarHorarioFim(request.horario(), request.horarioFim());
         RecorrenciaCompromisso recorrencia = request.recorrencia() == null ? RecorrenciaCompromisso.NENHUMA : request.recorrencia();
         validarRecorrencia(recorrencia, request.diasSemana(), request.quantidadeOcorrencias());
         CompromissoUsuaria c = CompromissoUsuaria.builder()
@@ -66,6 +68,7 @@ public class CompromissoUsuariaService {
                 .titulo(request.titulo().strip())
                 .dataInicio(request.data())
                 .horario(request.horario())
+                .horarioFim(request.horarioFim())
                 .orcamento(resolverOrcamento(request.orcamentoId(), usuario.getId()))
                 .insumo(resolverInsumo(request.insumoId(), usuario.getId()))
                 .recorrencia(recorrencia)
@@ -142,6 +145,7 @@ public class CompromissoUsuariaService {
         if (titulo.isEmpty()) {
             throw BusinessException.noCampo("titulo", "Informe o título");
         }
+        validarHorarioFim(request.horario(), request.horarioFim());
         Orcamento orcamento = resolverOrcamento(request.orcamentoId(), usuario.getId());
         Insumo insumo = resolverInsumo(request.insumoId(), usuario.getId());
         boolean serie = c.getRecorrencia() != RecorrenciaCompromisso.NENHUMA;
@@ -152,6 +156,7 @@ public class CompromissoUsuariaService {
             c.setTitulo(titulo);
             c.setDataInicio(data);
             c.setHorario(request.horario());
+            c.setHorarioFim(request.horarioFim());
             c.setOrcamento(orcamento);
             c.setInsumo(insumo);
             compromissoRepository.save(c);
@@ -162,6 +167,7 @@ public class CompromissoUsuariaService {
             // série inteira: título, horário e vínculos do mestre; a data só muda por ocorrência (RN-NOVA-21)
             c.setTitulo(titulo);
             c.setHorario(request.horario());
+            c.setHorarioFim(request.horarioFim());
             c.setOrcamento(orcamento);
             c.setInsumo(insumo);
             compromissoRepository.save(c);
@@ -173,9 +179,10 @@ public class CompromissoUsuariaService {
                 .orElseGet(() -> CompromissoUsuariaExcecao.builder().compromisso(c).dataOriginal(dataOriginal).build());
         e.setNovaData(novaData.equals(dataOriginal) ? null : novaData);
         e.setTitulo(titulo.equals(c.getTitulo()) ? null : titulo);
-        boolean horarioIgual = Objects.equals(request.horario(), c.getHorario());
+        boolean horarioIgual = Objects.equals(request.horario(), c.getHorario()) && Objects.equals(request.horarioFim(), c.getHorarioFim());
         e.setHorarioProprio(!horarioIgual);
         e.setHorario(horarioIgual ? null : request.horario());
+        e.setHorarioFim(horarioIgual ? null : request.horarioFim());
         aplicarVinculoOrcamento(e, c, orcamento);
         aplicarVinculoInsumo(e, c, insumo);
         excecaoRepository.save(e);
@@ -192,6 +199,7 @@ public class CompromissoUsuariaService {
         e.setTitulo(o.titulo());
         e.setHorarioProprio(true);
         e.setHorario(o.horario());
+        e.setHorarioFim(o.horarioFim());
         e.setOrcamento(o.orcamento());
         e.setOrcamentoSituacao(OcorrenciaResolvida.situacaoDe(o.orcamento()));
         e.setInsumo(o.insumo());
@@ -263,6 +271,17 @@ public class CompromissoUsuariaService {
         return texto;
     }
 
+    /** #1063 — o término exige o início e é posterior a ele (BLOQUEIO). */
+    private void validarHorarioFim(LocalTime horario, LocalTime horarioFim) {
+        if (horarioFim == null) return;
+        if (horario == null) {
+            throw BusinessException.noCampo("horarioFim", "Informe o horário de início para definir o término");
+        }
+        if (!horarioFim.isAfter(horario)) {
+            throw BusinessException.noCampo("horarioFim", "O término deve ser depois do início");
+        }
+    }
+
     private void validarData(LocalDate data) {
         if (data == null || data.isBefore(DATA_MINIMA) || data.isAfter(DATA_MAXIMA)) {
             throw BusinessException.noCampo("data", "A data deve estar entre 01/01/2000 e 31/12/2100");
@@ -329,7 +348,7 @@ public class CompromissoUsuariaService {
         CompromissoUsuaria c = o.mestre();
         Orcamento orc = o.orcamento();
         Insumo ins = o.insumo();
-        return new CompromissoUsuariaDetalheResponse(c.getId(), o.titulo(), o.dataOriginal(), o.data(), o.horario(), o.situacao(),
+        return new CompromissoUsuariaDetalheResponse(c.getId(), o.titulo(), o.dataOriginal(), o.data(), o.horario(), o.horarioFim(), o.situacao(),
                 o.observacaoCancelamento(), c.getRecorrencia() != RecorrenciaCompromisso.NENHUMA, c.getRecorrencia(),
                 OcorrenciasCalculadora.diasDaSemana(c).stream().sorted().toList(), c.getQuantidadeOcorrencias(),
                 orc == null ? null : new CompromissoUsuariaDetalheResponse.VinculoOrcamento(orc.getId(),

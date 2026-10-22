@@ -20,6 +20,7 @@ record OcorrenciaResolvida(
         LocalDate data,
         String titulo,
         LocalTime horario,
+        LocalTime horarioFim,
         SituacaoCompromisso situacao,
         String observacaoCancelamento,
         Orcamento orcamento,
@@ -29,7 +30,7 @@ record OcorrenciaResolvida(
     static OcorrenciaResolvida de(CompromissoUsuaria m, LocalDate dataOriginal, CompromissoUsuariaExcecao e) {
         if (e == null) {
             boolean serieCancelada = m.getSituacao() == SituacaoCompromisso.CANCELADO;
-            return new OcorrenciaResolvida(m, dataOriginal, dataOriginal, m.getTitulo(), m.getHorario(),
+            return new OcorrenciaResolvida(m, dataOriginal, dataOriginal, m.getTitulo(), m.getHorario(), m.getHorarioFim(),
                     serieCancelada ? SituacaoCompromisso.CANCELADO : SituacaoCompromisso.PENDENTE,
                     serieCancelada ? m.getObservacaoCancelamento() : null, m.getOrcamento(), m.getInsumo(), null);
         }
@@ -45,7 +46,7 @@ record OcorrenciaResolvida(
         };
         return new OcorrenciaResolvida(m, dataOriginal, e.getNovaData() != null ? e.getNovaData() : dataOriginal,
                 e.getTitulo() != null ? e.getTitulo() : m.getTitulo(),
-                e.isHorarioProprio() ? e.getHorario() : m.getHorario(), e.getSituacao(), e.getObservacaoCancelamento(),
+                e.isHorarioProprio() ? e.getHorario() : m.getHorario(), e.isHorarioProprio() ? e.getHorarioFim() : m.getHorarioFim(), e.getSituacao(), e.getObservacaoCancelamento(),
                 orcamento, insumo, e);
     }
 

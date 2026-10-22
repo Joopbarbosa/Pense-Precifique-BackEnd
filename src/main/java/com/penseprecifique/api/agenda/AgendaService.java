@@ -132,7 +132,7 @@ public class AgendaService {
         OrigemCompromisso origem = base.tipo().origem();
         return new CompromissoResponse(
                 base.chave(), base.tipo(), origem, base.situacao(), base.titulo(), base.data(), base.dataOriginalOcorrencia(),
-                base.data(), base.horario(), base.horario() == null, atrasado, diasAtraso,
+                base.data(), base.horario(), base.horarioFim(), base.horario() == null, atrasado, diasAtraso,
                 minutosAtraso,
                 base.marcacoes() == null ? List.of() : base.marcacoes(),
                 base.avisos() == null ? List.of() : base.avisos(),

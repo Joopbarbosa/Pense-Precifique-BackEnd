@@ -33,8 +33,18 @@ public record CompromissoBase(
         BigDecimal valor,
         Instant criadoEm,
         LocalDate dataOriginalOcorrencia,
-        boolean feminino
+        boolean feminino,
+        LocalTime horarioFim
 ) {
+    /** Compromisso sem hora de término (orçamento, produção, compra e avulso sem término). */
+    public CompromissoBase(String chave, TipoCompromisso tipo, SituacaoCompromisso situacao, String titulo, LocalDate data,
+                           LocalTime horario, List<String> marcacoes, List<String> avisos, UUID referenciaId, String identificador,
+                           int numeroOrigem, BigDecimal valor, Instant criadoEm, LocalDate dataOriginalOcorrencia, boolean feminino) {
+        this(chave, tipo, situacao, titulo, data, horario, marcacoes, avisos, referenciaId, identificador, numeroOrigem, valor,
+                criadoEm, dataOriginalOcorrencia, feminino, null);
+    }
+
+
     public boolean pendente() {
         return situacao == SituacaoCompromisso.PENDENTE;
     }

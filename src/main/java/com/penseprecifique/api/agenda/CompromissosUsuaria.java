@@ -62,6 +62,6 @@ public class CompromissosUsuaria implements FonteCompromissos {
         CompromissoUsuaria m = o.mestre();
         return new CompromissoBase(TipoCompromisso.AVULSO.name() + ":" + m.getId() + ":" + o.dataOriginal(), TipoCompromisso.AVULSO,
                 o.situacao(), o.titulo(), o.data(), o.horario(), List.of(), List.of(), m.getId(), null, 0, null,
-                m.getCreatedAt() == null ? null : m.getCreatedAt().toInstant(ZoneOffset.UTC), o.dataOriginal(), false);
+                m.getCreatedAt() == null ? null : m.getCreatedAt().toInstant(ZoneOffset.UTC), o.dataOriginal(), false, o.horarioFim());
     }
 }
