@@ -69,46 +69,46 @@ class AgendaServiceTest {
                 UUID.randomUUID(), "X-" + numero, numero, null, Instant.parse("2026-10-01T10:00:00Z"), null, false);
     }
 
-    /** CEN-NOVO-5/RN-NOVA-4 — pendente com data anterior a hoje sobe para hoje, com N dias de atraso; hoje não é atraso. */
+    /** CEN-NOVO-5/RN-NOVA-4 — pendente com data anterior a hoje é atrasado no dia original, com N dias de atraso; hoje não é atraso. */
     @Test
-    void atrasoSobeParaHojeComODiaDeAtraso() {
+    void atrasoFicaNoDiaOriginalComODiaDeAtraso() {
         base.add(c("a", TipoCompromisso.ENTREGA_ESTIMADA, "Entrega", LocalDate.of(2026, 10, 9), null, 1));
         base.add(c("b", TipoCompromisso.ENTREGA_ESTIMADA, "Entrega de hoje", HOJE, null, 2));
-        List<CompromissoResponse> r = service.compromissos(HOJE, HOJE);
+        List<CompromissoResponse> r = service.compromissos(HOJE.minusDays(3), HOJE);
         assertEquals(2, r.size());
         CompromissoResponse atrasado = r.stream().filter(x -> x.chave().equals("a")).findFirst().orElseThrow();
         assertTrue(atrasado.atrasado());
         assertEquals(3, atrasado.diasAtraso());
         assertEquals(LocalDate.of(2026, 10, 9), atrasado.dataExibicao());
-        assertEquals(HOJE, atrasado.dataFim());
         assertEquals(LocalDate.of(2026, 10, 9), atrasado.dataOrigem());
         CompromissoResponse deHoje = r.stream().filter(x -> x.chave().equals("b")).findFirst().orElseThrow();
         assertFalse(deHoje.atrasado());
         assertEquals(0, deHoje.diasAtraso());
     }
 
-    /** RN-NOVA-4 v2 — o atrasado é um só compromisso, do dia original até hoje; aparece em todo período que toca esse trecho. */
+    /** RN-NOVA-4 v3 (#1060, CEN-NOVO-91) — o atrasado fica só no dia original: não sobe para hoje nem se repete até hoje. */
     @Test
-    void atrasadoApareceEmTodoPeriodoQueTocaDaOrigemAteHoje() {
+    void atrasadoFicaSoNoDiaOriginal() {
         base.add(c("a", TipoCompromisso.ENTREGA_ESTIMADA, "Entrega", LocalDate.of(2026, 10, 9), null, 1));
-        assertEquals(1, service.compromissos(LocalDate.of(2026, 10, 12), LocalDate.of(2026, 10, 18)).size(), "período de hoje");
-        assertEquals(1, service.compromissos(LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 11)).size(), "período que contém a origem");
-        assertEquals(1, service.compromissos(LocalDate.of(2026, 10, 10), LocalDate.of(2026, 10, 11)).size(), "dia do meio");
-        assertEquals(0, service.compromissos(LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 8)).size(), "antes da origem");
-        assertEquals(0, service.compromissos(LocalDate.of(2026, 10, 13), LocalDate.of(2026, 10, 18)).size(), "depois de hoje");
-        CompromissoResponse r = service.compromissos(LocalDate.of(2026, 10, 10), LocalDate.of(2026, 10, 11)).get(0);
+        assertEquals(1, service.compromissos(LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 11)).size(), "período do dia original");
+        assertEquals(1, service.compromissos(LocalDate.of(2026, 10, 9), LocalDate.of(2026, 10, 9)).size(), "o próprio dia");
+        assertEquals(0, service.compromissos(LocalDate.of(2026, 10, 10), LocalDate.of(2026, 10, 11)).size(), "dia seguinte");
+        assertEquals(0, service.compromissos(LocalDate.of(2026, 10, 12), LocalDate.of(2026, 10, 18)).size(), "hoje não recebe o atrasado");
+        CompromissoResponse r = service.compromissos(LocalDate.of(2026, 10, 9), LocalDate.of(2026, 10, 9)).get(0);
         assertEquals(LocalDate.of(2026, 10, 9), r.dataExibicao());
-        assertEquals(HOJE, r.dataFim());
+        assertTrue(r.atrasado());
+        assertEquals(3, r.diasAtraso());
     }
 
-    /** CEN-NOVO-83 — atrasado de 90 dias: um compromisso só, em qualquer janela de 100 dias que o toque. */
+    /** Atrasado antigo: conta uma vez na faixa e na lista, e aparece só no seu dia. */
     @Test
-    void atrasadoAntigoContaUmaVezEApareceNaJanela() {
+    void atrasadoAntigoContaUmaVezEFicaNoSeuDia() {
         base.add(c("velho", TipoCompromisso.AVULSO, "Antigo", HOJE.minusDays(90), null, 0));
-        assertEquals(1, service.compromissos(HOJE.minusDays(30), HOJE.minusDays(1)).size());
+        assertEquals(0, service.compromissos(HOJE.minusDays(30), HOJE.minusDays(1)).size());
+        assertEquals(1, service.compromissos(HOJE.minusDays(90), HOJE.minusDays(90)).size());
         assertEquals(new AgendaResumoResponse(1, 0), service.resumo());
         assertEquals(1, service.atrasados(PageRequest.of(0, 20)).getTotalElements());
-        assertEquals(90, service.compromissos(HOJE, HOJE).get(0).diasAtraso());
+        assertEquals(90, service.compromissos(HOJE.minusDays(90), HOJE.minusDays(90)).get(0).diasAtraso());
     }
 
     /** CEN-NOVO-77, 78, 79 — hoje às 12:00 (Brasília): horário já passado é atraso por horário; igual ou futuro não é. */
@@ -125,7 +125,6 @@ class AgendaServiceTest {
         assertEquals(0, cedo.diasAtraso());
         assertEquals(420, cedo.minutosAtraso());
         assertEquals(HOJE, cedo.dataExibicao());
-        assertEquals(HOJE, cedo.dataFim());
         assertEquals(40, r.stream().filter(x -> x.chave().equals("meia")).findFirst().orElseThrow().minutosAtraso());
         for (String chave : List.of("agora", "depois", "diainteiro")) {
             CompromissoResponse x = r.stream().filter(y -> y.chave().equals(chave)).findFirst().orElseThrow();
@@ -152,7 +151,7 @@ class AgendaServiceTest {
         base.add(c("tarde", TipoCompromisso.AVULSO, "Reunião", HOJE, LocalTime.of(15, 0), 0));
         base.add(c("cedo", TipoCompromisso.AVULSO, "Dentista", HOJE, LocalTime.of(9, 30), 0));
         base.add(c("atrasado", TipoCompromisso.INICIO_PRODUCAO, "Início", LocalDate.of(2026, 10, 10), null, 8));
-        List<String> chaves = service.compromissos(HOJE, HOJE).stream().map(CompromissoResponse::chave).toList();
+        List<String> chaves = service.compromissos(HOJE.minusDays(2), HOJE).stream().map(CompromissoResponse::chave).toList();
         assertEquals(List.of("atrasado", "cedo", "tarde", "dia-inteiro-orc-a", "dia-inteiro-orc-b", "dia-inteiro-compra"), chaves);
     }
 
