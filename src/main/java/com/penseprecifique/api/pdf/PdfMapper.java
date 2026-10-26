@@ -50,6 +50,7 @@ public class PdfMapper {
             .restanteAposSinal(orc.getValorSinal() != null && orc.getTotal() != null ?
                 formatarMoeda(orc.getTotal().subtract(orc.getValorSinal())) : null)
             .percentualSinal(orc.getPercentualSinal() != null ? orc.getPercentualSinal() + "%" : null)
+            .sinalAte(orc.getSinalAte() != null ? orc.getSinalAte().format(DATE_FORMATTER) : null)
             .subtotal(formatarMoeda(orc.getSubtotal()))
             .desconto(formatarDesconto(orc))
             .percentualDesconto(formatarPercentualDesconto(orc))
@@ -89,6 +90,7 @@ public class PdfMapper {
             .valorSinal(dados.getValorSinal())
             .restanteAposSinal(dados.getRestanteAposSinal())
             .percentualSinal(dados.getPercentualSinal())
+            .sinalAte(dados.getSinalAte())
             .subtotal(dados.getSubtotal())
             .desconto(dados.getDesconto())
             .percentualDesconto(dados.getPercentualDesconto())
