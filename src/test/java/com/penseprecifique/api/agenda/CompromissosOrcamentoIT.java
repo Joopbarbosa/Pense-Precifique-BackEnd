@@ -123,7 +123,7 @@ class CompromissosOrcamentoIT {
         assertFalse(entregas.get(0).atrasado());
     }
 
-    /** CEN-NOVO-23 e 24 — a validade aparece só no dia e some ao aprovar. */
+    /** CEN-NOVO-23 e 24 (ajustado em #1112) — a validade aparece só no dia e, ao aprovar, fica como concluída. */
     @Test
     void validadeApareceSoNoDiaESomeAoAprovar() {
         seed();
@@ -136,7 +136,9 @@ class CompromissosOrcamentoIT {
         assertTrue(doTipo(agenda(hoje.plusDays(1), hoje.plusDays(1)), TipoCompromisso.VALIDADE_ORCAMENTO).isEmpty());
         assertTrue(doTipo(agenda(hoje.plusDays(3), hoje.plusDays(3)), TipoCompromisso.VALIDADE_ORCAMENTO).isEmpty());
         avancar(id, 1); // APROVADO
-        assertTrue(doTipo(agenda(hoje.plusDays(2), hoje.plusDays(2)), TipoCompromisso.VALIDADE_ORCAMENTO).isEmpty());
+        var aprovada = doTipo(agenda(hoje.plusDays(2), hoje.plusDays(2)), TipoCompromisso.VALIDADE_ORCAMENTO);
+        assertEquals(1, aprovada.size());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, aprovada.get(0).situacao());
     }
 
     /** CEN-NOVO-27 — sinal a receber no dia de "Sinal até", com o valor. */
