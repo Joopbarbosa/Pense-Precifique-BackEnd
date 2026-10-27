@@ -148,7 +148,10 @@ class CompromissosProducaoIT {
         assertEquals(3, c.diasAtraso());
         assertEquals(hoje.minusDays(3), c.dataExibicao());
         mudarEstado(p, EstadoProducao.FINALIZADA);
-        assertTrue(doTipo(janela(3), TipoCompromisso.TERMINO_PRODUCAO).isEmpty());
+        List<CompromissoResponse> finalizados = doTipo(janela(3), TipoCompromisso.TERMINO_PRODUCAO);
+        assertEquals(1, finalizados.size());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, finalizados.get(0).situacao());
+        assertFalse(finalizados.get(0).atrasado());
     }
 
     /** CEN-NOVO-42 — início vencido sem iniciar fica atrasado; iniciar encerra o compromisso de início. */
@@ -161,7 +164,10 @@ class CompromissosProducaoIT {
         assertEquals(3, c.diasAtraso());
         passouPorEmAndamento(p);
         mudarEstado(p, EstadoProducao.EM_ANDAMENTO);
-        assertTrue(doTipo(janela(3), TipoCompromisso.INICIO_PRODUCAO).isEmpty());
+        List<CompromissoResponse> iniciados = doTipo(janela(3), TipoCompromisso.INICIO_PRODUCAO);
+        assertEquals(1, iniciados.size());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, iniciados.get(0).situacao());
+        assertFalse(iniciados.get(0).atrasado());
         assertFalse(doTipo(janela(10), TipoCompromisso.TERMINO_PRODUCAO).isEmpty());
     }
 
@@ -230,9 +236,9 @@ class CompromissosProducaoIT {
         assertEquals(1, doTipo(janela(10), TipoCompromisso.INICIO_PRODUCAO).size());
         passouPorEmAndamento(p);
         mudarEstado(p, EstadoProducao.EM_ANDAMENTO);
-        assertTrue(doTipo(janela(10), TipoCompromisso.INICIO_PRODUCAO).isEmpty());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, doTipo(janela(10), TipoCompromisso.INICIO_PRODUCAO).get(0).situacao());
         mudarEstado(p, EstadoProducao.TRAVADA); // trava manual depois de iniciada
-        assertTrue(doTipo(janela(10), TipoCompromisso.INICIO_PRODUCAO).isEmpty());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, doTipo(janela(10), TipoCompromisso.INICIO_PRODUCAO).get(0).situacao());
     }
 
     private UUID aprovadoComEntregaEm(int dias) {

@@ -226,7 +226,27 @@ class CompromissosOrcamentoIT {
         assertEquals(0, new BigDecimal("350.00").compareTo(saldos.get(0).valor()));
         assertTrue(saldos.get(0).titulo().endsWith("— R$ 350,00"));
         avancar(id, 1); // PAGO
-        assertTrue(doTipo(agenda(hoje, hoje.plusDays(5)), TipoCompromisso.SALDO_A_RECEBER).isEmpty());
+        List<CompromissoResponse> pagos = doTipo(agenda(hoje, hoje.plusDays(5)), TipoCompromisso.SALDO_A_RECEBER);
+        assertEquals(1, pagos.size());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, pagos.get(0).situacao());
+    }
+
+    /** CEN-NOVO-126 — concluído nunca some: sinal pago e entrega entregue voltam como concluídos. */
+    @Test
+    void sinalPagoEEntregaEntregueContinuamComoConcluidos() {
+        seed();
+        UUID id = orcamentoService.criar(pedido(true, 4, null, hoje.plusDays(1))).getId();
+        avancar(id, 4); // ENVIADO, APROVADO, AGUARDANDO_SINAL, SINAL_PAGO
+        assertEquals("SINAL_PAGO", orcamentoService.buscarPorId(id).getStatus().name());
+        List<CompromissoResponse> sinais = doTipo(agenda(hoje, hoje.plusDays(5)), TipoCompromisso.SINAL_A_RECEBER);
+        assertEquals(1, sinais.size());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, sinais.get(0).situacao());
+        assertFalse(sinais.get(0).atrasado());
+        avancar(id, 4); // EM_PRODUCAO, FINALIZADO, PAGO, ENTREGUE
+        assertEquals("ENTREGUE", orcamentoService.buscarPorId(id).getStatus().name());
+        List<CompromissoResponse> entregas = doTipo(agenda(hoje, hoje.plusDays(10)), TipoCompromisso.ENTREGA_ESTIMADA);
+        assertEquals(1, entregas.size());
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, entregas.get(0).situacao());
     }
 
     /** CEN-NOVO-33 — sem sinal e sem prazo o saldo é o total e fica em hoje, sem destaque. */

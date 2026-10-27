@@ -38,8 +38,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CompromissosProducao implements FonteCompromissos {
 
+    /** Em aberto ou já cumpridas: a finalizada continua na Agenda como concluída; cancelada e não realizada saem. */
     private static final Set<EstadoProducao> EM_ABERTO =
-            Set.of(EstadoProducao.AGUARDANDO_INICIO, EstadoProducao.EM_ANDAMENTO, EstadoProducao.TRAVADA);
+            Set.of(EstadoProducao.AGUARDANDO_INICIO, EstadoProducao.EM_ANDAMENTO, EstadoProducao.TRAVADA, EstadoProducao.FINALIZADA);
     private static final Set<StatusOrcamento> ORCAMENTO_ENCERRADO = Set.of(StatusOrcamento.ENTREGUE, StatusOrcamento.CANCELADO);
     private static final DateTimeFormatter DIA_MES = DateTimeFormatter.ofPattern("dd/MM");
 
@@ -73,13 +74,16 @@ public class CompromissosProducao implements FonteCompromissos {
             // pelo sistema ao tentar iniciar sem nunca ter estado em andamento.
             boolean aindaNaoComecou = p.getEstado() == EstadoProducao.AGUARDANDO_INICIO
                     || (p.getEstado() == EstadoProducao.TRAVADA && !jaComecaram.contains(p.getId()));
-            if (p.getDataInicio() != null && aindaNaoComecou) {
+            boolean finalizada = p.getEstado() == EstadoProducao.FINALIZADA;
+            if (p.getDataInicio() != null) {
                 incluir(resultado, base(p, TipoCompromisso.INICIO_PRODUCAO, "Início previsto — " + identificador + sufixo,
-                        p.getDataInicio(), marcacoes, List.of()), de, ate, hoje);
+                        p.getDataInicio(), marcacoes, List.of(), aindaNaoComecou ? SituacaoCompromisso.PENDENTE : SituacaoCompromisso.CONCLUIDO), de, ate, hoje);
             }
             if (p.getDataTerminoPrevista() != null) {
                 incluir(resultado, base(p, TipoCompromisso.TERMINO_PRODUCAO, "Término previsto — " + identificador + sufixo,
-                        p.getDataTerminoPrevista(), marcacoes, avisoDeEstouro(p, vinculos.getOrDefault(p.getId(), List.of()))), de, ate, hoje);
+                        p.getDataTerminoPrevista(), marcacoes,
+                        finalizada ? List.of() : avisoDeEstouro(p, vinculos.getOrDefault(p.getId(), List.of())),
+                        finalizada ? SituacaoCompromisso.CONCLUIDO : SituacaoCompromisso.PENDENTE), de, ate, hoje);
             }
         }
         return resultado;
@@ -144,8 +148,9 @@ public class CompromissosProducao implements FonteCompromissos {
                 .collect(Collectors.joining(", ")));
     }
 
-    private CompromissoBase base(Producao p, TipoCompromisso tipo, String titulo, LocalDate data, List<String> marcacoes, List<String> avisos) {
-        return new CompromissoBase(tipo.name() + ":" + p.getId(), tipo, SituacaoCompromisso.PENDENTE, titulo, data, null,
+    private CompromissoBase base(Producao p, TipoCompromisso tipo, String titulo, LocalDate data, List<String> marcacoes, List<String> avisos,
+                                 SituacaoCompromisso situacao) {
+        return new CompromissoBase(tipo.name() + ":" + p.getId(), tipo, situacao, titulo, data, null,
                 marcacoes, avisos, p.getId(), IdentificadorFormatter.formatar("PRD", p.getNumero()),
                 p.getNumero() == null ? 0 : p.getNumero(),
                 null, p.getCreatedAt() == null ? null : p.getCreatedAt().toInstant(ZoneOffset.UTC), null, false);

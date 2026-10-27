@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -86,7 +87,7 @@ class CompromissosCompraIT {
         assertEquals(hoje.minusDays(3), c.dataExibicao());
     }
 
-    /** RN-NOVA-5 — confirmada, cancelada ou excluída sai da Agenda. */
+    /** RN-NOVA-5 (alterada) — confirmada continua como concluída; cancelada ou excluída sai da Agenda. */
     @Test
     void confirmadaCanceladaOuExcluidaSai() {
         seed();
@@ -94,7 +95,9 @@ class CompromissosCompraIT {
         assertEquals(1, compras(5).size());
         c.setStatus(StatusCompra.CONFIRMADA);
         compraRepository.save(c);
-        assertTrue(compras(5).isEmpty());
+        assertEquals(1, compras(5).size()); // recebida: continua no dia como concluída
+        assertEquals(com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso.CONCLUIDO, compras(5).get(0).situacao());
+        assertFalse(compras(5).get(0).atrasado());
         c.setStatus(StatusCompra.CANCELADA);
         compraRepository.save(c);
         assertTrue(compras(5).isEmpty());
