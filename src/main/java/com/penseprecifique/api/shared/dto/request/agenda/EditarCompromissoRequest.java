@@ -25,9 +25,18 @@ public record EditarCompromissoRequest(
         /** Hora de término opcional (#1063); exige horário e deve ser posterior a ele. */
         LocalTime horarioFim,
         UUID orcamentoId,
-        UUID insumoId
+        UUID insumoId,
+        /** Descrição opcional (#1159), até 500 caracteres; nula = sem descrição. Só muda ao editar o compromisso simples ou a série inteira. */
+        @Size(max = 500, message = "Máximo de 500 caracteres")
+        @Pattern(regexp = LimitesTexto.SEM_CARACTERE_NULO, message = LimitesTexto.SEM_CARACTERE_NULO_MENSAGEM)
+        String descricao
 ) {
+    public EditarCompromissoRequest(EscopoEdicaoCompromisso escopo, String titulo, LocalDate data, LocalTime horario, LocalTime horarioFim,
+                                    UUID orcamentoId, UUID insumoId) {
+        this(escopo, titulo, data, horario, horarioFim, orcamentoId, insumoId, null);
+    }
+
     public EditarCompromissoRequest(EscopoEdicaoCompromisso escopo, String titulo, LocalDate data, LocalTime horario, UUID orcamentoId, UUID insumoId) {
-        this(escopo, titulo, data, horario, null, orcamentoId, insumoId);
+        this(escopo, titulo, data, horario, null, orcamentoId, insumoId, null);
     }
 }

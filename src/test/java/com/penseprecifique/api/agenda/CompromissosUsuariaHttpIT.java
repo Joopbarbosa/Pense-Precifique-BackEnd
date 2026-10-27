@@ -72,6 +72,9 @@ class CompromissosUsuariaHttpIT {
                 "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"recorrencia\":\"SEMANAL\",\"diasSemana\":[\"MONDAY\"],\"quantidadeOcorrencias\":366}",
                 "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"recorrencia\":\"SEMANAL\",\"diasSemana\":[\"MONDAY\"],\"quantidadeOcorrencias\":-5}",
                 "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"quantidadeOcorrencias\":99999999999}", "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"orcamentoId\":\"nao-uuid\"}",
+                "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"descricao\":\"" + "d".repeat(501) + "\"}",
+                "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"descricao\":\"ab\\u0000cd\"}",
+                "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"descricao\":123}",
                 "{", "[]", "null",
         };
         for (String corpo : corpos) {
@@ -83,6 +86,20 @@ class CompromissosUsuariaHttpIT {
         assertTrue(tipoErrado == 415 || tipoErrado == 400, "content-type: " + tipoErrado);
         assertEquals(404, criar(t, "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"insumoId\":\"" + UUID.randomUUID() + "\"}").getResponse().getStatus());
         assertEquals(404, criar(t, "{\"titulo\":\"x\",\"data\":\"2030-05-10\",\"orcamentoId\":\"" + UUID.randomUUID() + "\"}").getResponse().getStatus());
+    }
+
+    /** CEN-NOVO-132 — descrição opcional de até 500 caracteres: aparada, vazia vira "sem descrição"; 501 é recusada. */
+    @Test
+    void descricaoOpcionalAte500() throws Exception {
+        String t = token();
+        MvcResult r = criar(t, "{\"titulo\":\"Ligar\",\"data\":\"2030-05-10\",\"descricao\":\"  Falar do prazo  \"}");
+        assertEquals(201, r.getResponse().getStatus(), r.getResponse().getContentAsString());
+        assertEquals("Falar do prazo", json.readTree(r.getResponse().getContentAsString()).get("descricao").asText());
+        MvcResult cheia = criar(t, "{\"titulo\":\"Cheia\",\"data\":\"2030-05-10\",\"descricao\":\"" + "d".repeat(500) + "\"}");
+        assertEquals(201, cheia.getResponse().getStatus());
+        MvcResult vazia = criar(t, "{\"titulo\":\"Vazia\",\"data\":\"2030-05-10\",\"descricao\":\"   \"}");
+        assertEquals(201, vazia.getResponse().getStatus());
+        assertTrue(json.readTree(vazia.getResponse().getContentAsString()).get("descricao").isNull());
     }
 
     /** Ações hostis: data malformada, ocorrência inexistente, id de outra conta, observação curta, corpo malformado. */
