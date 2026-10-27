@@ -64,14 +64,18 @@ public class CompromissosOrcamento implements FonteCompromissos {
                 entrega, null));
     }
 
-    /** RN-NOVA-11 — só em RASCUNHO ou ENVIADO e só no dia da validade; nunca vira atraso (não é devolvido depois). */
+    /**
+     * RN-NOVA-11 — no dia da validade; nunca vira atraso (não é devolvido depois). Em RASCUNHO ou ENVIADO fica
+     * pendente; depois da aprovação continua na Agenda como concluído (verde e riscado), até o orçamento ser
+     * entregue ou cancelado.
+     */
     private java.util.Optional<CompromissoBase> validade(Orcamento o) {
-        if (o.getDataValidade() == null
-                || (o.getStatus() != StatusOrcamento.RASCUNHO && o.getStatus() != StatusOrcamento.ENVIADO)) {
+        if (o.getDataValidade() == null) {
             return java.util.Optional.empty();
         }
+        boolean aberto = o.getStatus() == StatusOrcamento.RASCUNHO || o.getStatus() == StatusOrcamento.ENVIADO;
         return java.util.Optional.of(base(o, TipoCompromisso.VALIDADE_ORCAMENTO, "Validade — " + identificador(o) + " vence hoje",
-                o.getDataValidade().toLocalDate(), null));
+                o.getDataValidade().toLocalDate(), null, aberto ? SituacaoCompromisso.PENDENTE : SituacaoCompromisso.CONCLUIDO));
     }
 
     /** RN-NOVA-12 — em AGUARDANDO_SINAL: no dia de "Sinal até", ou em hoje (sem destaque) quando não há a data. */
@@ -97,7 +101,12 @@ public class CompromissosOrcamento implements FonteCompromissos {
     }
 
     private CompromissoBase base(Orcamento o, TipoCompromisso tipo, String titulo, LocalDate data, BigDecimal valor) {
-        return new CompromissoBase(tipo.name() + ":" + o.getId(), tipo, SituacaoCompromisso.PENDENTE, titulo, data, null,
+        return base(o, tipo, titulo, data, valor, SituacaoCompromisso.PENDENTE);
+    }
+
+    private CompromissoBase base(Orcamento o, TipoCompromisso tipo, String titulo, LocalDate data, BigDecimal valor,
+                                 SituacaoCompromisso situacao) {
+        return new CompromissoBase(tipo.name() + ":" + o.getId(), tipo, situacao, titulo, data, null,
                 List.of(), List.of(), o.getId(), identificador(o), o.getNumero() == null ? 0 : o.getNumero(), valor,
                 o.getCreatedAt() == null ? null : o.getCreatedAt().toInstant(ZoneOffset.UTC), null, false);
     }

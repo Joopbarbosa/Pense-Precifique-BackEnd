@@ -26,6 +26,8 @@ public class OrcamentoPdfData {
     private String valorSinal;
     private String restanteAposSinal;
     private String percentualSinal;
+    // V0.18.0 #1105: data limite do sinal já formatada (dd/MM/yyyy); nulo quando não informada
+    private String sinalAte;
     private String subtotal;
     private String desconto;
     private String percentualDesconto;

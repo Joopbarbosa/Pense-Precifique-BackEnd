@@ -22,6 +22,7 @@ public class PdfMicroservicoDocumentoOrcamentoPayload {
     private String valorSinal;
     private String restanteAposSinal;
     private String percentualSinal;
+    private String sinalAte;
     private String subtotal;
     private String desconto;
     private String percentualDesconto;
