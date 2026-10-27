@@ -109,10 +109,6 @@ public class CompromissosOrcamento implements FonteCompromissos {
                 pago ? SituacaoCompromisso.CONCLUIDO : SituacaoCompromisso.PENDENTE));
     }
 
-    private CompromissoBase base(Orcamento o, TipoCompromisso tipo, String titulo, LocalDate data, BigDecimal valor) {
-        return base(o, tipo, titulo, data, valor, SituacaoCompromisso.PENDENTE);
-    }
-
     private CompromissoBase base(Orcamento o, TipoCompromisso tipo, String titulo, LocalDate data, BigDecimal valor,
                                  SituacaoCompromisso situacao) {
         return new CompromissoBase(tipo.name() + ":" + o.getId(), tipo, situacao, titulo, data, null,
