@@ -27,7 +27,8 @@ public record CompromissoUsuariaDetalheResponse(
         List<DayOfWeek> diasSemana,
         Integer quantidadeOcorrencias,
         VinculoOrcamento orcamento,
-        VinculoInsumo insumo
+        VinculoInsumo insumo,
+        String descricao
 ) {
     public record VinculoOrcamento(UUID id, String identificador, String cliente) {}
 

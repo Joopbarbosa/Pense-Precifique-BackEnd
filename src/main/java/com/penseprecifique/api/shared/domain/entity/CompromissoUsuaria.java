@@ -44,6 +44,10 @@ public class CompromissoUsuaria {
     @Column(name = "horario_fim")
     private LocalTime horarioFim;
 
+    /** Descrição opcional (#1159), até 500 caracteres; vale para a série inteira. */
+    @Column(length = 500)
+    private String descricao;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "orcamento_id")
     private Orcamento orcamento;

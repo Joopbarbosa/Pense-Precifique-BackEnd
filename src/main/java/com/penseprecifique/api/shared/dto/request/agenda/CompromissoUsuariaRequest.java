@@ -28,10 +28,19 @@ public record CompromissoUsuariaRequest(
         UUID insumoId,
         RecorrenciaCompromisso recorrencia,
         List<DayOfWeek> diasSemana,
-        Integer quantidadeOcorrencias
+        Integer quantidadeOcorrencias,
+        /** Descrição opcional (#1159), até 500 caracteres. */
+        @Size(max = 500, message = "Máximo de 500 caracteres")
+        @Pattern(regexp = LimitesTexto.SEM_CARACTERE_NULO, message = LimitesTexto.SEM_CARACTERE_NULO_MENSAGEM)
+        String descricao
 ) {
+    public CompromissoUsuariaRequest(String titulo, LocalDate data, LocalTime horario, LocalTime horarioFim, UUID orcamentoId, UUID insumoId,
+                                     RecorrenciaCompromisso recorrencia, List<DayOfWeek> diasSemana, Integer quantidadeOcorrencias) {
+        this(titulo, data, horario, horarioFim, orcamentoId, insumoId, recorrencia, diasSemana, quantidadeOcorrencias, null);
+    }
+
     public CompromissoUsuariaRequest(String titulo, LocalDate data, LocalTime horario, UUID orcamentoId, UUID insumoId,
                                      RecorrenciaCompromisso recorrencia, List<DayOfWeek> diasSemana, Integer quantidadeOcorrencias) {
-        this(titulo, data, horario, null, orcamentoId, insumoId, recorrencia, diasSemana, quantidadeOcorrencias);
+        this(titulo, data, horario, null, orcamentoId, insumoId, recorrencia, diasSemana, quantidadeOcorrencias, null);
     }
 }

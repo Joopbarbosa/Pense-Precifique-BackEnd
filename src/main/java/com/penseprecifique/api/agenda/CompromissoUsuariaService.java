@@ -69,6 +69,7 @@ public class CompromissoUsuariaService {
                 .dataInicio(request.data())
                 .horario(request.horario())
                 .horarioFim(request.horarioFim())
+                .descricao(normalizarDescricao(request.descricao()))
                 .orcamento(resolverOrcamento(request.orcamentoId(), usuario.getId()))
                 .insumo(resolverInsumo(request.insumoId(), usuario.getId()))
                 .recorrencia(recorrencia)
@@ -157,6 +158,7 @@ public class CompromissoUsuariaService {
             c.setDataInicio(data);
             c.setHorario(request.horario());
             c.setHorarioFim(request.horarioFim());
+            c.setDescricao(normalizarDescricao(request.descricao()));
             c.setOrcamento(orcamento);
             c.setInsumo(insumo);
             compromissoRepository.save(c);
@@ -168,6 +170,7 @@ public class CompromissoUsuariaService {
             c.setTitulo(titulo);
             c.setHorario(request.horario());
             c.setHorarioFim(request.horarioFim());
+            c.setDescricao(normalizarDescricao(request.descricao()));
             c.setOrcamento(orcamento);
             c.setInsumo(insumo);
             compromissoRepository.save(c);
@@ -354,7 +357,15 @@ public class CompromissoUsuariaService {
                 orc == null ? null : new CompromissoUsuariaDetalheResponse.VinculoOrcamento(orc.getId(),
                         IdentificadorFormatter.formatar("ORC", orc.getNumero()), orc.getCliente().getNome()),
                 ins == null ? null : new CompromissoUsuariaDetalheResponse.VinculoInsumo(ins.getId(), ins.getNome(),
-                        ins.getDeletedAt() != null || !Boolean.TRUE.equals(ins.getAtivo())));
+                        ins.getDeletedAt() != null || !Boolean.TRUE.equals(ins.getAtivo())),
+                c.getDescricao());
+    }
+
+    /** #1159 — descrição opcional: apara os espaços e trata o vazio como "sem descrição". */
+    private static String normalizarDescricao(String descricao) {
+        if (descricao == null) return null;
+        String limpa = descricao.strip();
+        return limpa.isEmpty() ? null : limpa;
     }
 
     private Usuario getUsuarioAutenticado() {
