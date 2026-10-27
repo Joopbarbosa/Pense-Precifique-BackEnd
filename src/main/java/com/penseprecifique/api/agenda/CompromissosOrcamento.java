@@ -31,7 +31,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CompromissosOrcamento implements FonteCompromissos {
 
-    private static final Set<StatusOrcamento> ENCERRADOS = Set.of(StatusOrcamento.ENTREGUE, StatusOrcamento.CANCELADO);
+    private static final Set<StatusOrcamento> ENCERRADOS = Set.of(StatusOrcamento.CANCELADO);
+
+    private static final Set<StatusOrcamento> SINAL_RECEBIDO = Set.of(StatusOrcamento.SINAL_PAGO, StatusOrcamento.EM_PRODUCAO,
+            StatusOrcamento.FINALIZADO, StatusOrcamento.PAGO, StatusOrcamento.ENTREGUE);
 
     private final OrcamentoRepository orcamentoRepository;
     private final EntregaEstimadaCalculadora entregaEstimadaCalculadora;
@@ -60,8 +63,9 @@ public class CompromissosOrcamento implements FonteCompromissos {
         if (entrega == null) {
             return java.util.Optional.empty();
         }
+        SituacaoCompromisso situacao = o.getStatus() == StatusOrcamento.ENTREGUE ? SituacaoCompromisso.CONCLUIDO : SituacaoCompromisso.PENDENTE;
         return java.util.Optional.of(base(o, TipoCompromisso.ENTREGA_ESTIMADA, "Entrega estimada — " + identificador(o) + " (" + cliente(o) + ")",
-                entrega, null));
+                entrega, null, situacao));
     }
 
     /**
@@ -80,24 +84,29 @@ public class CompromissosOrcamento implements FonteCompromissos {
 
     /** RN-NOVA-12 — em AGUARDANDO_SINAL: no dia de "Sinal até", ou em hoje (sem destaque) quando não há a data. */
     private java.util.Optional<CompromissoBase> sinal(Orcamento o, LocalDate hoje) {
-        if (o.getStatus() != StatusOrcamento.AGUARDANDO_SINAL || o.getValorSinal() == null) {
+        boolean aguardando = o.getStatus() == StatusOrcamento.AGUARDANDO_SINAL;
+        boolean recebido = SINAL_RECEBIDO.contains(o.getStatus()) && Boolean.TRUE.equals(o.getSinalAtivo());
+        if (o.getValorSinal() == null || !aguardando && (!recebido || o.getSinalAte() == null)) {
             return java.util.Optional.empty();
         }
         LocalDate data = o.getSinalAte() != null ? o.getSinalAte() : hoje;
         return java.util.Optional.of(base(o, TipoCompromisso.SINAL_A_RECEBER,
-                "Sinal a receber — " + identificador(o) + " (" + cliente(o) + ") — " + reais(o.getValorSinal()), data, o.getValorSinal()));
+                "Sinal a receber — " + identificador(o) + " (" + cliente(o) + ") — " + reais(o.getValorSinal()), data, o.getValorSinal(),
+                aguardando ? SituacaoCompromisso.PENDENTE : SituacaoCompromisso.CONCLUIDO));
     }
 
     /** RN-NOVA-13 — em FINALIZADO: no dia da entrega estimada, ou em hoje (sem destaque) quando não há entrega estimada. */
     private java.util.Optional<CompromissoBase> saldo(Orcamento o, LocalDate hoje) {
-        if (o.getStatus() != StatusOrcamento.FINALIZADO) {
+        boolean pago = o.getStatus() == StatusOrcamento.PAGO || o.getStatus() == StatusOrcamento.ENTREGUE;
+        if (o.getStatus() != StatusOrcamento.FINALIZADO && !pago) {
             return java.util.Optional.empty();
         }
         BigDecimal sinalPago = Boolean.TRUE.equals(o.getSinalAtivo()) && o.getValorSinal() != null ? o.getValorSinal() : BigDecimal.ZERO;
         BigDecimal saldo = o.getTotal().subtract(sinalPago);
         LocalDate entrega = entregaEstimadaCalculadora.calcular(o);
         return java.util.Optional.of(base(o, TipoCompromisso.SALDO_A_RECEBER,
-                "Saldo a receber — " + identificador(o) + " (" + cliente(o) + ") — " + reais(saldo), entrega != null ? entrega : hoje, saldo));
+                "Saldo a receber — " + identificador(o) + " (" + cliente(o) + ") — " + reais(saldo), entrega != null ? entrega : hoje, saldo,
+                pago ? SituacaoCompromisso.CONCLUIDO : SituacaoCompromisso.PENDENTE));
     }
 
     private CompromissoBase base(Orcamento o, TipoCompromisso tipo, String titulo, LocalDate data, BigDecimal valor) {

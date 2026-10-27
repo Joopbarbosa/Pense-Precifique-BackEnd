@@ -35,7 +35,10 @@ public class CompromissosCompra implements FonteCompromissos {
 
     @Override
     public List<CompromissoBase> listar(UUID usuarioId, LocalDate de, LocalDate ate, LocalDate hoje) {
-        List<Compra> pendentes = compraRepository.findByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.PENDENTE_RECEBIMENTO);
+        List<Compra> pendentes = new ArrayList<>(compraRepository.findByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.PENDENTE_RECEBIMENTO));
+        // Concluído não some: a compra que estava a receber e já deu entrada continua no dia como concluída.
+        compraRepository.findByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.CONFIRMADA).stream()
+                .filter(c -> c.getPrevisaoEntrega() != null).forEach(pendentes::add);
         if (pendentes.isEmpty()) {
             return List.of();
         }
@@ -49,7 +52,8 @@ public class CompromissosCompra implements FonteCompromissos {
             String fornecedores = nomesDosFornecedores(c, linhas.getOrDefault(c.getId(), List.of()));
             String identificador = IdentificadorFormatter.formatar("COM", c.getNumero());
             CompromissoBase base = new CompromissoBase(TipoCompromisso.RECEBIMENTO_COMPRA.name() + ":" + c.getId(),
-                    TipoCompromisso.RECEBIMENTO_COMPRA, SituacaoCompromisso.PENDENTE,
+                    TipoCompromisso.RECEBIMENTO_COMPRA,
+                    c.getStatus() == StatusCompra.CONFIRMADA ? SituacaoCompromisso.CONCLUIDO : SituacaoCompromisso.PENDENTE,
                     "Entrega de compra — " + identificador + (fornecedores.isEmpty() ? "" : " (" + fornecedores + ")"),
                     c.getPrevisaoEntrega(), null, List.of(), List.of(), c.getId(), identificador,
                     c.getNumero() == null ? 0 : c.getNumero(), null,
