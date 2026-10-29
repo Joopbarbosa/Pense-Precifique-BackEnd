@@ -3,6 +3,7 @@ package com.penseprecifique.api.shared.dto.request.orcamento;
 import com.penseprecifique.api.shared.validation.LimitesTexto;
 import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -50,4 +51,10 @@ public class AvancaStatusRequest {
     // decisão por vínculo, só ciência. Default false/ausente preserva o comportamento de sempre
     // devolver o aviso na 1ª chamada quando houver vínculo órfão.
     private boolean confirmarVinculosOrfaos;
+
+    // RN-NOVA-40 (V0.18.0, #1167) — decisão por produção vinculada ao cancelar o orçamento. Produção
+    // sem decisão equivale a "Não, manter". Só vale para /cancelar; ignorado nos outros avanços.
+    @Valid
+    @Size(max = 50, message = "Decisões de produção em excesso")
+    private List<DecisaoProducaoCancelamentoRequest> decisoesProducao;
 }
