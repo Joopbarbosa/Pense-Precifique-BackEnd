@@ -79,6 +79,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.penseprecifique.api.shared.dto.request.orcamento.QuantidadeProducaoRequest;
+import com.penseprecifique.api.shared.dto.response.orcamento.SugestaoQuantidadeProducaoResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -1313,6 +1315,7 @@ public class OrcamentoService {
         if (produtos.isEmpty()) {
             throw new BusinessException("Orçamento não tem itens para criar uma produção");
         }
+        produtos = aplicarQuantidadesProducao(produtos, request.getQuantidadesProducao(), usuarioId);
 
         Producao producao = producaoService.criarProducaoBase(usuarioId, request.getDataInicio(),
                 request.getDataTerminoPrevista(), request.getObservacoes());
@@ -1326,6 +1329,97 @@ public class OrcamentoService {
         return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
                 .map(orcamentoMapper::toOrcamentoProducaoResponse)
                 .toList();
+    }
+
+    /**
+     * RN-NOVA-39 (V0.18.0, #1166) — produto com insumo não fracionável só produz em múltiplos do
+     * rendimento. Para cada um, usa a quantidade informada (múltiplo do rendimento e não menor que o
+     * pedido) ou, se ausente, o menor múltiplo que cobre o pedido. Produto fracionável mantém o
+     * pedido. Produto informado que não é do orçamento é recusado.
+     */
+    private List<ProducaoProdutoRequest> aplicarQuantidadesProducao(List<ProducaoProdutoRequest> produtos,
+                                                                      List<QuantidadeProducaoRequest> informadas,
+                                                                      UUID usuarioId) {
+        Map<UUID, BigDecimal> pedidos = new LinkedHashMap<>();
+        for (ProducaoProdutoRequest p : produtos) {
+            pedidos.merge(p.getProdutoId(), p.getQuantidade(), BigDecimal::add);
+        }
+        Map<UUID, BigDecimal> escolhidas = new LinkedHashMap<>();
+        if (informadas != null) {
+            for (QuantidadeProducaoRequest q : informadas) {
+                if (!pedidos.containsKey(q.getProdutoId())) {
+                    throw new BusinessException("Quantidade informada para produto que não está neste pedido");
+                }
+                if (escolhidas.put(q.getProdutoId(), q.getQuantidade()) != null) {
+                    throw new BusinessException("Quantidade informada mais de uma vez para o mesmo produto");
+                }
+            }
+        }
+
+        List<ProducaoProdutoRequest> resultado = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> e : pedidos.entrySet()) {
+            BigDecimal quantidade = e.getValue();
+            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(e.getKey(), usuarioId).orElse(null);
+            if (produto != null && exigeMultiploDoRendimento(produto)) {
+                BigDecimal rendimento = produto.getRendimento();
+                BigDecimal minimo = menorMultiploQueCobre(e.getValue(), rendimento);
+                BigDecimal escolhida = escolhidas.getOrDefault(e.getKey(), minimo);
+                if (escolhida.remainder(rendimento).compareTo(BigDecimal.ZERO) != 0 || escolhida.compareTo(minimo) < 0) {
+                    throw new BusinessException("Produto " + produto.getNome() + " exige quantidade em múltiplos de "
+                            + rendimento.stripTrailingZeros().toPlainString() + " unidades (mínimo "
+                            + minimo.stripTrailingZeros().toPlainString() + ")");
+                }
+                quantidade = escolhida;
+            } else if (escolhidas.containsKey(e.getKey())) {
+                throw new BusinessException("Produto " + (produto != null ? produto.getNome() : "")
+                        + " não exige quantidade múltipla do rendimento");
+            }
+            ProducaoProdutoRequest r = new ProducaoProdutoRequest();
+            r.setProdutoId(e.getKey());
+            r.setQuantidade(quantidade);
+            resultado.add(r);
+        }
+        return resultado;
+    }
+
+    private boolean exigeMultiploDoRendimento(Produto produto) {
+        if (produto.getRendimento() == null || produto.getRendimento().compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        return fichaTecnicaItemRepository.findByProdutoId(produto.getId()).stream()
+                .anyMatch(f -> f.getInsumo() != null && Boolean.FALSE.equals(f.getInsumo().getFracionavel()));
+    }
+
+    private BigDecimal menorMultiploQueCobre(BigDecimal pedido, BigDecimal rendimento) {
+        return pedido.divide(rendimento, 0, RoundingMode.CEILING).multiply(rendimento);
+    }
+
+    /** RN-NOVA-39 (V0.18.0, #1166) — sugestão por produto não fracionável do orçamento, para a janela. */
+    @Transactional(readOnly = true)
+    public List<SugestaoQuantidadeProducaoResponse> sugerirQuantidadesProducao(UUID id, List<UUID> produtoIds) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        Map<UUID, BigDecimal> pedidos = new LinkedHashMap<>();
+        for (ProducaoProdutoRequest p : filtrarPorProdutoIds(produtosDoOrcamentoComoRequest(orcamento.getId()), produtoIds)) {
+            pedidos.merge(p.getProdutoId(), p.getQuantidade(), BigDecimal::add);
+        }
+        List<SugestaoQuantidadeProducaoResponse> lista = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> e : pedidos.entrySet()) {
+            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(e.getKey(), usuarioId).orElse(null);
+            if (produto == null || !exigeMultiploDoRendimento(produto)) {
+                continue;
+            }
+            SugestaoQuantidadeProducaoResponse r = new SugestaoQuantidadeProducaoResponse();
+            r.setProdutoId(produto.getId());
+            r.setNomeProduto(produto.getNome());
+            r.setQuantidadePedida(e.getValue());
+            r.setRendimento(produto.getRendimento());
+            r.setQuantidadeSugerida(menorMultiploQueCobre(e.getValue(), produto.getRendimento()));
+            r.setSobra(r.getQuantidadeSugerida().subtract(e.getValue()));
+            lista.add(r);
+        }
+        return lista;
     }
 
     private List<ProducaoProdutoRequest> produtosDoOrcamentoComoRequest(UUID orcamentoId) {

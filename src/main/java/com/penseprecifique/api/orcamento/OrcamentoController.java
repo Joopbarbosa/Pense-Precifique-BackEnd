@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
+import com.penseprecifique.api.shared.dto.response.orcamento.SugestaoQuantidadeProducaoResponse;
 import java.util.UUID;
 
 @RestController
@@ -159,6 +160,13 @@ public class OrcamentoController {
             @PathVariable UUID id,
             @Valid @RequestBody CriarProducaoVinculadaRequest request) {
         return ResponseEntity.status(201).body(orcamentoService.criarProducaoVinculada(id, request));
+    }
+
+    @GetMapping("/{id}/sugestao-quantidade-producao")
+    public ResponseEntity<List<SugestaoQuantidadeProducaoResponse>> sugerirQuantidadesProducao(
+            @PathVariable UUID id,
+            @RequestParam(required = false) List<UUID> produtoIds) {
+        return ResponseEntity.ok(orcamentoService.sugerirQuantidadesProducao(id, produtoIds));
     }
 
     @PostMapping("/{id}/avancar-status")

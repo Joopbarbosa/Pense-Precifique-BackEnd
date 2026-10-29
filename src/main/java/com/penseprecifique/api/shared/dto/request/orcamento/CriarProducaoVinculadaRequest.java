@@ -1,6 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.orcamento;
 
 import com.penseprecifique.api.shared.validation.LimitesTexto;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -36,4 +37,9 @@ public class CriarProducaoVinculadaRequest {
     private String observacoes;
 
     private List<UUID> produtoIds;
+
+    /** RN-NOVA-39 (V0.18.0, #1166) — quantidade a produzir por produto com insumo não fracionável. */
+    @Valid
+    @Size(max = 200, message = "Quantidades demais informadas")
+    private List<QuantidadeProducaoRequest> quantidadesProducao;
 }
