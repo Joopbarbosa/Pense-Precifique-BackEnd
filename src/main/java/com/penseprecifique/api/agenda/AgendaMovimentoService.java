@@ -14,7 +14,6 @@ import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
-import com.penseprecifique.api.shared.domain.enums.TipoCompromisso;
 import com.penseprecifique.api.shared.dto.request.agenda.MoverCompromissoRequest;
 import com.penseprecifique.api.shared.dto.response.agenda.MovimentoCompromissoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
