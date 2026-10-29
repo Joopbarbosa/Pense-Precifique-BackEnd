@@ -30,6 +30,10 @@ import com.penseprecifique.api.shared.dto.request.producao.CriarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.DesagruparProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.JuntarProducoesRequest;
+import com.penseprecifique.api.shared.dto.response.producao.CandidataJuntarResponse;
+import com.penseprecifique.api.shared.dto.response.producao.JuntarProducoesResponse;
+import com.penseprecifique.api.shared.dto.response.producao.PedidoAtendidoResponse;
 import com.penseprecifique.api.shared.dto.request.producao.PerdaProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.RetomarProducaoRequest;
@@ -72,6 +76,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,6 +102,7 @@ public class ProducaoService {
     private final UsuarioRepository usuarioRepository;
     private final ProducaoMapper producaoMapper;
     private final OrcamentoProducaoRepository orcamentoProducaoRepository;
+    private final com.penseprecifique.api.orcamento.OrcamentoItemRepository orcamentoItemRepository;
 
     // #158/RN-NOVA-6 (+ item avulso P-BE-NUMERO-SORT) — allowlist explícita dos 5 critérios de
     // ordenação aceitos em GET /producoes. "produto" e "quantidade" são agregados (MIN/SUM sobre
@@ -646,6 +652,12 @@ public class ProducaoService {
      */
     private Object dividir(Producao producaoOriginal, List<ProducaoProduto> produtosDaProducao,
                             VerificacaoInsumos verificacao, List<UUID> idsConfirmados) {
+        // RN-NOVA-42 — lote com mais de um pedido trava inteiro; não se divide.
+        if (pedidosDaProducao(producaoOriginal.getId()).stream()
+                .map(p -> p.orcamento().getId()).distinct().count() > 1) {
+            throw new BusinessException("Não é possível dividir uma produção que atende mais de um pedido. "
+                    + "Opções: resolver o estoque ou cancelar a produção.");
+        }
         ProdutosDivididos divididos = classificarPorBloqueio(produtosDaProducao, verificacao.bloqueantes());
 
         if (divididos.semBloqueio().isEmpty()) {
@@ -1107,8 +1119,287 @@ public class ProducaoService {
         List<HistoricoStatusProducao> historico = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producao.getId());
         List<Producao> producoesFilhas = producaoRepository.findByProducaoOrigemId(producao.getId());
         List<OrcamentoProducao> orcamentosVinculados = orcamentoProducaoRepository.findByProducaoId(producao.getId());
-        return producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos, historico, producoesFilhas,
-                fichaTecnicaPorProduto(produtos), orcamentosVinculados);
+        ProducaoDetalheResponse detalhe = producaoMapper.toDetalheResponse(producao, consumidos, produtos, alertasInsumos,
+                historico, producoesFilhas, fichaTecnicaPorProduto(produtos), orcamentosVinculados);
+        detalhe.setPedidosAtendidos(pedidosDaProducao(producao.getId()).stream().map(this::toPedidoAtendidoResponse).toList());
+        return detalhe;
+    }
+
+    /** RN-NOVA-42 — pedidos atendidos de uma produção, para o orçamento mostrar "5 de 12". */
+    @Transactional(readOnly = true)
+    public List<PedidoAtendidoResponse> pedidosAtendidosDaProducao(UUID producaoId) {
+        return pedidosDaProducao(producaoId).stream().map(this::toPedidoAtendidoResponse).toList();
+    }
+
+    private PedidoAtendidoResponse toPedidoAtendidoResponse(PedidoNoLote pedido) {
+        PedidoAtendidoResponse r = new PedidoAtendidoResponse();
+        r.setOrcamentoId(pedido.orcamento().getId());
+        r.setIdentificadorOrcamento(IdentificadorFormatter.formatar("ORC", pedido.orcamento().getNumero()));
+        r.setNomeCliente(pedido.orcamento().getCliente().getNome());
+        r.setProdutoId(pedido.produto().getId());
+        r.setNomeProduto(pedido.produto().getNome());
+        r.setQuantidade(pedido.quantidade());
+        return r;
+    }
+
+    /** Quanto de um produto de um pedido há no lote (saldo ITEM_ADICIONADO − ITEM_REMOVIDO). */
+    private record PedidoNoLote(Orcamento orcamento, Produto produto, BigDecimal quantidade) {
+    }
+
+    /** RN-NOVA-42 — saldo líquido por orçamento e produto, na ordem em que entraram; saldo zerado some. */
+    private List<PedidoNoLote> pedidosDaProducao(UUID producaoId) {
+        Map<String, Orcamento> orcamentos = new LinkedHashMap<>();
+        Map<String, Produto> produtos = new LinkedHashMap<>();
+        Map<String, BigDecimal> saldos = new LinkedHashMap<>();
+        for (HistoricoStatusProducao linha : historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producaoId)) {
+            if ((linha.getTipoEvento() != TipoEventoHistoricoProducao.ITEM_ADICIONADO
+                    && linha.getTipoEvento() != TipoEventoHistoricoProducao.ITEM_REMOVIDO)
+                    || linha.getReferenciaOrcamento() == null || linha.getProduto() == null) {
+                continue;
+            }
+            String chave = linha.getReferenciaOrcamento().getId() + "|" + linha.getProduto().getId();
+            orcamentos.putIfAbsent(chave, linha.getReferenciaOrcamento());
+            produtos.putIfAbsent(chave, linha.getProduto());
+            BigDecimal delta = linha.getTipoEvento() == TipoEventoHistoricoProducao.ITEM_ADICIONADO
+                    ? linha.getQuantidade() : linha.getQuantidade().negate();
+            saldos.merge(chave, delta, BigDecimal::add);
+        }
+        Set<UUID> vinculados = orcamentoProducaoRepository.findByProducaoId(producaoId).stream()
+                .map(v -> v.getOrcamento().getId()).collect(java.util.stream.Collectors.toSet());
+        List<PedidoNoLote> lista = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> e : saldos.entrySet()) {
+            if (e.getValue().compareTo(BigDecimal.ZERO) > 0
+                    && vinculados.contains(orcamentos.get(e.getKey()).getId())) {
+                Orcamento orc = orcamentos.get(e.getKey());
+                Produto prod = produtos.get(e.getKey());
+                // O histórico guarda a quantidade produzida (já arredondada); o pedido vale o que está nos itens.
+                BigDecimal doPedido = orcamentoItemRepository.findByOrcamentoId(orc.getId()).stream()
+                        .filter(i -> i.getProduto() != null && i.getProduto().getId().equals(prod.getId()))
+                        .map(i -> BigDecimal.valueOf(i.getQuantidade()))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                lista.add(new PedidoNoLote(orc, prod,
+                        doPedido.signum() > 0 ? doPedido : e.getValue()));
+            }
+        }
+        return lista;
+    }
+
+    /** RN-NOVA-42 (4) — produtos do lote cujos pedidos, hoje, somam mais do que a produção cobre. */
+    @Transactional(readOnly = true)
+    public List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> excedentesDoLote(UUID producaoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+        Map<UUID, BigDecimal> somaPedidos = new LinkedHashMap<>();
+        for (PedidoNoLote p : pedidosDaProducao(producao.getId())) {
+            somaPedidos.merge(p.produto().getId(), p.quantidade(), BigDecimal::add);
+        }
+        List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> lista = new ArrayList<>();
+        for (ProducaoProduto pp : producaoProdutoRepository.findByProducaoId(producao.getId())) {
+            BigDecimal pedidos = somaPedidos.getOrDefault(pp.getProduto().getId(), BigDecimal.ZERO);
+            BigDecimal falta = pedidos.subtract(pp.getQuantidade());
+            if (somaPedidos.size() > 1 || orcamentoProducaoRepository.findByProducaoId(producao.getId()).size() > 1) {
+                if (falta.signum() > 0) {
+                    var r = new com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse();
+                    r.setProducaoId(producao.getId());
+                    r.setIdentificadorProducao(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
+                    r.setProdutoId(pp.getProduto().getId());
+                    r.setNomeProduto(pp.getProduto().getNome());
+                    r.setQuantidadeLote(pp.getQuantidade());
+                    r.setQuantidadePedidos(pedidos);
+                    r.setNaoCobertas(falta);
+                    lista.add(r);
+                }
+            }
+        }
+        return lista;
+    }
+
+    /**
+     * RN-NOVA-42 (4) — manter o lote registra no histórico as unidades não cobertas; cancelar o lote
+     * cancela a produção e deixa todos os pedidos sem produção vinculada.
+     */
+    public ProducaoDetalheResponse resolverExcedente(UUID producaoId,
+            com.penseprecifique.api.shared.dto.request.producao.ResolverExcedenteRequest request) {
+        List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> excedentes = excedentesDoLote(producaoId);
+        Producao producao = producaoRepository.findById(producaoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+        if (excedentes.isEmpty()) {
+            throw new BusinessException("Esta produção não tem pedidos acima da quantidade do lote");
+        }
+        if (Boolean.TRUE.equals(request.getCancelarLote())) {
+            CancelarProducaoRequest cancelamento = new CancelarProducaoRequest();
+            cancelamento.setJustificativa("Pedido do lote passou da quantidade produzida: lote cancelado por decisão da usuária (RN-NOVA-42).");
+            ProducaoDetalheResponse r = cancelar(producaoId, cancelamento);
+            orcamentoProducaoRepository.deleteAll(orcamentoProducaoRepository.findByProducaoId(producaoId));
+            return r;
+        }
+        String detalhe = excedentes.stream()
+                .map(e -> e.getNaoCobertas().stripTrailingZeros().toPlainString() + " un. de " + e.getNomeProduto())
+                .collect(Collectors.joining("; "));
+        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                .producao(producao)
+                .statusAnterior(producao.getEstado())
+                .statusNovo(producao.getEstado())
+                .origem(OrigemHistoricoStatus.USUARIO)
+                .justificativa("Lote mantido com pedidos acima da quantidade produzida; não cobertas: " + detalhe + " (RN-NOVA-42).")
+                .build());
+        return montarDetalhe(producao, List.of());
+    }
+
+    private boolean exigeMultiploDoRendimento(Produto produto) {
+        if (produto.getRendimento() == null || produto.getRendimento().compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        return fichaTecnicaItemRepository.findByProdutoId(produto.getId()).stream()
+                .anyMatch(f -> f.getInsumo() != null && Boolean.FALSE.equals(f.getInsumo().getFracionavel()));
+    }
+
+    /**
+     * RN-NOVA-42 — candidatas a juntar com a produção informada: mesmo produto, Aguardando início,
+     * vinculadas a algum orçamento e a nenhum dos orçamentos da produção atual. Em andamento, Travada,
+     * Finalizada e Cancelada nunca entram.
+     */
+    @Transactional(readOnly = true)
+    public List<CandidataJuntarResponse> candidatasParaJuntar(UUID producaoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Producao atual = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+        Set<UUID> produtosAtuais = new HashSet<>();
+        for (ProducaoProduto pp : producaoProdutoRepository.findByProducaoId(atual.getId())) {
+            produtosAtuais.add(pp.getProduto().getId());
+        }
+        Set<UUID> orcamentosAtuais = new HashSet<>();
+        for (OrcamentoProducao v : orcamentoProducaoRepository.findByProducaoId(atual.getId())) {
+            orcamentosAtuais.add(v.getOrcamento().getId());
+        }
+        List<CandidataJuntarResponse> resultado = new ArrayList<>();
+        for (Producao outra : producaoRepository.findByUsuarioIdAndEstado(usuarioId, EstadoProducao.AGUARDANDO_INICIO)) {
+            if (outra.getId().equals(atual.getId())) {
+                continue;
+            }
+            List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(outra.getId());
+            if (produtos.stream().noneMatch(pp -> produtosAtuais.contains(pp.getProduto().getId()))) {
+                continue;
+            }
+            List<OrcamentoProducao> vinculos = orcamentoProducaoRepository.findByProducaoId(outra.getId());
+            if (vinculos.isEmpty() || vinculos.stream().anyMatch(v -> orcamentosAtuais.contains(v.getOrcamento().getId()))) {
+                continue;
+            }
+            CandidataJuntarResponse r = new CandidataJuntarResponse();
+            r.setId(outra.getId());
+            r.setIdentificador(IdentificadorFormatter.formatar("PRD", outra.getNumero()));
+            r.setDataInicio(outra.getDataInicio());
+            r.setDataTerminoPrevista(outra.getDataTerminoPrevista());
+            r.setProdutos(produtos.stream().map(pp -> {
+                CandidataJuntarResponse.ProdutoQuantidade q = new CandidataJuntarResponse.ProdutoQuantidade();
+                q.setProdutoId(pp.getProduto().getId());
+                q.setNomeProduto(pp.getProduto().getNome());
+                q.setQuantidade(pp.getQuantidade());
+                return q;
+            }).toList());
+            r.setOrcamentos(vinculos.stream().map(v -> IdentificadorFormatter.formatar("ORC", v.getOrcamento().getNumero())
+                    + " — " + v.getOrcamento().getCliente().getNome()).toList());
+            resultado.add(r);
+        }
+        return resultado;
+    }
+
+    /**
+     * RN-NOVA-42 — junta duas produções de pedidos diferentes num lote (usa {@link #agrupar}, PDC-015).
+     * A quantidade do lote é recalculada a partir dos pedidos (não das quantidades já arredondadas das
+     * originais): soma dos pedidos, arredondada ao menor múltiplo do rendimento quando o produto exige
+     * (PDC-027). A sobra é permitida. A data posterior ao prazo de um pedido só gera AVISO.
+     */
+    public JuntarProducoesResponse juntar(UUID producaoId, JuntarProducoesRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        if (producaoId.equals(request.getProducaoOutraId())) {
+            throw new BusinessException("Escolha outra produção para juntar");
+        }
+        List<Producao> duas = new ArrayList<>();
+        for (UUID id : List.of(producaoId, request.getProducaoOutraId())) {
+            Producao p = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+            if (p.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
+                throw new BusinessException("Só produções aguardando início podem ser juntadas ("
+                        + IdentificadorFormatter.formatar("PRD", p.getNumero()) + " está em " + p.getEstado() + ")");
+            }
+            duas.add(p);
+        }
+        Set<UUID> produtosA = new HashSet<>();
+        producaoProdutoRepository.findByProducaoId(duas.get(0).getId()).forEach(pp -> produtosA.add(pp.getProduto().getId()));
+        if (producaoProdutoRepository.findByProducaoId(duas.get(1).getId()).stream()
+                .noneMatch(pp -> produtosA.contains(pp.getProduto().getId()))) {
+            throw new BusinessException("As produções precisam ter ao menos um produto em comum");
+        }
+        Set<UUID> orcamentosA = new HashSet<>();
+        orcamentoProducaoRepository.findByProducaoId(duas.get(0).getId()).forEach(v -> orcamentosA.add(v.getOrcamento().getId()));
+        List<OrcamentoProducao> vinculosB = orcamentoProducaoRepository.findByProducaoId(duas.get(1).getId());
+        if (orcamentosA.isEmpty() || vinculosB.isEmpty()) {
+            throw new BusinessException("Só é possível juntar produções vinculadas a orçamentos");
+        }
+        if (vinculosB.stream().anyMatch(v -> orcamentosA.contains(v.getOrcamento().getId()))) {
+            throw new BusinessException("As produções precisam ser de orçamentos diferentes");
+        }
+
+        AgruparProducoesRequest agrupar = new AgruparProducoesRequest();
+        agrupar.setProducaoIds(List.of(duas.get(0).getId(), duas.get(1).getId()));
+        agrupar.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
+        agrupar.setDataInicio(request.getDataInicio());
+        agrupar.setDataTerminoPrevista(request.getDataTerminoPrevista());
+        agrupar.setJustificativa("Juntadas num lote de pedidos diferentes (RN-NOVA-42)");
+        AgruparProducoesResponse agrupada = (AgruparProducoesResponse) agrupar(agrupar);
+
+        Producao nova = producaoRepository.findByIdAndUsuarioId(agrupada.getProducaoNova().getId(), usuarioId).orElseThrow();
+        List<PedidoNoLote> pedidos = pedidosDaProducao(nova.getId());
+        Map<UUID, BigDecimal> somaPorProduto = new LinkedHashMap<>();
+        for (PedidoNoLote p : pedidos) {
+            somaPorProduto.merge(p.produto().getId(), p.quantidade(), BigDecimal::add);
+        }
+        for (ProducaoProduto pp : producaoProdutoRepository.findByProducaoId(nova.getId())) {
+            BigDecimal soma = somaPorProduto.get(pp.getProduto().getId());
+            if (soma == null) {
+                continue;
+            }
+            BigDecimal quantidade = exigeMultiploDoRendimento(pp.getProduto())
+                    ? soma.divide(pp.getProduto().getRendimento(), 0, RoundingMode.CEILING).multiply(pp.getProduto().getRendimento())
+                    : soma;
+            pp.setQuantidade(quantidade);
+            producaoProdutoRepository.save(pp);
+        }
+
+        JuntarProducoesResponse response = new JuntarProducoesResponse();
+        response.setProducaoNova(montarDetalhe(nova, List.of()));
+        response.setProducoesOriginais(agrupada.getProducoesOriginais());
+        response.setAvisos(avisosDePrazo(nova));
+        return response;
+    }
+
+    /** RN-NOVA-42 (1) — AVISO (nunca bloqueio) quando o término previsto do lote passa do prazo de algum pedido. */
+    @Transactional(readOnly = true)
+    public List<String> avisosDePrazoDaProducao(UUID producaoId) {
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, getUsuarioIdAutenticado())
+                .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
+        return avisosDePrazo(producao);
+    }
+
+    private List<String> avisosDePrazo(Producao producao) {
+        LocalDate fim = producao.getDataTerminoPrevista() != null ? producao.getDataTerminoPrevista() : producao.getDataInicio();
+        List<String> avisos = new ArrayList<>();
+        if (fim == null) {
+            return avisos;
+        }
+        Set<UUID> vistos = new HashSet<>();
+        for (OrcamentoProducao v : orcamentoProducaoRepository.findByProducaoId(producao.getId())) {
+            Orcamento o = v.getOrcamento();
+            if (!vistos.add(o.getId()) || o.getDataInicioEstimada() == null || o.getPrazoProducaoDias() == null) {
+                continue;
+            }
+            if (fim.isAfter(o.getDataInicioEstimada().plusDays(o.getPrazoProducaoDias()))) {
+                avisos.add("A data prevista é posterior ao prazo de entrega de " + o.getCliente().getNome());
+            }
+        }
+        return avisos;
     }
 
     /** Componente (insumo ou produto-base) com a necessidade já somada entre todos os produtos da produção. */
