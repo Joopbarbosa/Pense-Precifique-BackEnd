@@ -220,9 +220,10 @@ class ProducaoOrcamentosVinculadosIT {
                         .anyMatch(v -> v.getOrcamentoId().equals(orcamentoB))));
     }
 
-    /** RN-NOVA-16, critério 1 — indicador continua aceso mesmo com o orçamento vinculado CANCELADO. */
+    /** RN-NOVA-40 (V0.18.0, #1167) substitui o critério 1 da RN-NOVA-16 da V0.8: o orçamento cancelado
+     * sempre se desvincula, então o indicador some da produção que ficou (decisão "manter" ou ausente). */
     @Test
-    void listagemMostraVinculoIndependenteDoStatusDoOrcamentoInclusiveCancelado() {
+    void listagemNaoMostraVinculoDeOrcamentoCancelado() {
         seedUsuarioECliente();
         Produto produto = novoProduto();
         UUID orcamentoId = criarOrcamentoComProduto(produto, 1, new BigDecimal("20.00"));
@@ -235,9 +236,8 @@ class ProducaoOrcamentosVinculadosIT {
         ProducaoResponse resposta = pagina.getContent().stream()
                 .filter(p -> p.getId().equals(producao.getId())).findFirst().orElseThrow();
 
-        assertEquals(1, resposta.getOrcamentosVinculados().size(),
-                "vínculo continua visível mesmo com o orçamento já CANCELADO — RN-NOVA-16 não filtra por status");
-        assertEquals(StatusOrcamento.CANCELADO, resposta.getOrcamentosVinculados().get(0).getStatusOrcamento());
+        assertTrue(resposta.getOrcamentosVinculados().isEmpty(),
+                "orçamento CANCELADO se desvincula da produção — RN-NOVA-40");
     }
 
     /** RN-NOVA-16 — findByProducaoIdIn é 1 única query batched, independente do nº de produções/vínculos
