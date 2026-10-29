@@ -10,6 +10,7 @@ import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoReques
 import com.penseprecifique.api.shared.dto.request.producao.JuntarProducoesRequest;
 import com.penseprecifique.api.shared.dto.response.producao.CandidataJuntarResponse;
 import com.penseprecifique.api.shared.dto.response.producao.JuntarProducoesResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducoesPeriodoResponse;
 import com.penseprecifique.api.shared.dto.request.producao.RetomarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
@@ -137,6 +138,12 @@ public class ProducaoController {
     @GetMapping("/{id}/candidatas-juntar")
     public ResponseEntity<List<CandidataJuntarResponse>> candidatasJuntar(@PathVariable UUID id) {
         return ResponseEntity.ok(producaoService.candidatasParaJuntar(id));
+    }
+
+    // RN-NOVA-49 (V0.18.0, #1184) — produções do intervalo entre a aprovação e a entrega estimada do orçamento.
+    @GetMapping("/do-periodo")
+    public ResponseEntity<ProducoesPeriodoResponse> doPeriodo(@RequestParam UUID orcamentoId) {
+        return ResponseEntity.ok(producaoService.producoesDoPeriodo(orcamentoId));
     }
 
     @PostMapping("/{id}/juntar")

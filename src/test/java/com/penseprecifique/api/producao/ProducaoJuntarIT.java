@@ -63,6 +63,7 @@ class ProducaoJuntarIT {
     @Autowired OrcamentoProducaoRepository orcamentoProducaoRepository;
     @Autowired OrcamentoItemRepository orcamentoItemRepository;
     @Autowired ProducaoRepository producaoRepository;
+    @Autowired com.penseprecifique.api.orcamento.OrcamentoRepository orcamentoRepository;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -77,10 +78,14 @@ class ProducaoJuntarIT {
     }
 
     private Produto novoProduto(int numero, boolean insumoFracionavel) {
+        return novoProduto(numero, insumoFracionavel, new BigDecimal("12"));
+    }
+
+    private Produto novoProduto(int numero, boolean insumoFracionavel, BigDecimal rendimento) {
         Produto produto = produtoRepository.save(Produto.builder()
                 .usuario(usuario).numero(numero).nome("Brownie " + numero).tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(new BigDecimal("1000"))
-                .permitirEstoqueNegativo(true).rendimento(new BigDecimal("12"))
+                .permitirEstoqueNegativo(true).rendimento(rendimento)
                 .precoVenda(new BigDecimal("50.00")).build());
         UnidadeMedida un = unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), "un")
                 .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
@@ -174,18 +179,143 @@ class ProducaoJuntarIT {
         assertTrue(r.getAvisos().get(0).contains("posterior ao prazo de entrega de Maria"));
     }
 
+    /** CEN-NOVO-164 e CEN-NOVO-151 revisado (RN-NOVA-48) — qualquer produto entra; Em andamento aparece marcada e sem poder ser escolhida. */
     @Test
-    void candidatasExcluemProdutoDiferenteEEmAndamento() {
+    void candidatasTrazemQualquerProdutoEMarcamEmAndamento() {
         seed();
         Produto p = novoProduto(1, false);
         Produto outro = novoProduto(2, false);
         LocalDate termino = LocalDate.now().plusDays(3);
         UUID a = producaoDoOrcamento(orcamento(p, 5, null, null), termino);
-        UUID b = producaoDoOrcamento(orcamento(p, 7, null, null), termino);
-        producaoDoOrcamento(orcamento(outro, 7, null, null), termino);
+        UUID b = producaoDoOrcamento(orcamento(outro, 7, null, null), termino);
+        UUID c = producaoDoOrcamento(orcamento(p, 7, null, null), termino);
+        var emAndamento = producaoRepository.findById(c).orElseThrow();
+        emAndamento.setEstado(EstadoProducao.EM_ANDAMENTO);
+        producaoRepository.save(emAndamento);
         List<CandidataJuntarResponse> lista = producaoService.candidatasParaJuntar(a);
-        assertEquals(1, lista.size());
-        assertEquals(b, lista.get(0).getId());
+        assertEquals(2, lista.size());
+        CandidataJuntarResponse deOutroProduto = lista.stream().filter(x -> x.getId().equals(b)).findFirst().orElseThrow();
+        assertTrue(deOutroProduto.isSelecionavel());
+        assertEquals("AGUARDANDO_INICIO", deOutroProduto.getSituacao());
+        CandidataJuntarResponse andamento = lista.stream().filter(x -> x.getId().equals(c)).findFirst().orElseThrow();
+        assertFalse(andamento.isSelecionavel());
+        assertEquals("EM_ANDAMENTO", andamento.getSituacao());
+        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(c)));
+    }
+
+    /** CEN-NOVO-163 (RN-NOVA-48) — Brownie 5 + 7 vira uma linha de 12; Necessaire (rendimento 1) fica 4 numa linha separada. */
+    @Test
+    void produtosDiferentesNaoSomamEntreSi() {
+        seed();
+        Produto brownie = novoProduto(1, false);
+        Produto necessaire = novoProduto(2, false, BigDecimal.ONE);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID a = producaoDoOrcamento(orcamento(brownie, 5, null, null), termino);
+        UUID b = producaoDoOrcamento(orcamento(brownie, 7, null, null), termino);
+        UUID c = producaoDoOrcamento(orcamento(necessaire, 4, null, null), termino);
+        UUID lote1 = producaoService.juntar(a, juntarCom(b)).getProducaoNova().getId();
+        JuntarProducoesResponse r = producaoService.juntar(lote1, juntarCom(c));
+        var linhas = r.getProducaoNova().getProdutos();
+        assertEquals(2, linhas.size());
+        assertEquals(12, linhas.stream().filter(l -> l.getProdutoId().equals(brownie.getId())).findFirst().orElseThrow().getQuantidade().intValue());
+        assertEquals(4, linhas.stream().filter(l -> l.getProdutoId().equals(necessaire.getId())).findFirst().orElseThrow().getQuantidade().intValue());
+        assertEquals(3, r.getProducaoNova().getPedidosAtendidos().size());
+    }
+
+    /** CEN-NOVO-169 (RN-NOVA-48) — a Ana cancela: manter o lote deixa as linhas como estão (4 viram sobra); cancelar derruba tudo. */
+    @Test
+    void cancelarPedidoDeProdutoDiferenteMantendoOuCancelandoLote() {
+        seed();
+        Produto brownie = novoProduto(1, false);
+        Produto necessaire = novoProduto(2, false, BigDecimal.ONE);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID oa = orcamento(brownie, 5, null, null);
+        UUID ob = orcamento(brownie, 7, null, null);
+        UUID oc = orcamento(necessaire, 4, null, null);
+        UUID lote1 = producaoService.juntar(producaoDoOrcamento(oa, termino), juntarCom(producaoDoOrcamento(ob, termino)))
+                .getProducaoNova().getId();
+        UUID lote = producaoService.juntar(lote1, juntarCom(producaoDoOrcamento(oc, termino))).getProducaoNova().getId();
+
+        orcamentoService.cancelar(oc, cancelamento(lote, false));
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(lote).orElseThrow().getEstado());
+        var linhas = producaoService.buscarPorId(lote).getProdutos();
+        assertEquals(12, linhas.stream().filter(l -> l.getProdutoId().equals(brownie.getId())).findFirst().orElseThrow().getQuantidade().intValue());
+        assertEquals(4, linhas.stream().filter(l -> l.getProdutoId().equals(necessaire.getId())).findFirst().orElseThrow().getQuantidade().intValue());
+        assertEquals(2, orcamentoProducaoRepository.findByProducaoId(lote).size());
+        assertEquals(2, producaoService.pedidosAtendidosDaProducao(lote).size());
+    }
+
+    @Test
+    void cancelarPedidoDeProdutoDiferenteCancelandoLoteInteiro() {
+        seed();
+        Produto brownie = novoProduto(1, false);
+        Produto necessaire = novoProduto(2, false, BigDecimal.ONE);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID oa = orcamento(brownie, 5, null, null);
+        UUID oc = orcamento(necessaire, 4, null, null);
+        UUID lote = producaoService.juntar(producaoDoOrcamento(oa, termino), juntarCom(producaoDoOrcamento(oc, termino)))
+                .getProducaoNova().getId();
+        orcamentoService.cancelar(oc, cancelamento(lote, true));
+        assertEquals(EstadoProducao.CANCELADA, producaoRepository.findById(lote).orElseThrow().getEstado());
+        assertTrue(orcamentoProducaoRepository.findByProducaoId(lote).isEmpty());
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoId(oa).stream().noneMatch(v -> v.getProducao().getId().equals(lote)));
+    }
+
+    private UUID orcamentoAprovado(Produto produto, int quantidade, LocalDate aprovacao, Integer prazoDias) {
+        UUID id = orcamento(produto, quantidade, null, prazoDias);
+        var o = orcamentoRepository.findById(id).orElseThrow();
+        o.setDataAprovacao(aprovacao == null ? null : aprovacao.atTime(10, 0));
+        orcamentoRepository.save(o);
+        return id;
+    }
+
+    private UUID producaoNoDia(Produto produto, LocalDate inicio, LocalDate termino, EstadoProducao estado) {
+        UUID id = producaoDoOrcamento(orcamento(produto, 5, null, null), termino);
+        var pr = producaoRepository.findById(id).orElseThrow();
+        pr.setDataInicio(inicio);
+        pr.setEstado(estado);
+        producaoRepository.save(pr);
+        return id;
+    }
+
+    /** CEN-NOVO-165 (RN-NOVA-49) — aprovado em 02/11 com entrega em 06/11: entram 03/11, 04/11, 05/11; 10/11 e Cancelada não. */
+    @Test
+    void producoesDoPeriodoDaAprovacaoAteAEntrega() {
+        seed();
+        Produto p = novoProduto(1, false);
+        LocalDate aprovacao = LocalDate.of(2026, 11, 2);
+        UUID alvo = orcamentoAprovado(p, 5, aprovacao, 4);
+        UUID aguardando = producaoNoDia(p, LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 3), EstadoProducao.AGUARDANDO_INICIO);
+        UUID andamento = producaoNoDia(p, LocalDate.of(2026, 11, 5), LocalDate.of(2026, 11, 5), EstadoProducao.EM_ANDAMENTO);
+        UUID travada = producaoNoDia(p, LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 4), EstadoProducao.TRAVADA);
+        UUID depois = producaoNoDia(p, LocalDate.of(2026, 11, 10), LocalDate.of(2026, 11, 10), EstadoProducao.AGUARDANDO_INICIO);
+        UUID cancelada = producaoNoDia(p, LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 3), EstadoProducao.CANCELADA);
+        UUID naBorda = producaoNoDia(p, LocalDate.of(2026, 11, 6), LocalDate.of(2026, 11, 8), EstadoProducao.AGUARDANDO_INICIO);
+
+        var r = producaoService.producoesDoPeriodo(alvo);
+        assertTrue(r.isPeriodoDisponivel());
+        assertEquals(aprovacao, r.getDataInicio());
+        assertEquals(LocalDate.of(2026, 11, 6), r.getDataFim());
+        List<UUID> ids = r.getProducoes().stream().map(CandidataJuntarResponse::getId).toList();
+        assertTrue(ids.containsAll(List.of(aguardando, andamento, travada, naBorda)));
+        assertFalse(ids.contains(depois));
+        assertFalse(ids.contains(cancelada));
+        assertTrue(r.getProducoes().stream().filter(x -> x.getId().equals(aguardando)).findFirst().orElseThrow().isSelecionavel());
+        assertFalse(r.getProducoes().stream().filter(x -> x.getId().equals(andamento)).findFirst().orElseThrow().isSelecionavel());
+        assertFalse(r.getProducoes().stream().filter(x -> x.getId().equals(travada)).findFirst().orElseThrow().isSelecionavel());
+    }
+
+    /** CEN-NOVO-165 — orçamento sem aprovação (ou sem prazo) não tem período. */
+    @Test
+    void producoesDoPeriodoSemAprovacaoOuSemEntrega() {
+        seed();
+        Produto p = novoProduto(1, false);
+        UUID semAprovacao = orcamentoAprovado(p, 5, null, 4);
+        UUID semPrazo = orcamentoAprovado(p, 5, LocalDate.of(2026, 11, 2), null);
+        assertFalse(producaoService.producoesDoPeriodo(semAprovacao).isPeriodoDisponivel());
+        assertFalse(producaoService.producoesDoPeriodo(semPrazo).isPeriodoDisponivel());
+        assertTrue(producaoService.producoesDoPeriodo(semPrazo).getProducoes().isEmpty());
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.producoesDoPeriodo(UUID.randomUUID()));
     }
 
     @Test

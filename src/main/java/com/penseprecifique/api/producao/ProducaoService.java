@@ -33,6 +33,7 @@ import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoReques
 import com.penseprecifique.api.shared.dto.request.producao.JuntarProducoesRequest;
 import com.penseprecifique.api.shared.dto.response.producao.CandidataJuntarResponse;
 import com.penseprecifique.api.shared.dto.response.producao.JuntarProducoesResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducoesPeriodoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.PedidoAtendidoResponse;
 import com.penseprecifique.api.shared.dto.request.producao.PerdaProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
@@ -103,6 +104,8 @@ public class ProducaoService {
     private final ProducaoMapper producaoMapper;
     private final OrcamentoProducaoRepository orcamentoProducaoRepository;
     private final com.penseprecifique.api.orcamento.OrcamentoItemRepository orcamentoItemRepository;
+    private final com.penseprecifique.api.orcamento.OrcamentoRepository orcamentoRepository;
+    private final com.penseprecifique.api.orcamento.EntregaEstimadaCalculadora entregaEstimadaCalculadora;
 
     // #158/RN-NOVA-6 (+ item avulso P-BE-NUMERO-SORT) — allowlist explícita dos 5 critérios de
     // ordenação aceitos em GET /producoes. "produto" e "quantidade" são agregados (MIN/SUM sobre
@@ -1262,53 +1265,99 @@ public class ProducaoService {
     }
 
     /**
-     * RN-NOVA-42 — candidatas a juntar com a produção informada: mesmo produto, Aguardando início,
-     * vinculadas a algum orçamento e a nenhum dos orçamentos da produção atual. Em andamento, Travada,
-     * Finalizada e Cancelada nunca entram.
+     * RN-NOVA-48 — candidatas a juntar com a produção informada: Aguardando início de qualquer produto,
+     * vinculadas a algum orçamento e a nenhum dos orçamentos da produção atual. Em andamento aparece
+     * marcada, sem poder ser escolhida; Travada, Finalizada e Cancelada nunca entram.
      */
     @Transactional(readOnly = true)
     public List<CandidataJuntarResponse> candidatasParaJuntar(UUID producaoId) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao atual = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
-        Set<UUID> produtosAtuais = new HashSet<>();
-        for (ProducaoProduto pp : producaoProdutoRepository.findByProducaoId(atual.getId())) {
-            produtosAtuais.add(pp.getProduto().getId());
-        }
         Set<UUID> orcamentosAtuais = new HashSet<>();
         for (OrcamentoProducao v : orcamentoProducaoRepository.findByProducaoId(atual.getId())) {
             orcamentosAtuais.add(v.getOrcamento().getId());
         }
         List<CandidataJuntarResponse> resultado = new ArrayList<>();
-        for (Producao outra : producaoRepository.findByUsuarioIdAndEstado(usuarioId, EstadoProducao.AGUARDANDO_INICIO)) {
-            if (outra.getId().equals(atual.getId())) {
-                continue;
+        for (EstadoProducao estado : List.of(EstadoProducao.AGUARDANDO_INICIO, EstadoProducao.EM_ANDAMENTO)) {
+            for (Producao outra : producaoRepository.findByUsuarioIdAndEstado(usuarioId, estado)) {
+                if (outra.getId().equals(atual.getId())) {
+                    continue;
+                }
+                List<OrcamentoProducao> vinculos = orcamentoProducaoRepository.findByProducaoId(outra.getId());
+                if (vinculos.isEmpty() || vinculos.stream().anyMatch(v -> orcamentosAtuais.contains(v.getOrcamento().getId()))) {
+                    continue;
+                }
+                resultado.add(montarCandidata(outra, vinculos));
             }
-            List<ProducaoProduto> produtos = producaoProdutoRepository.findByProducaoId(outra.getId());
-            if (produtos.stream().noneMatch(pp -> produtosAtuais.contains(pp.getProduto().getId()))) {
-                continue;
-            }
-            List<OrcamentoProducao> vinculos = orcamentoProducaoRepository.findByProducaoId(outra.getId());
-            if (vinculos.isEmpty() || vinculos.stream().anyMatch(v -> orcamentosAtuais.contains(v.getOrcamento().getId()))) {
-                continue;
-            }
-            CandidataJuntarResponse r = new CandidataJuntarResponse();
-            r.setId(outra.getId());
-            r.setIdentificador(IdentificadorFormatter.formatar("PRD", outra.getNumero()));
-            r.setDataInicio(outra.getDataInicio());
-            r.setDataTerminoPrevista(outra.getDataTerminoPrevista());
-            r.setProdutos(produtos.stream().map(pp -> {
-                CandidataJuntarResponse.ProdutoQuantidade q = new CandidataJuntarResponse.ProdutoQuantidade();
-                q.setProdutoId(pp.getProduto().getId());
-                q.setNomeProduto(pp.getProduto().getNome());
-                q.setQuantidade(pp.getQuantidade());
-                return q;
-            }).toList());
-            r.setOrcamentos(vinculos.stream().map(v -> IdentificadorFormatter.formatar("ORC", v.getOrcamento().getNumero())
-                    + " — " + v.getOrcamento().getCliente().getNome()).toList());
-            resultado.add(r);
         }
         return resultado;
+    }
+
+    private CandidataJuntarResponse montarCandidata(Producao producao, List<OrcamentoProducao> vinculos) {
+        CandidataJuntarResponse r = new CandidataJuntarResponse();
+        r.setId(producao.getId());
+        r.setIdentificador(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
+        r.setSituacao(producao.getEstado().name());
+        r.setSelecionavel(producao.getEstado() == EstadoProducao.AGUARDANDO_INICIO);
+        r.setDataInicio(producao.getDataInicio());
+        r.setDataTerminoPrevista(producao.getDataTerminoPrevista());
+        r.setProdutos(producaoProdutoRepository.findByProducaoId(producao.getId()).stream().map(pp -> {
+            CandidataJuntarResponse.ProdutoQuantidade q = new CandidataJuntarResponse.ProdutoQuantidade();
+            q.setProdutoId(pp.getProduto().getId());
+            q.setNomeProduto(pp.getProduto().getNome());
+            q.setQuantidade(pp.getQuantidade());
+            return q;
+        }).toList());
+        r.setOrcamentos(vinculos.stream().map(v -> IdentificadorFormatter.formatar("ORC", v.getOrcamento().getNumero())
+                + " — " + v.getOrcamento().getCliente().getNome()).toList());
+        return r;
+    }
+
+    /**
+     * RN-NOVA-49 — produções de outros orçamentos cujo início ou término previsto cai entre a aprovação
+     * do orçamento e a entrega estimada dele (inclusive os dois dias). Cancelada e não realizada não
+     * aparecem; só Aguardando início pode ser juntada. Sem aprovação ou sem entrega estimada, o período
+     * não existe.
+     */
+    @Transactional(readOnly = true)
+    public ProducoesPeriodoResponse producoesDoPeriodo(UUID orcamentoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        com.penseprecifique.api.shared.domain.entity.Orcamento orcamento = orcamentoRepository
+                .findByIdAndUsuarioIdAndDeletedAtIsNull(orcamentoId, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        ProducoesPeriodoResponse resposta = new ProducoesPeriodoResponse();
+        resposta.setProducoes(new ArrayList<>());
+        LocalDate fim = entregaEstimadaCalculadora.calcular(orcamento);
+        if (orcamento.getDataAprovacao() == null || fim == null) {
+            resposta.setPeriodoDisponivel(false);
+            return resposta;
+        }
+        LocalDate inicio = orcamento.getDataAprovacao().toLocalDate();
+        resposta.setPeriodoDisponivel(true);
+        resposta.setDataInicio(inicio);
+        resposta.setDataFim(fim);
+        for (EstadoProducao estado : List.of(EstadoProducao.AGUARDANDO_INICIO, EstadoProducao.EM_ANDAMENTO,
+                EstadoProducao.TRAVADA, EstadoProducao.FINALIZADA)) {
+            for (Producao producao : producaoRepository.findByUsuarioIdAndEstado(usuarioId, estado)) {
+                if (!dentroDoPeriodo(producao.getDataInicio(), inicio, fim)
+                        && !dentroDoPeriodo(producao.getDataTerminoPrevista(), inicio, fim)) {
+                    continue;
+                }
+                List<OrcamentoProducao> vinculos = orcamentoProducaoRepository.findByProducaoId(producao.getId());
+                if (vinculos.stream().anyMatch(v -> v.getOrcamento().getId().equals(orcamentoId))) {
+                    continue;
+                }
+                CandidataJuntarResponse linha = montarCandidata(producao, vinculos);
+                linha.setSelecionavel(linha.isSelecionavel() && !vinculos.isEmpty());
+                resposta.getProducoes().add(linha);
+            }
+        }
+        return resposta;
+    }
+
+    private static boolean dentroDoPeriodo(LocalDate data, LocalDate inicio, LocalDate fim) {
+        return data != null && !data.isBefore(inicio) && !data.isAfter(fim);
     }
 
     /**
@@ -1331,12 +1380,6 @@ public class ProducaoService {
                         + IdentificadorFormatter.formatar("PRD", p.getNumero()) + " está em " + p.getEstado() + ")");
             }
             duas.add(p);
-        }
-        Set<UUID> produtosA = new HashSet<>();
-        producaoProdutoRepository.findByProducaoId(duas.get(0).getId()).forEach(pp -> produtosA.add(pp.getProduto().getId()));
-        if (producaoProdutoRepository.findByProducaoId(duas.get(1).getId()).stream()
-                .noneMatch(pp -> produtosA.contains(pp.getProduto().getId()))) {
-            throw new BusinessException("As produções precisam ter ao menos um produto em comum");
         }
         Set<UUID> orcamentosA = new HashSet<>();
         orcamentoProducaoRepository.findByProducaoId(duas.get(0).getId()).forEach(v -> orcamentosA.add(v.getOrcamento().getId()));
