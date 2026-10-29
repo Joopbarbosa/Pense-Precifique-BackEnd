@@ -31,6 +31,8 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.CriarProducaoVinculadaRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.DecisaoProducaoCancelamentoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
@@ -1536,6 +1538,9 @@ public class OrcamentoService {
 
         StatusOrcamento atual = orcamento.getStatus();
         LocalDateTime now = LocalDateTime.now();
+        // Já cancelado cai no erro de negócio do switch; as decisões só são validadas quando há o que decidir.
+        Map<UUID, Boolean> decisoes = atual == StatusOrcamento.CANCELADO
+                ? new LinkedHashMap<>() : validarDecisoesProducao(orcamento, request);
 
         switch (atual) {
             case RASCUNHO:
@@ -1597,7 +1602,52 @@ public class OrcamentoService {
         orcamento.setStatus(StatusOrcamento.CANCELADO);
         orcamento.setDataCancelamento(now);
         orcamento = orcamentoRepository.save(orcamento);
+        aplicarDecisoesProducaoNoCancelamento(orcamento, decisoes);
         return montarDetalhe(orcamento);
+    }
+
+    /**
+     * RN-NOVA-40 (V0.18.0, #1167) — o orçamento cancelado sempre se desvincula das produções. Para
+     * cada produção ainda aberta (aguardando início, em andamento ou travada), a decisão "cancelar"
+     * cancela a produção (insumo já consumido não volta ao estoque: consumo total, sem estorno) e a
+     * ausência de decisão ou "manter" deixa a produção como está, sem o vínculo; produtos e histórico
+     * (com o orçamento de origem) continuam intactos. Finalizada, cancelada e não realizada não
+     * entram na pergunta; só perdem o vínculo.
+     */
+    private void aplicarDecisoesProducaoNoCancelamento(Orcamento orcamento, Map<UUID, Boolean> decisoes) {
+        List<OrcamentoProducao> vinculos = new ArrayList<>(orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()));
+        for (OrcamentoProducao vinculo : vinculos) {
+            Producao producao = vinculo.getProducao();
+            EstadoProducao estado = producao.getEstado();
+            boolean aberta = estado == EstadoProducao.AGUARDANDO_INICIO
+                    || estado == EstadoProducao.EM_ANDAMENTO
+                    || estado == EstadoProducao.TRAVADA;
+            if (aberta && Boolean.TRUE.equals(decisoes.get(producao.getId()))) {
+                CancelarProducaoRequest cancelamento = new CancelarProducaoRequest();
+                cancelamento.setJustificativa("Orçamento ORC-" + orcamento.getNumero()
+                        + " cancelado: produção cancelada junto, por decisão da usuária.");
+                producaoService.cancelar(producao.getId(), cancelamento);
+            }
+            orcamentoProducaoRepository.delete(vinculo);
+        }
+    }
+
+    private Map<UUID, Boolean> validarDecisoesProducao(Orcamento orcamento, AvancaStatusRequest request) {
+        Map<UUID, Boolean> decisoes = new LinkedHashMap<>();
+        if (request.getDecisoesProducao() == null || request.getDecisoesProducao().isEmpty()) {
+            return decisoes;
+        }
+        Set<UUID> vinculadas = orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
+                .map(v -> v.getProducao().getId())
+                .collect(Collectors.toSet());
+        for (DecisaoProducaoCancelamentoRequest decisao : request.getDecisoesProducao()) {
+            if (!vinculadas.contains(decisao.getProducaoId())) {
+                // Mesma resposta para produção inexistente ou de outra conta: nunca revela o dado alheio.
+                throw new ResourceNotFoundException("Produção não encontrada neste orçamento");
+            }
+            decisoes.put(decisao.getProducaoId(), decisao.isCancelar());
+        }
+        return decisoes;
     }
 
     private void reverterEstoque(Orcamento orcamento, String motivo) {
