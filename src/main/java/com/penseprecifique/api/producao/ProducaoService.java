@@ -652,13 +652,19 @@ public class ProducaoService {
      */
     private Object dividir(Producao producaoOriginal, List<ProducaoProduto> produtosDaProducao,
                             VerificacaoInsumos verificacao, List<UUID> idsConfirmados) {
-        // RN-NOVA-42 — lote com mais de um pedido trava inteiro; não se divide.
-        if (pedidosDaProducao(producaoOriginal.getId()).stream()
-                .map(p -> p.orcamento().getId()).distinct().count() > 1) {
-            throw new BusinessException("Não é possível dividir uma produção que atende mais de um pedido. "
+        ProdutosDivididos divididos = classificarPorBloqueio(produtosDaProducao, verificacao.bloqueantes());
+
+        // RN-NOVA-42 — lote (produto bloqueado atendendo mais de um pedido) trava inteiro; não se divide.
+        Set<UUID> bloqueados = new HashSet<>();
+        divididos.comBloqueio().forEach(pp -> bloqueados.add(pp.getProduto().getId()));
+        Map<UUID, Set<UUID>> pedidosPorProduto = new HashMap<>();
+        for (PedidoNoLote p : pedidosDaProducao(producaoOriginal.getId())) {
+            pedidosPorProduto.computeIfAbsent(p.produto().getId(), k -> new HashSet<>()).add(p.orcamento().getId());
+        }
+        if (bloqueados.stream().anyMatch(id -> pedidosPorProduto.getOrDefault(id, Set.of()).size() > 1)) {
+            throw new BusinessException("Não é possível dividir uma produção em lote: o produto com insumo faltando atende mais de um pedido. "
                     + "Opções: resolver o estoque ou cancelar a produção.");
         }
-        ProdutosDivididos divididos = classificarPorBloqueio(produtosDaProducao, verificacao.bloqueantes());
 
         if (divididos.semBloqueio().isEmpty()) {
             throw new BusinessException("Não é possível dividir — todos os produtos têm insumos bloqueantes. "
