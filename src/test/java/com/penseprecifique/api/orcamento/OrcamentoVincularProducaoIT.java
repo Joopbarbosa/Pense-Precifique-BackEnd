@@ -231,6 +231,9 @@ class OrcamentoVincularProducaoIT {
         assertTrue(vinculos.stream().anyMatch(v -> v.getProducaoId().equals(producaoA.getId())));
         assertTrue(vinculos.stream().anyMatch(v -> v.getProducaoId().equals(producaoB.getId())));
         assertTrue(vinculos.stream().allMatch(v -> v.getIdentificadorProducao() != null && v.getId() != null));
+        // RN-NOVA-41 (#1168): situação, início e produtos da produção vêm no vínculo
+        assertTrue(vinculos.stream().allMatch(v -> v.getEstado() != null));
+        assertTrue(vinculos.stream().allMatch(v -> v.getProdutos() != null));
     }
 
     /** P-B013/#320 — sem nenhum vínculo, a lista vem vazia, nunca null. */
