@@ -31,6 +31,16 @@ public class EntregaEstimadaCalculadora {
         return partida.plusDays(prazo);
     }
 
+    /** V0.18.0 (#1181) — dia em que a contagem do prazo começa (já considerando a data de início estimada); null se ainda não há. */
+    public LocalDate pontoDeContagem(Orcamento orcamento) {
+        LocalDate partida = pontoDePartida(orcamento);
+        if (partida != null && Boolean.FALSE.equals(orcamento.getInicioAssimQueAprovado()) && orcamento.getDataInicioEstimada() != null
+                && orcamento.getDataInicioEstimada().isAfter(partida)) {
+            return orcamento.getDataInicioEstimada();
+        }
+        return partida;
+    }
+
     private LocalDate pontoDePartida(Orcamento orcamento) {
         if (Boolean.TRUE.equals(orcamento.getSinalAtivo())) {
             return orcamento.getDataSinalPago() == null ? null : orcamento.getDataSinalPago().toLocalDate();

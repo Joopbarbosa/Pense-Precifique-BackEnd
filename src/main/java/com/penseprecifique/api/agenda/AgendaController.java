@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.penseprecifique.api.shared.dto.request.agenda.CancelarCompromissoRequest;
 import com.penseprecifique.api.shared.dto.request.agenda.CompromissoUsuariaRequest;
 import com.penseprecifique.api.shared.dto.request.agenda.EditarCompromissoRequest;
+import com.penseprecifique.api.shared.dto.request.agenda.MoverCompromissoRequest;
+import com.penseprecifique.api.shared.dto.response.agenda.MovimentoCompromissoResponse;
 import com.penseprecifique.api.shared.dto.response.agenda.CompromissoUsuariaDetalheResponse;
 import jakarta.validation.Valid;
 
@@ -37,6 +39,7 @@ public class AgendaController {
     private final AgendaService agendaService;
     private final CompromissoUsuariaService compromissoUsuariaService;
     private final ResumoDoDiaService resumoDoDiaService;
+    private final AgendaMovimentoService agendaMovimentoService;
 
     @GetMapping("/compromissos")
     public ResponseEntity<List<CompromissoResponse>> compromissos(
@@ -59,6 +62,18 @@ public class AgendaController {
     public ResponseEntity<Page<CompromissoResponse>> atrasados(
             @PageableDefault(size = AgendaService.TAMANHO_PAGINA_PADRAO) Pageable pageable) {
         return ResponseEntity.ok(agendaService.atrasados(pageable));
+    }
+
+    // ---- mover cards derivados (#1181) --------------------------------------------------------------
+
+    @PostMapping("/movimentos/simular")
+    public ResponseEntity<MovimentoCompromissoResponse> simularMovimento(@Valid @RequestBody MoverCompromissoRequest request) {
+        return ResponseEntity.ok(agendaMovimentoService.simular(request));
+    }
+
+    @PostMapping("/movimentos")
+    public ResponseEntity<MovimentoCompromissoResponse> moverCompromisso(@Valid @RequestBody MoverCompromissoRequest request) {
+        return ResponseEntity.ok(agendaMovimentoService.mover(request));
     }
 
     // ---- compromisso da usuária (#1039) ------------------------------------------------------------
