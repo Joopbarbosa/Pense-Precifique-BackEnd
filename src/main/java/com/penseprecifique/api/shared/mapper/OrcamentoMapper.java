@@ -202,6 +202,8 @@ public class OrcamentoMapper {
         response.setDataTerminoPrevista(dataTerminoPrevista);
         response.setEstouroPrazo(estouraPrazo(entregaEstimadaCalculadora.calcular(vinculo.getOrcamento()), dataTerminoPrevista));
         response.setCreatedAt(vinculo.getCreatedAt());
+        response.setEstado(vinculo.getProducao().getEstado().name());
+        response.setDataInicio(vinculo.getProducao().getDataInicio());
         return response;
     }
 

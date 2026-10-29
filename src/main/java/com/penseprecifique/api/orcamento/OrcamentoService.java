@@ -149,6 +149,7 @@ public class OrcamentoService {
     private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final ReciboEstornoRepository reciboEstornoRepository;
     private final OrcamentoProducaoRepository orcamentoProducaoRepository;
+    private final com.penseprecifique.api.producao.ProducaoProdutoRepository producaoProdutoRepository;
     private final ProducaoRepository producaoRepository;
     private final ProducaoService producaoService;
     private final UsuarioRepository usuarioRepository;
@@ -1166,9 +1167,7 @@ public class OrcamentoService {
                     .build());
         }
 
-        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
-                .map(orcamentoMapper::toOrcamentoProducaoResponse)
-                .toList();
+        return montarVinculosProducao(orcamento.getId());
     }
 
     /**
@@ -1326,9 +1325,7 @@ public class OrcamentoService {
                 .producao(producao)
                 .build());
 
-        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
-                .map(orcamentoMapper::toOrcamentoProducaoResponse)
-                .toList();
+        return montarVinculosProducao(orcamento.getId());
     }
 
     /**
@@ -2096,10 +2093,32 @@ public class OrcamentoService {
         }
         OrcamentoDetalheResponse response = orcamentoMapper.toDetalheResponse(orcamento, itens);
         response.setItens(itensResponse);
-        response.setProducoesVinculadas(orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
-                .map(orcamentoMapper::toOrcamentoProducaoResponse)
-                .toList());
+        response.setProducoesVinculadas(montarVinculosProducao(orcamento.getId()));
         return response;
+    }
+
+    /**
+     * RN-NOVA-41 (V0.18.0, #1168) — vínculos do orçamento com situação, datas e os produtos/quantidades de
+     * cada produção, lidos de uma vez só (sem consulta por produção).
+     */
+    private List<OrcamentoProducaoResponse> montarVinculosProducao(UUID orcamentoId) {
+        List<OrcamentoProducaoResponse> respostas = orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).stream()
+                .map(orcamentoMapper::toOrcamentoProducaoResponse)
+                .toList();
+        if (respostas.isEmpty()) {
+            return respostas;
+        }
+        Map<UUID, List<OrcamentoProducaoResponse.ProdutoProducao>> porProducao = new LinkedHashMap<>();
+        for (var pp : producaoProdutoRepository.findComProdutoByProducaoIdIn(
+                respostas.stream().map(OrcamentoProducaoResponse::getProducaoId).toList())) {
+            var item = new OrcamentoProducaoResponse.ProdutoProducao();
+            item.setProdutoId(pp.getProduto().getId());
+            item.setNomeProduto(pp.getProduto().getNome());
+            item.setQuantidade(pp.getQuantidade());
+            porProducao.computeIfAbsent(pp.getProducao().getId(), k -> new ArrayList<>()).add(item);
+        }
+        respostas.forEach(r -> r.setProdutos(porProducao.getOrDefault(r.getProducaoId(), List.of())));
+        return respostas;
     }
 
     /** #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition. */

@@ -5,6 +5,8 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -17,4 +19,17 @@ public class OrcamentoProducaoResponse {
     private LocalDate dataTerminoPrevista;
     private boolean estouroPrazo;
     private LocalDateTime createdAt;
+    /** RN-NOVA-41 (V0.18.0, #1168) — situação e início da produção, para a seção Produção do Detalhe. */
+    private String estado;
+    private LocalDate dataInicio;
+    /** RN-NOVA-41 — produtos e quantidades da produção (não só os do orçamento). */
+    private List<ProdutoProducao> produtos = List.of();
+
+    @Getter
+    @Setter
+    public static class ProdutoProducao {
+        private UUID produtoId;
+        private String nomeProduto;
+        private BigDecimal quantidade;
+    }
 }
