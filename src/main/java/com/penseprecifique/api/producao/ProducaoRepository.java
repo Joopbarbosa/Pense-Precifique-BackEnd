@@ -31,6 +31,9 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
     // RN-073/UC-036 — produções filhas de uma divisão (DIVISAO) ou agrupamento (AGRUPAMENTO).
     List<Producao> findByProducaoOrigemId(UUID producaoOrigemId);
 
+    // RN-NOVA-42 (V0.18.0, #1169) — candidatas a juntar.
+    List<Producao> findByUsuarioIdAndEstado(UUID usuarioId, com.penseprecifique.api.shared.domain.enums.EstadoProducao estado);
+
     // RN-NOVA-4 (V0.10.0, #336) — contadores por filtro (badges da Lista/Kanban de Produção),
     // mesmo padrão já usado por ProdutoRepository#contarPorTipo.
     long countByUsuarioId(UUID usuarioId);

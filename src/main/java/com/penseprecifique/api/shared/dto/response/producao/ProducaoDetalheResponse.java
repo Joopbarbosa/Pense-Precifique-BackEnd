@@ -37,4 +37,7 @@ public class ProducaoDetalheResponse {
     // RN-NOVA-15 (V0.8.3, #375+308) — orçamentos com vínculo formal a esta produção
     // (orcamento_producoes). Lista vazia quando não há vínculo — Frontend oculta a seção.
     private List<ProducaoOrcamentoResponse> orcamentosVinculados;
+
+    // RN-NOVA-42 (V0.18.0, #1169) — quanto de cada pedido há nesta produção (saldo do histórico de itens).
+    private List<PedidoAtendidoResponse> pedidosAtendidos = List.of();
 }

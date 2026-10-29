@@ -24,6 +24,8 @@ public class OrcamentoProducaoResponse {
     private LocalDate dataInicio;
     /** RN-NOVA-41 — produtos e quantidades da produção (não só os do orçamento). */
     private List<ProdutoProducao> produtos = List.of();
+    /** RN-NOVA-42 (V0.18.0, #1169) — outros pedidos no mesmo lote ("junto com ORC-18"); vazio fora de lote. */
+    private List<String> outrosOrcamentos = List.of();
 
     @Getter
     @Setter
@@ -31,5 +33,7 @@ public class OrcamentoProducaoResponse {
         private UUID produtoId;
         private String nomeProduto;
         private BigDecimal quantidade;
+        /** RN-NOVA-42 — quanto deste produto é deste pedido (null quando o histórico não registra). */
+        private BigDecimal quantidadePedido;
     }
 }

@@ -89,6 +89,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1718,6 +1719,12 @@ public class OrcamentoService {
                 cancelamento.setJustificativa("Orçamento ORC-" + orcamento.getNumero()
                         + " cancelado: produção cancelada junto, por decisão da usuária.");
                 producaoService.cancelar(producao.getId(), cancelamento);
+                // RN-NOVA-42 — lote cancelado inteiro: os outros pedidos mantêm a situação e ficam sem produção vinculada.
+                for (OrcamentoProducao outro : orcamentoProducaoRepository.findByProducaoId(producao.getId())) {
+                    if (!outro.getId().equals(vinculo.getId())) {
+                        orcamentoProducaoRepository.delete(outro);
+                    }
+                }
             }
             orcamentoProducaoRepository.delete(vinculo);
         }
@@ -2117,7 +2124,22 @@ public class OrcamentoService {
             item.setQuantidade(pp.getQuantidade());
             porProducao.computeIfAbsent(pp.getProducao().getId(), k -> new ArrayList<>()).add(item);
         }
-        respostas.forEach(r -> r.setProdutos(porProducao.getOrDefault(r.getProducaoId(), List.of())));
+        for (OrcamentoProducaoResponse r : respostas) {
+            List<OrcamentoProducaoResponse.ProdutoProducao> produtos = porProducao.getOrDefault(r.getProducaoId(), List.of());
+            r.setProdutos(produtos);
+            // RN-NOVA-42 — quanto deste pedido há no lote e com quais outros pedidos ele divide a produção.
+            var pedidos = producaoService.pedidosAtendidosDaProducao(r.getProducaoId());
+            Set<String> outros = new LinkedHashSet<>();
+            for (var pedido : pedidos) {
+                if (pedido.getOrcamentoId().equals(orcamentoId)) {
+                    produtos.stream().filter(p -> p.getProdutoId().equals(pedido.getProdutoId()))
+                            .forEach(p -> p.setQuantidadePedido(pedido.getQuantidade()));
+                } else {
+                    outros.add(pedido.getIdentificadorOrcamento());
+                }
+            }
+            r.setOutrosOrcamentos(new ArrayList<>(outros));
+        }
         return respostas;
     }
 

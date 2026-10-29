@@ -1,0 +1,297 @@
+package com.penseprecifique.api.producao;
+
+import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.cliente.ClienteRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.orcamento.OrcamentoProducaoRepository;
+import com.penseprecifique.api.orcamento.OrcamentoService;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
+import com.penseprecifique.api.produto.ProdutoRepository;
+import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.domain.enums.TipoProduto;
+import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.CriarProducaoVinculadaRequest;
+import com.penseprecifique.api.shared.dto.request.producao.CriarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.JuntarProducoesRequest;
+import com.penseprecifique.api.shared.dto.request.producao.ResolverExcedenteRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
+import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
+import com.penseprecifique.api.orcamento.OrcamentoItemRepository;
+import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
+import com.penseprecifique.api.shared.dto.response.producao.CandidataJuntarResponse;
+import com.penseprecifique.api.shared.dto.response.producao.JuntarProducoesResponse;
+import com.penseprecifique.api.shared.dto.response.producao.PedidoAtendidoResponse;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
+import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** RN-NOVA-42 (#1169) — juntar produções de pedidos diferentes num lote. */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+class ProducaoJuntarIT {
+
+    @Autowired ProducaoService producaoService;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
+    @Autowired OrcamentoService orcamentoService;
+    @Autowired UsuarioRepository usuarioRepository;
+    @Autowired ClienteRepository clienteRepository;
+    @Autowired ProdutoRepository produtoRepository;
+    @Autowired InsumoRepository insumoRepository;
+    @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
+    @Autowired OrcamentoProducaoRepository orcamentoProducaoRepository;
+    @Autowired OrcamentoItemRepository orcamentoItemRepository;
+    @Autowired ProducaoRepository producaoRepository;
+
+    private Usuario usuario;
+    private Cliente cliente;
+
+    private void seed() {
+        usuario = usuarioRepository.save(Usuario.builder()
+                .email("prod-juntar-" + UUID.randomUUID() + "@test.com").senhaHash("x").ativo(true).build());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
+        cliente = clienteRepository.save(Cliente.builder()
+                .usuario(usuario).numero(1).nome("Maria").ativa(true).build());
+    }
+
+    private Produto novoProduto(int numero, boolean insumoFracionavel) {
+        Produto produto = produtoRepository.save(Produto.builder()
+                .usuario(usuario).numero(numero).nome("Brownie " + numero).tipo(TipoProduto.PRODUTO)
+                .tempoProducao(30).estoqueAtual(new BigDecimal("1000"))
+                .permitirEstoqueNegativo(true).rendimento(new BigDecimal("12"))
+                .precoVenda(new BigDecimal("50.00")).build());
+        UnidadeMedida un = unidadeMedidaRepository.findByUsuarioIdAndSiglaIgnoreCaseAndDeletedAtIsNull(usuario.getId(), "un")
+                .orElseGet(() -> unidadeMedidaRepository.save(UnidadeMedida.builder()
+                        .usuario(usuario).nome("un").sigla("un").build()));
+        Insumo insumo = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(numero).nome("Ovos " + numero).marca("X").unidadeMedida(un)
+                .estoqueAtual(new BigDecimal("10000")).permitirEstoqueNegativo(true)
+                .fracionavel(insumoFracionavel).build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produto).insumo(insumo).quantidade(new BigDecimal("1")).build());
+        return produto;
+    }
+
+    private UUID criarProducao(Produto produto, String quantidade, LocalDate termino) {
+        CriarProducaoRequest criar = new CriarProducaoRequest();
+        criar.setDataTerminoPrevista(termino);
+        ProducaoProdutoRequest item = new ProducaoProdutoRequest();
+        item.setProdutoId(produto.getId());
+        item.setQuantidade(new BigDecimal(quantidade));
+        criar.setProdutos(List.of(item));
+        return producaoService.criarProducao(criar).getId();
+    }
+
+    private UUID orcamento(Produto produto, int quantidade, LocalDate inicio, Integer prazoDias) {
+        OrcamentoItemRequest item = new OrcamentoItemRequest();
+        item.setProdutoId(produto.getId());
+        item.setMargemAplicada(BigDecimal.ZERO);
+        item.setPrecoUnitario(new BigDecimal("50.00"));
+        item.setQuantidade(quantidade);
+        OrcamentoRequest req = new OrcamentoRequest();
+        req.setClienteId(cliente.getId());
+        req.setMetodoPagamento(MetodoPagamento.PIX);
+        req.setTemPrazoProducao(prazoDias != null);
+        req.setDataInicioEstimada(inicio);
+        req.setPrazoProducaoDias(prazoDias);
+        req.setItens(List.of(item));
+        req.setSinalAtivo(false);
+        return orcamentoService.criar(req).getId();
+    }
+
+    private void vincular(UUID orcamentoId, UUID producaoId) {
+        VincularProducaoRequest req = new VincularProducaoRequest();
+        req.setProducaoId(producaoId);
+        orcamentoService.vincularProducao(orcamentoId, req);
+    }
+
+    /** Cria a produção pelo caminho real do orçamento (RN-NOVA-39: arredonda ao múltiplo do rendimento). */
+    private UUID producaoDoOrcamento(UUID orcamentoId, LocalDate termino) {
+        CriarProducaoVinculadaRequest req = new CriarProducaoVinculadaRequest();
+        req.setDataTerminoPrevista(termino);
+        orcamentoService.criarProducaoVinculada(orcamentoId, req);
+        return orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).get(0).getProducao().getId();
+    }
+
+    private JuntarProducoesRequest juntarCom(UUID outra) {
+        JuntarProducoesRequest r = new JuntarProducoesRequest();
+        r.setProducaoOutraId(outra);
+        return r;
+    }
+
+    private JuntarProducoesResponse cenario(int qa, int qb, LocalDate inicioB, Integer prazoB, LocalDate termino) {
+        seed();
+        Produto p = novoProduto(1, false);
+        UUID prodA = producaoDoOrcamento(orcamento(p, qa, null, null), termino);
+        UUID prodB = producaoDoOrcamento(orcamento(p, qb, inicioB, prazoB), termino);
+        return producaoService.juntar(prodA, juntarCom(prodB));
+    }
+
+    @Test
+    void cinco_mais_sete_vira_lote_de_doze() {
+        JuntarProducoesResponse r = cenario(5, 7, null, null, LocalDate.now().plusDays(3));
+        assertEquals(0, new BigDecimal("12").compareTo(r.getProducaoNova().getProdutos().get(0).getQuantidade()));
+        List<PedidoAtendidoResponse> pedidos = r.getProducaoNova().getPedidosAtendidos();
+        assertEquals(2, pedidos.size());
+        assertEquals(12, pedidos.stream().mapToInt(x -> x.getQuantidade().intValue()).sum());
+        assertEquals(2, orcamentoProducaoRepository.findByProducaoId(r.getProducaoNova().getId()).size());
+    }
+
+    @Test
+    void cinco_mais_quatro_arredonda_para_doze_com_sobra() {
+        JuntarProducoesResponse r = cenario(5, 4, null, null, LocalDate.now().plusDays(3));
+        assertEquals(0, new BigDecimal("12").compareTo(r.getProducaoNova().getProdutos().get(0).getQuantidade()));
+        assertEquals(9, r.getProducaoNova().getPedidosAtendidos().stream().mapToInt(x -> x.getQuantidade().intValue()).sum());
+    }
+
+    @Test
+    void dataPosteriorAoPrazoSoAvisa() {
+        LocalDate inicio = LocalDate.now().plusDays(1);
+        JuntarProducoesResponse r = cenario(5, 7, inicio, 2, inicio.plusDays(10));
+        assertFalse(r.getAvisos().isEmpty());
+        assertTrue(r.getAvisos().get(0).contains("posterior ao prazo de entrega de Maria"));
+    }
+
+    @Test
+    void candidatasExcluemProdutoDiferenteEEmAndamento() {
+        seed();
+        Produto p = novoProduto(1, false);
+        Produto outro = novoProduto(2, false);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID a = producaoDoOrcamento(orcamento(p, 5, null, null), termino);
+        UUID b = producaoDoOrcamento(orcamento(p, 7, null, null), termino);
+        producaoDoOrcamento(orcamento(outro, 7, null, null), termino);
+        List<CandidataJuntarResponse> lista = producaoService.candidatasParaJuntar(a);
+        assertEquals(1, lista.size());
+        assertEquals(b, lista.get(0).getId());
+    }
+
+    @Test
+    void entradaHostilNuncaViraErroInterno() {
+        seed();
+        Produto p = novoProduto(1, false);
+        UUID a = producaoDoOrcamento(orcamento(p, 5, null, null), LocalDate.now().plusDays(3));
+        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(a)));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.juntar(a, juntarCom(UUID.randomUUID())));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.juntar(UUID.randomUUID(), juntarCom(a)));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.candidatasParaJuntar(UUID.randomUUID()));
+    }
+
+    /** Monta dois pedidos (5 e 7) já juntados; devolve [orcA, orcB, lote]. */
+    private UUID[] lote() {
+        seed();
+        Produto p = novoProduto(1, false);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID oa = orcamento(p, 5, null, null);
+        UUID ob = orcamento(p, 7, null, null);
+        UUID a = producaoDoOrcamento(oa, termino);
+        UUID b = producaoDoOrcamento(ob, termino);
+        UUID lote = producaoService.juntar(a, juntarCom(b)).getProducaoNova().getId();
+        return new UUID[] {oa, ob, lote};
+    }
+
+    private AvancaStatusRequest cancelamento(UUID producaoId, boolean cancelar) {
+        AvancaStatusRequest req = new AvancaStatusRequest();
+        req.setMotivoCancelamento("Cliente desistiu");
+        var d = new com.penseprecifique.api.shared.dto.request.orcamento.DecisaoProducaoCancelamentoRequest();
+        d.setProducaoId(producaoId);
+        d.setCancelar(cancelar);
+        req.setDecisoesProducao(List.of(d));
+        return req;
+    }
+
+    /** CEN-NOVO-148 — cancelar um pedido do lote e manter o lote: só o vínculo dele sai. */
+    @Test
+    void cancelarPedidoDoLoteMantendoLote() {
+        UUID[] l = lote();
+        orcamentoService.cancelar(l[1], cancelamento(l[2], false));
+        assertEquals(1, orcamentoProducaoRepository.findByProducaoId(l[2]).size());
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(l[2]).orElseThrow().getEstado());
+        assertEquals(1, producaoService.pedidosAtendidosDaProducao(l[2]).size());
+    }
+
+    /** CEN-NOVO-148 — cancelar o lote inteiro: os outros pedidos ficam sem produção vinculada. */
+    @Test
+    void cancelarPedidoDoLoteCancelandoLote() {
+        UUID[] l = lote();
+        orcamentoService.cancelar(l[1], cancelamento(l[2], true));
+        assertEquals(EstadoProducao.CANCELADA, producaoRepository.findById(l[2]).orElseThrow().getEstado());
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoId(l[0]).stream().noneMatch(v -> v.getProducao().getId().equals(l[2])));
+    }
+
+    /** CEN-NOVO-149 — pedido passa de 5 para 8: soma 15 > 12, aviso com 3 não cobertas. */
+    @Test
+    void quantidadeAcimaDoLoteAvisaEPermiteManterOuCancelar() {
+        UUID[] l = lote();
+        assertTrue(producaoService.excedentesDoLote(l[2]).isEmpty());
+        var item = orcamentoItemRepository.findByOrcamentoId(l[0]).get(0);
+        item.setQuantidade(8);
+        orcamentoItemRepository.save(item);
+        var exc = producaoService.excedentesDoLote(l[2]);
+        assertEquals(1, exc.size());
+        assertEquals(3, exc.get(0).getNaoCobertas().intValue());
+        ResolverExcedenteRequest manter = new ResolverExcedenteRequest();
+        manter.setCancelarLote(false);
+        producaoService.resolverExcedente(l[2], manter);
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(l[2]).orElseThrow().getEstado());
+        ResolverExcedenteRequest cancelar = new ResolverExcedenteRequest();
+        cancelar.setCancelarLote(true);
+        producaoService.resolverExcedente(l[2], cancelar);
+        assertEquals(EstadoProducao.CANCELADA, producaoRepository.findById(l[2]).orElseThrow().getEstado());
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoId(l[0]).stream().noneMatch(v -> v.getProducao().getId().equals(l[2])));
+        assertTrue(orcamentoProducaoRepository.findByOrcamentoId(l[1]).stream().noneMatch(v -> v.getProducao().getId().equals(l[2])));
+    }
+
+    @Test
+    void excedenteHostil() {
+        UUID[] l = lote();
+        ResolverExcedenteRequest r = new ResolverExcedenteRequest();
+        r.setCancelarLote(true);
+        assertThrows(BusinessException.class, () -> producaoService.resolverExcedente(l[2], r));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.resolverExcedente(UUID.randomUUID(), r));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.excedentesDoLote(UUID.randomUUID()));
+    }
+
+    /** CEN-NOVO-150 — falta de insumo trava o lote inteiro e não oferece divisão. */
+    @Test
+    void loteComInsumoFaltandoTravaInteiroESemDividir() {
+        UUID[] l = lote();
+        for (Insumo i : insumoRepository.findAll()) {
+            if (i.getUsuario().getId().equals(usuario.getId())) {
+                i.setEstoqueAtual(BigDecimal.ZERO);
+                i.setPermitirEstoqueNegativo(false);
+                insumoRepository.save(i);
+            }
+        }
+        com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest req =
+                new com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest();
+        req.setDividir(true);
+        assertThrows(BusinessException.class, () -> producaoService.iniciar(l[2], req));
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(l[2]).orElseThrow().getEstado());
+        req.setDividir(false);
+        producaoService.iniciar(l[2], req);
+        assertEquals(EstadoProducao.TRAVADA, producaoRepository.findById(l[2]).orElseThrow().getEstado());
+    }
+}
