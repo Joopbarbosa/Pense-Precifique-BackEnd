@@ -3,7 +3,7 @@
 > Lido automaticamente pelo Claude Code ao abrir `pense-precifique-backend/`. Projeto pré-produção
 > (primeiro deploy estável com usuários reais = v1). Caminho:
 > `/home/joaobarbosa/Documentos/Projetos/Pense & Precifique/pense-precifique-backend`
-> Última revisão de padrões: 02/10/2026 (Retomada V0.15.0). Antes de agir,
+> Última revisão de padrões: 30/10/2026 (Retomada V0.18.0). Antes de agir,
 > confirmar a branch com `git branch --show-current` e a versão ativa no
 > `POCKET_V[X.Y].md`; não usar uma branch de versão gravada neste arquivo.
 > Se uma instrução técnica deste arquivo e o prompt da sessão divergirem,
@@ -89,8 +89,13 @@ antigo extinto desde o refactor V0.5):
 
 ```
 com/penseprecifique/api/
-├── auth/ caixa/ catalogo/ cliente/ compra/ dashboard/ empresa/ insumo/ orcamento/ producao/
+├── agenda/ auth/ caixa/ catalogo/ cliente/ compra/ dashboard/ empresa/ insumo/ orcamento/ producao/
 │   produto/ unidademedida/
+│   (`agenda/`, V0.18.0: `AgendaService` (compromissos do período), `FonteCompromissos` + `CompromissosOrcamento/
+│   Producao/Compra/Usuaria` (uma fonte por origem, todas devolvem `CompromissoBase`), `OcorrenciasCalculadora`
+│   (recorrência), `AgendaMovimentoService` (simular/mover), `ResumoDoDiaService`, `CompromissoUsuariaService`.
+│   Origem nova = nova `FonteCompromissos`, nunca `if` em `AgendaService`. `infra/config/RelogioConfig`: bean
+│   `Clock` no fuso de Brasília)
 │   → *Controller, *Service(+Impl quando houver), *Repository de cada módulo
 │   (`unidademedida/`, V0.14.0/#298: entidade `UnidadeMedida` referenciada por FK em `Insumo` —
 │   regras documentadas no módulo INSUMO, não num módulo próprio)
@@ -281,10 +286,22 @@ pré-migração modular — histórico, não consultar para desenvolvimento novo
   marca insumos obrigatórios; `ErroPadraoController` é `@Hidden`. Campo novo de request ganha limite no DTO e
   o contrato é conferido em `OpenApiContratoIT`. O fuzzer roda com `schemathesis.toml` (3 verificações
   desligadas, justificadas no arquivo) — achado de 500 vira tarefa, nunca entra na política.
-- **Faturamento do Início = vendas da RN-NOVA-12** (V0.17.0, #1022): `DashboardService` soma
-  `VendasService.Venda::faturamento` do mês de Brasília (`LocalDate.now(clock)`); não consultar orçamento
-  direto. Marca (RN-NOVA-36): `NomeMarca.chave()` compara sem acento/caixa, sem colapsar espaço interno.
-
+- **Faturamento = vendas da RN-NOVA-12** (V0.17.0, #1022): `VendasService.Venda::faturamento` do mês de
+  Brasília (`LocalDate.now(clock)`), exibido no Dashboard de Vendas; o Início virou a Agenda (V0.18.0, #1040) e
+  o `DashboardService` do Dashboard geral foi removido. Não consultar orçamento direto. Marca (RN-NOVA-36):
+  `NomeMarca.chave()` compara sem acento/caixa, sem colapsar espaço interno.
+- **Relógio injetado** (V0.18.0, #1200/#1209): serviço que decide por data usa o `Clock` do construtor
+  (`LocalDate.now(clock)`), nunca `LocalDate.now()`; testes fixam o `Clock`. Pendências conhecidas (débito
+  #1217): `ProducaoService`, `OrcamentoService`, `ClienteHistoricoService`, `PeriodoDashboard`, `CaixaTurnoService`.
+- **Faixa de data 2000–2100** (V0.18.0, #1197/#1200/#1211): toda data que entra pela API e vira consulta ou
+  coluna é validada com 400 antes do banco (data extrema derruba a consulta com 500). A constante existe em 8
+  serviços (débito #1223): endpoint novo reaproveita, não copia.
+- **Juntar produções** (V0.18.0, RN-NOVA-42, #1169/#1184/#1191): `ProducaoService.juntar`; candidatas por data,
+  qualquer produto, aceita `Em andamento`; lote repetido é idempotente (#1208); `resolverExcedente` escopado
+  por conta (#1198).
+- **Comentário por orçamento** (V0.18.0, #1038): limite de 500 depois de aparar (`@Size` após o strip, #1201);
+  `@ApiResponse` fica no método do próprio endpoint. **Histórico de preço sugerido** do item de catálogo: #961.
+- **Migrações**: a numeração vai até V85 (V80–V85 são desta versão).
 ---
 
 ## 6. Legado e exceções
