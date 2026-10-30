@@ -1204,10 +1204,11 @@ public class ProducaoService {
             somaPedidos.merge(p.produto().getId(), p.quantidade(), BigDecimal::add);
         }
         List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> lista = new ArrayList<>();
+        boolean loteComVariosPedidos = somaPedidos.size() > 1 || orcamentoProducaoRepository.findByProducaoId(producao.getId()).size() > 1;
         for (ProducaoProduto pp : producaoProdutoRepository.findByProducaoId(producao.getId())) {
             BigDecimal pedidos = somaPedidos.getOrDefault(pp.getProduto().getId(), BigDecimal.ZERO);
             BigDecimal falta = pedidos.subtract(pp.getQuantidade());
-            if (somaPedidos.size() > 1 || orcamentoProducaoRepository.findByProducaoId(producao.getId()).size() > 1) {
+            if (loteComVariosPedidos) {
                 if (falta.signum() > 0) {
                     var r = new com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse();
                     r.setProducaoId(producao.getId());
@@ -1231,7 +1232,7 @@ public class ProducaoService {
     public ProducaoDetalheResponse resolverExcedente(UUID producaoId,
             com.penseprecifique.api.shared.dto.request.producao.ResolverExcedenteRequest request) {
         List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> excedentes = excedentesDoLote(producaoId);
-        Producao producao = producaoRepository.findById(producaoId)
+        Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, getUsuarioIdAutenticado())
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
         if (excedentes.isEmpty()) {
             throw new BusinessException("Esta produção não tem pedidos acima da quantidade do lote");
