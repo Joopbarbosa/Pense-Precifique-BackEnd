@@ -64,6 +64,7 @@ class ProducaoJuntarIT {
     @Autowired OrcamentoItemRepository orcamentoItemRepository;
     @Autowired ProducaoRepository producaoRepository;
     @Autowired com.penseprecifique.api.orcamento.OrcamentoRepository orcamentoRepository;
+    @Autowired com.penseprecifique.api.producao.HistoricoStatusProducaoRepository historicoStatusProducaoRepository;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -461,6 +462,35 @@ class ProducaoJuntarIT {
         assertTrue(orcamentoProducaoRepository.findByOrcamentoId(l[1]).stream().noneMatch(v -> v.getProducao().getId().equals(l[2])));
     }
 
+    /** #1208 — "manter lote" repetido não duplica o histórico; só uma nova situação de excedente gera nova linha. */
+    @Test
+    void manterLoteRepetidoNaoDuplicaHistorico() {
+        UUID[] l = lote();
+        var item = orcamentoItemRepository.findByOrcamentoId(l[0]).get(0);
+        item.setQuantidade(8);
+        orcamentoItemRepository.save(item);
+        ResolverExcedenteRequest manter = new ResolverExcedenteRequest();
+        manter.setCancelarLote(false);
+        long antes = contarMantidos(l[2]);
+        producaoService.resolverExcedente(l[2], manter);
+        producaoService.resolverExcedente(l[2], manter);
+        producaoService.resolverExcedente(l[2], manter);
+        assertEquals(antes + 1, contarMantidos(l[2]));
+        // o excedente mudou (8 -> 9): é outra decisão, vira nova linha
+        item.setQuantidade(9);
+        orcamentoItemRepository.save(item);
+        producaoService.resolverExcedente(l[2], manter);
+        producaoService.resolverExcedente(l[2], manter);
+        assertEquals(antes + 2, contarMantidos(l[2]));
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(l[2]).orElseThrow().getEstado());
+    }
+
+    private long contarMantidos(UUID producaoId) {
+        return historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producaoId).stream()
+                .filter(h -> h.getJustificativa() != null && h.getJustificativa().startsWith("Lote mantido com pedidos acima"))
+                .count();
+    }
+
     @Test
     void excedenteHostil() {
         UUID[] l = lote();
@@ -471,7 +501,7 @@ class ProducaoJuntarIT {
         assertThrows(ResourceNotFoundException.class, () -> producaoService.excedentesDoLote(UUID.randomUUID()));
     }
 
-    /** CEN-NOVO-150 — falta de insumo trava o lote inteiro e não oferece divisão. */
+    /** Produção de outra conta: candidatas, excedentes, avisos, resolver e juntar respondem 404 e nada muda. */
     @Test
     void producaoDeOutraContaNaoEhLidaNemAlteradaPelosEndpointsDoLote() {
         seed();
@@ -494,6 +524,7 @@ class ProducaoJuntarIT {
         assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(b).orElseThrow().getEstado());
     }
 
+    /** CEN-NOVO-150 — falta de insumo trava o lote inteiro e não oferece divisão. */
     @Test
     void loteComInsumoFaltandoTravaInteiroESemDividir() {
         UUID[] l = lote();
