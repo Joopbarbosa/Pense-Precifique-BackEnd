@@ -6,6 +6,7 @@ import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.entity.MovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoProducao;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.ProducaoInsumoConsumido;
@@ -32,6 +33,8 @@ import com.penseprecifique.api.shared.dto.request.producao.FinalizarProducaoRequ
 import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.JuntarProducoesRequest;
 import com.penseprecifique.api.shared.dto.response.producao.CandidataJuntarResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse;
+import com.penseprecifique.api.shared.dto.request.producao.ResolverExcedenteRequest;
 import com.penseprecifique.api.shared.dto.response.producao.JuntarProducoesResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducoesPeriodoResponse;
 import com.penseprecifique.api.shared.dto.response.producao.PedidoAtendidoResponse;
@@ -1175,27 +1178,33 @@ public class ProducaoService {
         }
         Set<UUID> vinculados = orcamentoProducaoRepository.findByProducaoId(producaoId).stream()
                 .map(v -> v.getOrcamento().getId()).collect(java.util.stream.Collectors.toSet());
+        List<Map.Entry<String, BigDecimal>> positivos = saldos.entrySet().stream()
+                .filter(e -> e.getValue().compareTo(BigDecimal.ZERO) > 0
+                        && vinculados.contains(orcamentos.get(e.getKey()).getId()))
+                .toList();
+        // Uma única consulta para os itens de todos os pedidos do lote (sem N+1).
+        Map<UUID, List<OrcamentoItem>> itensPorOrcamento = positivos.isEmpty() ? Map.of()
+                : orcamentoItemRepository.findByOrcamentoIdIn(
+                        positivos.stream().map(e -> orcamentos.get(e.getKey()).getId()).collect(Collectors.toSet()))
+                        .stream().collect(Collectors.groupingBy(i -> i.getOrcamento().getId()));
         List<PedidoNoLote> lista = new ArrayList<>();
-        for (Map.Entry<String, BigDecimal> e : saldos.entrySet()) {
-            if (e.getValue().compareTo(BigDecimal.ZERO) > 0
-                    && vinculados.contains(orcamentos.get(e.getKey()).getId())) {
-                Orcamento orc = orcamentos.get(e.getKey());
-                Produto prod = produtos.get(e.getKey());
-                // O histórico guarda a quantidade produzida (já arredondada); o pedido vale o que está nos itens.
-                BigDecimal doPedido = orcamentoItemRepository.findByOrcamentoId(orc.getId()).stream()
-                        .filter(i -> i.getProduto() != null && i.getProduto().getId().equals(prod.getId()))
-                        .map(i -> BigDecimal.valueOf(i.getQuantidade()))
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                lista.add(new PedidoNoLote(orc, prod,
-                        doPedido.signum() > 0 ? doPedido : e.getValue()));
-            }
+        for (Map.Entry<String, BigDecimal> e : positivos) {
+            Orcamento orc = orcamentos.get(e.getKey());
+            Produto prod = produtos.get(e.getKey());
+            // O histórico guarda a quantidade produzida (já arredondada); o pedido vale o que está nos itens.
+            BigDecimal doPedido = itensPorOrcamento.getOrDefault(orc.getId(), List.of()).stream()
+                    .filter(i -> i.getProduto() != null && i.getProduto().getId().equals(prod.getId()))
+                    .map(i -> BigDecimal.valueOf(i.getQuantidade()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            lista.add(new PedidoNoLote(orc, prod,
+                    doPedido.signum() > 0 ? doPedido : e.getValue()));
         }
         return lista;
     }
 
     /** RN-NOVA-42 (4) — produtos do lote cujos pedidos, hoje, somam mais do que a produção cobre. */
     @Transactional(readOnly = true)
-    public List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> excedentesDoLote(UUID producaoId) {
+    public List<ExcedenteLoteResponse> excedentesDoLote(UUID producaoId) {
         UUID usuarioId = getUsuarioIdAutenticado();
         Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
@@ -1203,14 +1212,14 @@ public class ProducaoService {
         for (PedidoNoLote p : pedidosDaProducao(producao.getId())) {
             somaPedidos.merge(p.produto().getId(), p.quantidade(), BigDecimal::add);
         }
-        List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> lista = new ArrayList<>();
+        List<ExcedenteLoteResponse> lista = new ArrayList<>();
         boolean loteComVariosPedidos = somaPedidos.size() > 1 || orcamentoProducaoRepository.findByProducaoId(producao.getId()).size() > 1;
         for (ProducaoProduto pp : producaoProdutoRepository.findByProducaoId(producao.getId())) {
             BigDecimal pedidos = somaPedidos.getOrDefault(pp.getProduto().getId(), BigDecimal.ZERO);
             BigDecimal falta = pedidos.subtract(pp.getQuantidade());
             if (loteComVariosPedidos) {
                 if (falta.signum() > 0) {
-                    var r = new com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse();
+                    var r = new ExcedenteLoteResponse();
                     r.setProducaoId(producao.getId());
                     r.setIdentificadorProducao(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
                     r.setProdutoId(pp.getProduto().getId());
@@ -1230,8 +1239,8 @@ public class ProducaoService {
      * cancela a produção e deixa todos os pedidos sem produção vinculada.
      */
     public ProducaoDetalheResponse resolverExcedente(UUID producaoId,
-            com.penseprecifique.api.shared.dto.request.producao.ResolverExcedenteRequest request) {
-        List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse> excedentes = excedentesDoLote(producaoId);
+            ResolverExcedenteRequest request) {
+        List<ExcedenteLoteResponse> excedentes = excedentesDoLote(producaoId);
         Producao producao = producaoRepository.findByIdAndUsuarioId(producaoId, getUsuarioIdAutenticado())
                 .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
         if (excedentes.isEmpty()) {
@@ -1247,13 +1256,19 @@ public class ProducaoService {
         String detalhe = excedentes.stream()
                 .map(e -> e.getNaoCobertas().stripTrailingZeros().toPlainString() + " un. de " + e.getNomeProduto())
                 .collect(Collectors.joining("; "));
-        historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
-                .producao(producao)
-                .statusAnterior(producao.getEstado())
-                .statusNovo(producao.getEstado())
-                .origem(OrigemHistoricoStatus.USUARIO)
-                .justificativa("Lote mantido com pedidos acima da quantidade produzida; não cobertas: " + detalhe + " (RN-NOVA-42).")
-                .build());
+        String justificativa = "Lote mantido com pedidos acima da quantidade produzida; não cobertas: " + detalhe + " (RN-NOVA-42).";
+        // Idempotente: repetir "manter" com as mesmas unidades não cobertas não duplica o histórico.
+        boolean jaRegistrado = historicoStatusProducaoRepository.findByProducaoIdOrderByDataTransicaoAsc(producaoId).stream()
+                .anyMatch(h -> justificativa.equals(h.getJustificativa()));
+        if (!jaRegistrado) {
+            historicoStatusProducaoRepository.save(HistoricoStatusProducao.builder()
+                    .producao(producao)
+                    .statusAnterior(producao.getEstado())
+                    .statusNovo(producao.getEstado())
+                    .origem(OrigemHistoricoStatus.USUARIO)
+                    .justificativa(justificativa)
+                    .build());
+        }
         return montarDetalhe(producao, List.of());
     }
 
