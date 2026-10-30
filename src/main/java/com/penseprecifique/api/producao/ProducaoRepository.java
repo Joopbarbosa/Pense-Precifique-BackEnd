@@ -15,6 +15,11 @@ import java.util.UUID;
 
 public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
 
+    /** V0.18.0 (DT-NOVA-1) — produções da conta que ainda geram compromisso na Agenda (nem finalizadas, nem canceladas, nem não realizadas). */
+    @Query("SELECT p FROM Producao p WHERE p.usuario.id = :usuarioId AND p.deletedAt IS NULL AND p.estado IN :estados")
+    List<Producao> findEmAberto(@Param("usuarioId") UUID usuarioId,
+                                @Param("estados") java.util.Collection<com.penseprecifique.api.shared.domain.enums.EstadoProducao> estados);
+
     Page<Producao> findByUsuarioIdOrderByNumeroDesc(UUID usuarioId, Pageable pageable);
 
     Optional<Producao> findByIdAndUsuarioId(UUID id, UUID usuarioId);
@@ -25,6 +30,9 @@ public interface ProducaoRepository extends JpaRepository<Producao, UUID> {
 
     // RN-073/UC-036 — produções filhas de uma divisão (DIVISAO) ou agrupamento (AGRUPAMENTO).
     List<Producao> findByProducaoOrigemId(UUID producaoOrigemId);
+
+    // RN-NOVA-42 (V0.18.0, #1169) — candidatas a juntar.
+    List<Producao> findByUsuarioIdAndEstado(UUID usuarioId, com.penseprecifique.api.shared.domain.enums.EstadoProducao estado);
 
     // RN-NOVA-4 (V0.10.0, #336) — contadores por filtro (badges da Lista/Kanban de Produção),
     // mesmo padrão já usado por ProdutoRepository#contarPorTipo.

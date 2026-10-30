@@ -1,6 +1,7 @@
 package com.penseprecifique.api.compra;
 
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
+import com.penseprecifique.api.shared.dto.request.compra.AdiarPrevisaoCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CancelarCompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.CompraRequest;
 import com.penseprecifique.api.shared.dto.request.compra.PagamentoCompraRequest;
@@ -153,6 +154,13 @@ public class CompraController {
     public ResponseEntity<CompraResponse> duplicar(@PathVariable UUID id,
                                                    @RequestParam(defaultValue = "true") boolean manterDescontos) {
         return ResponseEntity.status(201).body(compraService.duplicar(id, manterDescontos));
+    }
+
+    /** V0.18.0 (#549, RN-NOVA-18) — adia a previsão de entrega da compra pendente de recebimento (a Agenda e a lista). */
+    @PatchMapping("/{id}/previsao")
+    public ResponseEntity<CompraResponse> adiarPrevisao(@PathVariable UUID id,
+                                                        @Valid @RequestBody AdiarPrevisaoCompraRequest request) {
+        return ResponseEntity.ok(compraService.adiarPrevisao(id, request));
     }
 
     @PatchMapping("/{id}/pagamento")

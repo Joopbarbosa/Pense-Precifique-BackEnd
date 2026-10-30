@@ -7,6 +7,10 @@ import com.penseprecifique.api.shared.dto.request.producao.CriarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.DesagruparProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.FinalizarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.JuntarProducoesRequest;
+import com.penseprecifique.api.shared.dto.response.producao.CandidataJuntarResponse;
+import com.penseprecifique.api.shared.dto.response.producao.JuntarProducoesResponse;
+import com.penseprecifique.api.shared.dto.response.producao.ProducoesPeriodoResponse;
 import com.penseprecifique.api.shared.dto.request.producao.RetomarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.TravarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
@@ -128,5 +132,40 @@ public class ProducaoController {
     public ResponseEntity<DesagruparProducaoResponse> desagrupar(
             @PathVariable UUID id, @Valid @RequestBody DesagruparProducaoRequest request) {
         return ResponseEntity.ok(producaoService.desagrupar(id, request));
+    }
+
+    // RN-NOVA-42 (V0.18.0, #1169) — juntar produções de pedidos diferentes num lote.
+    @GetMapping("/{id}/candidatas-juntar")
+    public ResponseEntity<List<CandidataJuntarResponse>> candidatasJuntar(@PathVariable UUID id) {
+        return ResponseEntity.ok(producaoService.candidatasParaJuntar(id));
+    }
+
+    // RN-NOVA-49 (V0.18.0, #1184) — produções do intervalo entre a aprovação e a entrega estimada do orçamento.
+    @GetMapping("/do-periodo")
+    public ResponseEntity<ProducoesPeriodoResponse> doPeriodo(@RequestParam UUID orcamentoId) {
+        return ResponseEntity.ok(producaoService.producoesDoPeriodo(orcamentoId));
+    }
+
+    @PostMapping("/{id}/juntar")
+    public ResponseEntity<JuntarProducoesResponse> juntar(
+            @PathVariable UUID id, @Valid @RequestBody JuntarProducoesRequest request) {
+        return ResponseEntity.ok(producaoService.juntar(id, request));
+    }
+
+    @GetMapping("/{id}/excedentes")
+    public ResponseEntity<List<com.penseprecifique.api.shared.dto.response.producao.ExcedenteLoteResponse>> excedentes(
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(producaoService.excedentesDoLote(id));
+    }
+
+    @PostMapping("/{id}/resolver-excedente")
+    public ResponseEntity<ProducaoDetalheResponse> resolverExcedente(@PathVariable UUID id,
+            @Valid @RequestBody com.penseprecifique.api.shared.dto.request.producao.ResolverExcedenteRequest request) {
+        return ResponseEntity.ok(producaoService.resolverExcedente(id, request));
+    }
+
+    @GetMapping("/{id}/avisos-prazo")
+    public ResponseEntity<List<String>> avisosPrazo(@PathVariable UUID id) {
+        return ResponseEntity.ok(producaoService.avisosDePrazoDaProducao(id));
     }
 }

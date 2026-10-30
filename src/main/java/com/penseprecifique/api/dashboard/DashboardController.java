@@ -1,7 +1,6 @@
 package com.penseprecifique.api.dashboard;
 
 import com.penseprecifique.api.shared.domain.enums.TipoVendaCmv;
-import com.penseprecifique.api.shared.dto.response.dashboard.DashboardResponse;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -19,14 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class DashboardController {
 
-    private final DashboardService dashboardService;
     private final DashboardVendasService dashboardVendasService;
     private final DashboardCadastrosService dashboardCadastrosService;
-
-    @GetMapping
-    public ResponseEntity<DashboardResponse> getDashboard() {
-        return ResponseEntity.ok(dashboardService.getDashboard());
-    }
 
     /** #719/RN-NOVA-17 (V0.17.0) — aba Gráficos do Dashboard de Vendas; sem datas, o mês atual. */
     @GetMapping("/vendas")

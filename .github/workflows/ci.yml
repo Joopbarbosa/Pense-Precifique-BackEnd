@@ -30,6 +30,8 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pense_ci
       SPRING_DATASOURCE_USERNAME: pense_ci
       SPRING_DATASOURCE_PASSWORD: pense_ci
+      # A suíte guarda muitos contextos Spring em cache; sem limite, o pool padrão (10) de cada um estoura as 100 conexões do Postgres.
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "2"
       JWT_SECRET: Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQw==
       JWT_EXPIRATION_MS: "86400000"
       R2_ACCOUNT_ID: ci

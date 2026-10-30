@@ -26,4 +26,14 @@ public interface ItemCatalogoComponenteRepository extends JpaRepository<ItemCata
     @Query("SELECT c FROM ItemCatalogoComponente c " +
             "WHERE c.insumo.id = :insumoId AND c.itemCatalogo.deletedAt IS NULL")
     List<ItemCatalogoComponente> findByInsumoId(@Param("insumoId") UUID insumoId);
+
+    /** V0.18.0 (#961) — itens (não excluídos) que têm algum dos insumos como componente direto. */
+    @Query("SELECT DISTINCT c.itemCatalogo.id FROM ItemCatalogoComponente c " +
+            "WHERE c.insumo.id IN :insumoIds AND c.itemCatalogo.deletedAt IS NULL")
+    List<UUID> findItemIdsByInsumoIds(@Param("insumoIds") java.util.Collection<UUID> insumoIds);
+
+    /** V0.18.0 (#961) — itens (não excluídos) que têm algum dos produtos ou customizações como componente. */
+    @Query("SELECT DISTINCT c.itemCatalogo.id FROM ItemCatalogoComponente c " +
+            "WHERE c.produtoBase.id IN :produtoIds AND c.itemCatalogo.deletedAt IS NULL")
+    List<UUID> findItemIdsByProdutoBaseIds(@Param("produtoIds") java.util.Collection<UUID> produtoIds);
 }

@@ -265,6 +265,8 @@ public class ProdutoService {
         // antes de qualquer alteração da edição.
         Set<UUID> afetadosPelaEdicao = comAncestrais(List.of(produto.getId()));
         Map<UUID, BigDecimal> precoSugeridoAntes = capturarPrecosSugeridos(afetadosPelaEdicao);
+        // #961/RN-NOVA-28 — o mesmo para os itens de Catálogo que usam o produto (ou um produto-pai) como componente
+        Map<UUID, BigDecimal> precoItensAntes = itemCatalogoService.capturarPrecosSugeridos(itemCatalogoService.itensComProdutos(afetadosPelaEdicao));
         BigDecimal custoUnitarioAntes = custoUnitarioAoVivo(produto);
 
         BigDecimal precoVendaAntigo = produto.getPrecoVenda();
@@ -321,6 +323,9 @@ public class ProdutoService {
                 && margemLucroAntigo.compareTo(produto.getMargemLucro()) != 0
                 && custoUnitarioAntes.compareTo(custoUnitario) == 0;
         registrarMudancasPrecoSugerido(usuarioId, precoSugeridoAntes,
+                soMargem ? CausaPrecoSugerido.PRODUTO_MARGEM : CausaPrecoSugerido.PRODUTO_EDICAO, produto.getId(),
+                IdentificadorFormatter.formatar("PRO", produto.getNumero()), Map.of());
+        itemCatalogoService.registrarMudancasPrecoSugerido(usuarioId, precoItensAntes,
                 soMargem ? CausaPrecoSugerido.PRODUTO_MARGEM : CausaPrecoSugerido.PRODUTO_EDICAO, produto.getId(),
                 IdentificadorFormatter.formatar("PRO", produto.getNumero()), Map.of());
 
@@ -533,10 +538,19 @@ public class ProdutoService {
      * único tipo de vínculo (ITEM_CATALOGO_COMPONENTE), já que RN-NOVA-1 elimina essa distinção. */
     private void resolverVinculoCatalogo(UUID usuarioId, List<ItemCatalogoComponente> componentesCatalogo,
                                           ResolucaoVinculoCatalogoRequest request) {
+        // #961/RN-NOVA-28 — preço sugerido de antes dos itens de Catálogo que usam o produto, e o registro depois da resolução
+        Map<UUID, BigDecimal> precoItensAntes = itemCatalogoService.capturarPrecosSugeridos(
+                componentesCatalogo.stream().map(c -> c.getItemCatalogo().getId()).collect(java.util.stream.Collectors.toSet()));
+        Produto original = componentesCatalogo.isEmpty() ? null : componentesCatalogo.get(0).getProdutoBase();
         if (request.getAcao() == AcaoResolucaoVinculo.REMOVER_VINCULOS) {
             removerVinculosCatalogo(componentesCatalogo);
         } else {
             aplicarSubstituicoesCatalogo(usuarioId, componentesCatalogo, request.getSubstituicoes());
+        }
+        if (original != null) {
+            itemCatalogoComponenteRepository.flush();
+            itemCatalogoService.registrarMudancasPrecoSugerido(usuarioId, precoItensAntes, CausaPrecoSugerido.ITEM_EDICAO,
+                    original.getId(), IdentificadorFormatter.formatar("PRO", original.getNumero()), Map.of());
         }
     }
 

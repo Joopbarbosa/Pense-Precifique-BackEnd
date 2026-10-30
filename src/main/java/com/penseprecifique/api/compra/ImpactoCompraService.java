@@ -50,6 +50,7 @@ public class ImpactoCompraService {
     private final FichaTecnicaItemRepository fichaTecnicaItemRepository;
     private final ProdutoService produtoService;
     private final PrecoSugeridoHistoricoService precoSugeridoHistoricoService;
+    private final com.penseprecifique.api.catalogo.ItemCatalogoService itemCatalogoService;
 
     /** Custo de um insumo antes e depois da operação. */
     public record MudancaCusto(Insumo insumo, BigDecimal antes, BigDecimal depois) {}
@@ -155,6 +156,9 @@ public class ImpactoCompraService {
                         p.getPrecoVenda(), Boolean.TRUE.equals(p.getOverride())));
             }
         }
+        if (evento != null) {
+            registrarMudancasDosItens(usuarioId, mudaram, insumoAntes, produtoAntes, evento);
+        }
         produtos.sort(Comparator.comparing((ImpactoCompraResponse.ProdutoImpacto i) -> !i.direto())
                 .thenComparing(ImpactoCompraResponse.ProdutoImpacto::nome));
 
@@ -165,6 +169,34 @@ public class ImpactoCompraService {
                         m.antes(), m.depois()))
                 .toList();
         return new ImpactoCompraResponse(true, insumos, produtos);
+    }
+
+    /**
+     * #961/RN-NOVA-28 — preço sugerido dos itens de Catálogo que têm como componente um insumo que mudou de custo, ou um produto
+     * ou customização afetado por ele. O "antes" usa os custos de antes (insumos e produtos), o "depois" é o ao vivo, já com os
+     * custos gravados; grava só quem mudou em centavos, com os insumos de origem.
+     */
+    private void registrarMudancasDosItens(UUID usuarioId, List<MudancaCusto> mudaram,
+                                           Map<UUID, BigDecimal> insumoAntes, Map<UUID, BigDecimal> produtoAntes, EventoPreco evento) {
+        Map<UUID, Set<UUID>> insumosPorItem = new HashMap<>();
+        for (MudancaCusto m : mudaram) {
+            UUID insumoId = m.insumo().getId();
+            Set<UUID> itens = new java.util.LinkedHashSet<>(itemCatalogoService.itensComInsumos(List.of(insumoId)));
+            itens.addAll(itemCatalogoService.itensComProdutos(alcance(insumoId)));
+            itens.forEach(itemId -> insumosPorItem.computeIfAbsent(itemId, k -> new java.util.LinkedHashSet<>()).add(insumoId));
+        }
+        if (insumosPorItem.isEmpty()) {
+            return;
+        }
+        Map<UUID, BigDecimal> antes = new LinkedHashMap<>();
+        insumosPorItem.keySet().forEach(itemId -> {
+            BigDecimal valor = itemCatalogoService.precoSugeridoSimulado(itemId, insumoAntes, produtoAntes);
+            if (valor != null) {
+                antes.put(itemId, valor);
+            }
+        });
+        itemCatalogoService.registrarMudancasPrecoSugerido(usuarioId, antes, evento.causa(), evento.referenciaId(),
+                evento.referenciaTexto(), insumosPorItem);
     }
 
     /** #672 — produtos (diretos e indiretos, até {@value #LIMITE_NIVEIS} níveis) que um insumo alcança. */

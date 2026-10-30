@@ -36,13 +36,15 @@ public class OrcamentoRequest {
     @NotNull(message = "É obrigatório informar se o orçamento vai ter prazo de produção")
     private Boolean temPrazoProducao;
 
-    @Min(value = 1, message = "O prazo deve ser de pelo menos 1 dia útil")
+    @Min(value = 1, message = "O prazo deve ser de pelo menos 1 dia")
     private Integer prazoProducaoDias;
 
     private boolean inicioAssimQueAprovado = true;
     private LocalDate dataInicioEstimada;
 
     private boolean sinalAtivo = false;
+    /** RN-NOVA-12 (V0.18.0) — "Sinal até"; só com sinal ativo e não anterior a hoje (salvo o valor já gravado). */
+    private LocalDate sinalAte;
     private BigDecimal percentualSinal;
     private BigDecimal valorSinal;
 

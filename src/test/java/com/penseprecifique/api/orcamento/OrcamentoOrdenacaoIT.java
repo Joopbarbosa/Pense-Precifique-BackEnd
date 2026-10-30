@@ -106,6 +106,13 @@ class OrcamentoOrdenacaoIT {
     }
 
     @Test
+    void consultaSemOrdenacaoOrdenaPorNumeroDesc() {
+        seed();
+        Page<OrcamentoResponse> pagina = orcamentoService.listar(null, null, null, null, PageRequest.of(0, 20));
+        assertEquals(List.of(oCId, oBId, oAId), pagina.getContent().stream().map(OrcamentoResponse::getId).toList());
+    }
+
+    @Test
     void ordenaPorClienteNomeAlfabetico() {
         seed();
         List<UUID> asc = idsNaOrdem(Sort.by(Sort.Direction.ASC, "cliente.nome"));
@@ -126,11 +133,19 @@ class OrcamentoOrdenacaoIT {
     @Test
     void ordenaPeloCicloDeVidaComDesempatePeloNumero() {
         seed();
-        // #994: RASCUNHO (A, 100) < ENVIADO (C, 102) < APROVADO (B, 101) — a ordem do ciclo de vida, não a alfabética
-        Sort asc = Sort.by(Sort.Order.asc("cicloDeVida"), Sort.Order.asc("numero"));
-        assertEquals(List.of(oAId, oCId, oBId), idsNaOrdem(asc));
-        Sort desc = Sort.by(Sort.Order.desc("cicloDeVida"), Sort.Order.asc("numero"));
-        assertEquals(List.of(oBId, oCId, oAId), idsNaOrdem(desc));
+        UUID oDId = novoOrcamento(novoCliente("Delta", 4), 99, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.RASCUNHO);
+        UUID oFinalizadoId = novoOrcamento(novoCliente("Finalizado", 5), 105, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.FINALIZADO);
+        UUID oPagoId = novoOrcamento(novoCliente("Pago", 6), 106, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.PAGO);
+        UUID oEntregueId = novoOrcamento(novoCliente("Entregue", 7), 107, new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.ENTREGUE);
+        // #994/#447: ordenação asc segue o ciclo de vida e coloca PAGO antes de ENTREGUE.
+        Sort asc = Sort.by(Sort.Order.asc("cicloDeVida"));
+        assertEquals(List.of(oAId, oDId, oCId, oBId, oFinalizadoId, oPagoId, oEntregueId), idsNaOrdem(asc));
+        Sort desc = Sort.by(Sort.Order.desc("cicloDeVida"));
+        assertEquals(List.of(oEntregueId, oPagoId, oFinalizadoId, oBId, oCId, oAId, oDId), idsNaOrdem(desc));
     }
 
     @Test
@@ -139,7 +154,7 @@ class OrcamentoOrdenacaoIT {
         // dois orçamentos com o mesmo total (100,00): o número desempata, para a página numerada não repetir nem perder registros
         UUID oDId = novoOrcamento(novoCliente("Delta", 4), 99, new BigDecimal("100.00"),
                 LocalDateTime.of(2026, 1, 1, 10, 0), StatusOrcamento.RASCUNHO);
-        assertEquals(List.of(oAId, oDId, oCId, oBId), idsNaOrdem(Sort.by(Sort.Direction.ASC, "total")));
+        assertEquals(List.of(oAId, oCId, oDId, oBId), idsNaOrdem(Sort.by(Sort.Direction.ASC, "total")));
     }
 
     @Test

@@ -31,6 +31,8 @@ import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.domain.enums.SituacaoAlertaInsumo;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.CriarProducaoVinculadaRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.DecisaoProducaoCancelamentoRequest;
+import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
@@ -77,6 +79,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.penseprecifique.api.shared.dto.request.orcamento.QuantidadeProducaoRequest;
+import com.penseprecifique.api.shared.dto.response.orcamento.SugestaoQuantidadeProducaoResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -85,6 +89,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -112,8 +117,7 @@ public class OrcamentoService {
     );
 
     /**
-     * #994 (RN-NOVA-31 item 3) — a coluna Status ordena pelo ciclo de vida do orçamento (rascunho até pago/cancelado), não
-     * pela ordem alfabética (a mesma dos filtros da tela: ... Finalizado, Entregue, Pago, Cancelado); no servidor, para valer em todas as páginas (antes era reordenada na tela, só na página carregada).
+     * #994/#447 — a coluna Status ordena pelo ciclo de vida do orçamento, não pela ordem alfabética; no servidor, para valer em todas as páginas.
      */
     // O COALESCE faz o Spring Data tratar a expressão como função, sem prefixar o alias da consulta.
     private static final Map<String, String> EXPRESSOES_ORDENACAO_ORCAMENTO = Map.of(
@@ -125,8 +129,8 @@ public class OrcamentoService {
                     + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.SINAL_PAGO THEN 4 "
                     + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.EM_PRODUCAO THEN 5 "
                     + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.FINALIZADO THEN 6 "
-                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE THEN 7 "
-                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.PAGO THEN 8 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.PAGO THEN 7 "
+                    + "WHEN com.penseprecifique.api.shared.domain.enums.StatusOrcamento.ENTREGUE THEN 8 "
                     + "ELSE 9 END, 9)"
     );
 
@@ -146,6 +150,7 @@ public class OrcamentoService {
     private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final ReciboEstornoRepository reciboEstornoRepository;
     private final OrcamentoProducaoRepository orcamentoProducaoRepository;
+    private final com.penseprecifique.api.producao.ProducaoProdutoRepository producaoProdutoRepository;
     private final ProducaoRepository producaoRepository;
     private final ProducaoService producaoService;
     private final UsuarioRepository usuarioRepository;
@@ -169,10 +174,13 @@ public class OrcamentoService {
 
         Pageable pageableOrdenado = PageableOrdenacaoResolver.resolverMisto(pageable, CAMPOS_ORDENACAO_ORCAMENTO,
                 EXPRESSOES_ORDENACAO_ORCAMENTO, "total, createdAt, status, cicloDeVida, cliente.nome, numero");
-        // #994: página numerada exige ordem total — o número do orçamento desempata qualquer coluna não única
-        if (pageableOrdenado.getSort().isSorted() && pageableOrdenado.getSort().getOrderFor("numero") == null) {
+        // #380: a lista sem ordenação escolhida abre pelo número desc; qualquer outra coluna desempata pelo número desc.
+        if (pageableOrdenado.getSort().isUnsorted()) {
             pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
-                    pageableOrdenado.getSort().and(Sort.by(Sort.Direction.ASC, "numero")));
+                    Sort.by(Sort.Direction.DESC, "numero"));
+        } else if (pageableOrdenado.getSort().getOrderFor("numero") == null) {
+            pageableOrdenado = PageRequest.of(pageableOrdenado.getPageNumber(), pageableOrdenado.getPageSize(),
+                    pageableOrdenado.getSort().and(Sort.by(Sort.Direction.DESC, "numero")));
         }
         Page<Orcamento> page = orcamentoRepository.buscar(
                 usuarioId, status, buscaNormalizada, dataCriacaoDeInicio, dataCriacaoAteFim, pageableOrdenado);
@@ -281,6 +289,7 @@ public class OrcamentoService {
                 PapelCadastro.CLIENTE, null);
 
         validarRegras(request);
+        validarSinalAte(request, null);
 
         TipoDesconto tipoDesconto = parseTipoDesconto(request.getTipoDesconto());
 
@@ -294,6 +303,7 @@ public class OrcamentoService {
                 .prazoProducaoDias(request.getPrazoProducaoDias())
                 .inicioAssimQueAprovado(request.isInicioAssimQueAprovado())
                 .dataInicioEstimada(request.getDataInicioEstimada())
+                .sinalAte(request.getSinalAte())
                 .sinalAtivo(request.isSinalAtivo())
                 .percentualSinal(request.getPercentualSinal())
                 .descontoTipo(tipoDesconto)
@@ -356,6 +366,7 @@ public class OrcamentoService {
                 PapelCadastro.CLIENTE, orcamento.getCliente() != null ? orcamento.getCliente().getId() : null);
 
         validarRegras(request);
+        validarSinalAte(request, orcamento.getSinalAte());
         for (OrcamentoItemRequest itemReq : request.getItens()) {
             validarOrigemItem(itemReq);
         }
@@ -403,6 +414,7 @@ public class OrcamentoService {
         orcamento.setPrazoProducaoDias(request.getPrazoProducaoDias());
         orcamento.setInicioAssimQueAprovado(request.isInicioAssimQueAprovado());
         orcamento.setDataInicioEstimada(request.getDataInicioEstimada());
+        orcamento.setSinalAte(request.getSinalAte());
         orcamento.setSinalAtivo(request.isSinalAtivo());
         orcamento.setPercentualSinal(request.getPercentualSinal());
         orcamento.setDescontoTipo(tipoDesconto);
@@ -473,6 +485,7 @@ public class OrcamentoService {
         request.setDescontoValor(original.getDescontoValor());
         request.setObservacoes(original.getObservacoes());
         request.setDataValidade(null);
+        request.setSinalAte(null);
 
         List<OrcamentoItemRequest> itensRequest = new ArrayList<>();
         for (OrcamentoItem itemOriginal : orcamentoItemRepository.findByOrcamentoId(original.getId())) {
@@ -894,6 +907,9 @@ public class OrcamentoService {
         switch (atual) {
             case RASCUNHO:
                 orcamento.setStatus(StatusOrcamento.ENVIADO);
+                if (orcamento.getDataEnvio() == null) {
+                    orcamento.setDataEnvio(LocalDateTime.now());
+                }
                 break;
 
             case ENVIADO:
@@ -920,6 +936,9 @@ public class OrcamentoService {
                         orcamento.setDataAprovacao(LocalDateTime.now());
                         baixarEstoque(orcamento, itensAtalho);
                         orcamento.setStatus(StatusOrcamento.FINALIZADO);
+                        if (orcamento.getDataFinalizacao() == null) {
+                            orcamento.setDataFinalizacao(LocalDateTime.now());
+                        }
                         break;
                     }
                     // bloqueio duro (produto sem permitirEstoqueNegativo e insuficiente) — atalho não
@@ -965,7 +984,10 @@ public class OrcamentoService {
                 // já usado por RN-NOVA-6 (ver DECISOES_V0.8.3.md).
                 List<ProducaoResumoResponse> vinculosOrfaos = new ArrayList<>();
                 List<String> producoesPendentes = new ArrayList<>();
-                for (OrcamentoProducao vinculo : orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId())) {
+                // ORC-047 (#398) — a lista de produções (pendentes e canceladas) sai sempre pelo número, do menor para o maior.
+                List<OrcamentoProducao> vinculosDoOrcamento = new ArrayList<>(orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()));
+                vinculosDoOrcamento.sort(java.util.Comparator.comparing(v -> v.getProducao().getNumero()));
+                for (OrcamentoProducao vinculo : vinculosDoOrcamento) {
                     Producao producaoVinculada = vinculo.getProducao();
                     EstadoProducao estadoVinculado = producaoVinculada.getEstado();
                     String identificadorVinculado = IdentificadorFormatter.formatar("PRD", producaoVinculada.getNumero());
@@ -1011,6 +1033,9 @@ public class OrcamentoService {
                 }
                 baixarEstoque(orcamento, itensParaBaixa);
                 orcamento.setStatus(StatusOrcamento.FINALIZADO);
+                if (orcamento.getDataFinalizacao() == null) {
+                    orcamento.setDataFinalizacao(LocalDateTime.now());
+                }
                 break;
 
             case FINALIZADO:
@@ -1143,9 +1168,7 @@ public class OrcamentoService {
                     .build());
         }
 
-        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
-                .map(orcamentoMapper::toOrcamentoProducaoResponse)
-                .toList();
+        return montarVinculosProducao(orcamento.getId());
     }
 
     /**
@@ -1292,6 +1315,7 @@ public class OrcamentoService {
         if (produtos.isEmpty()) {
             throw new BusinessException("Orçamento não tem itens para criar uma produção");
         }
+        produtos = aplicarQuantidadesProducao(produtos, request.getQuantidadesProducao(), usuarioId);
 
         Producao producao = producaoService.criarProducaoBase(usuarioId, request.getDataInicio(),
                 request.getDataTerminoPrevista(), request.getObservacoes());
@@ -1302,9 +1326,98 @@ public class OrcamentoService {
                 .producao(producao)
                 .build());
 
-        return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
-                .map(orcamentoMapper::toOrcamentoProducaoResponse)
-                .toList();
+        return montarVinculosProducao(orcamento.getId());
+    }
+
+    /**
+     * RN-NOVA-39 (V0.18.0, #1166) — produto com insumo não fracionável só produz em múltiplos do
+     * rendimento. Para cada um, usa a quantidade informada (múltiplo do rendimento e não menor que o
+     * pedido) ou, se ausente, o menor múltiplo que cobre o pedido. Produto fracionável mantém o
+     * pedido. Produto informado que não é do orçamento é recusado.
+     */
+    private List<ProducaoProdutoRequest> aplicarQuantidadesProducao(List<ProducaoProdutoRequest> produtos,
+                                                                      List<QuantidadeProducaoRequest> informadas,
+                                                                      UUID usuarioId) {
+        Map<UUID, BigDecimal> pedidos = new LinkedHashMap<>();
+        for (ProducaoProdutoRequest p : produtos) {
+            pedidos.merge(p.getProdutoId(), p.getQuantidade(), BigDecimal::add);
+        }
+        Map<UUID, BigDecimal> escolhidas = new LinkedHashMap<>();
+        if (informadas != null) {
+            for (QuantidadeProducaoRequest q : informadas) {
+                if (!pedidos.containsKey(q.getProdutoId())) {
+                    throw new BusinessException("Quantidade informada para produto que não está neste pedido");
+                }
+                if (escolhidas.put(q.getProdutoId(), q.getQuantidade()) != null) {
+                    throw new BusinessException("Quantidade informada mais de uma vez para o mesmo produto");
+                }
+            }
+        }
+
+        List<ProducaoProdutoRequest> resultado = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> e : pedidos.entrySet()) {
+            BigDecimal quantidade = e.getValue();
+            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(e.getKey(), usuarioId).orElse(null);
+            if (produto != null && exigeMultiploDoRendimento(produto)) {
+                BigDecimal rendimento = produto.getRendimento();
+                BigDecimal minimo = menorMultiploQueCobre(e.getValue(), rendimento);
+                BigDecimal escolhida = escolhidas.getOrDefault(e.getKey(), minimo);
+                if (escolhida.remainder(rendimento).compareTo(BigDecimal.ZERO) != 0 || escolhida.compareTo(minimo) < 0) {
+                    throw new BusinessException("Produto " + produto.getNome() + " exige quantidade em múltiplos de "
+                            + rendimento.stripTrailingZeros().toPlainString() + " unidades (mínimo "
+                            + minimo.stripTrailingZeros().toPlainString() + ")");
+                }
+                quantidade = escolhida;
+            } else if (escolhidas.containsKey(e.getKey())) {
+                throw new BusinessException("Produto " + (produto != null ? produto.getNome() : "")
+                        + " não exige quantidade múltipla do rendimento");
+            }
+            ProducaoProdutoRequest r = new ProducaoProdutoRequest();
+            r.setProdutoId(e.getKey());
+            r.setQuantidade(quantidade);
+            resultado.add(r);
+        }
+        return resultado;
+    }
+
+    private boolean exigeMultiploDoRendimento(Produto produto) {
+        if (produto.getRendimento() == null || produto.getRendimento().compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        return fichaTecnicaItemRepository.findByProdutoId(produto.getId()).stream()
+                .anyMatch(f -> f.getInsumo() != null && Boolean.FALSE.equals(f.getInsumo().getFracionavel()));
+    }
+
+    private BigDecimal menorMultiploQueCobre(BigDecimal pedido, BigDecimal rendimento) {
+        return pedido.divide(rendimento, 0, RoundingMode.CEILING).multiply(rendimento);
+    }
+
+    /** RN-NOVA-39 (V0.18.0, #1166) — sugestão por produto não fracionável do orçamento, para a janela. */
+    @Transactional(readOnly = true)
+    public List<SugestaoQuantidadeProducaoResponse> sugerirQuantidadesProducao(UUID id, List<UUID> produtoIds) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        Map<UUID, BigDecimal> pedidos = new LinkedHashMap<>();
+        for (ProducaoProdutoRequest p : filtrarPorProdutoIds(produtosDoOrcamentoComoRequest(orcamento.getId()), produtoIds)) {
+            pedidos.merge(p.getProdutoId(), p.getQuantidade(), BigDecimal::add);
+        }
+        List<SugestaoQuantidadeProducaoResponse> lista = new ArrayList<>();
+        for (Map.Entry<UUID, BigDecimal> e : pedidos.entrySet()) {
+            Produto produto = produtoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(e.getKey(), usuarioId).orElse(null);
+            if (produto == null || !exigeMultiploDoRendimento(produto)) {
+                continue;
+            }
+            SugestaoQuantidadeProducaoResponse r = new SugestaoQuantidadeProducaoResponse();
+            r.setProdutoId(produto.getId());
+            r.setNomeProduto(produto.getNome());
+            r.setQuantidadePedida(e.getValue());
+            r.setRendimento(produto.getRendimento());
+            r.setQuantidadeSugerida(menorMultiploQueCobre(e.getValue(), produto.getRendimento()));
+            r.setSobra(r.getQuantidadeSugerida().subtract(e.getValue()));
+            lista.add(r);
+        }
+        return lista;
     }
 
     private List<ProducaoProdutoRequest> produtosDoOrcamentoComoRequest(UUID orcamentoId) {
@@ -1517,6 +1630,9 @@ public class OrcamentoService {
 
         StatusOrcamento atual = orcamento.getStatus();
         LocalDateTime now = LocalDateTime.now();
+        // Já cancelado cai no erro de negócio do switch; as decisões só são validadas quando há o que decidir.
+        Map<UUID, Boolean> decisoes = atual == StatusOrcamento.CANCELADO
+                ? new LinkedHashMap<>() : validarDecisoesProducao(orcamento, request);
 
         switch (atual) {
             case RASCUNHO:
@@ -1578,7 +1694,58 @@ public class OrcamentoService {
         orcamento.setStatus(StatusOrcamento.CANCELADO);
         orcamento.setDataCancelamento(now);
         orcamento = orcamentoRepository.save(orcamento);
+        aplicarDecisoesProducaoNoCancelamento(orcamento, decisoes);
         return montarDetalhe(orcamento);
+    }
+
+    /**
+     * RN-NOVA-40 (V0.18.0, #1167) — o orçamento cancelado sempre se desvincula das produções. Para
+     * cada produção ainda aberta (aguardando início, em andamento ou travada), a decisão "cancelar"
+     * cancela a produção (insumo já consumido não volta ao estoque: consumo total, sem estorno) e a
+     * ausência de decisão ou "manter" deixa a produção como está, sem o vínculo; produtos e histórico
+     * (com o orçamento de origem) continuam intactos. Finalizada, cancelada e não realizada não
+     * entram na pergunta; só perdem o vínculo.
+     */
+    private void aplicarDecisoesProducaoNoCancelamento(Orcamento orcamento, Map<UUID, Boolean> decisoes) {
+        List<OrcamentoProducao> vinculos = new ArrayList<>(orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()));
+        for (OrcamentoProducao vinculo : vinculos) {
+            Producao producao = vinculo.getProducao();
+            EstadoProducao estado = producao.getEstado();
+            boolean aberta = estado == EstadoProducao.AGUARDANDO_INICIO
+                    || estado == EstadoProducao.EM_ANDAMENTO
+                    || estado == EstadoProducao.TRAVADA;
+            if (aberta && Boolean.TRUE.equals(decisoes.get(producao.getId()))) {
+                CancelarProducaoRequest cancelamento = new CancelarProducaoRequest();
+                cancelamento.setJustificativa("Orçamento ORC-" + orcamento.getNumero()
+                        + " cancelado: produção cancelada junto, por decisão da usuária.");
+                producaoService.cancelar(producao.getId(), cancelamento);
+                // RN-NOVA-42 — lote cancelado inteiro: os outros pedidos mantêm a situação e ficam sem produção vinculada.
+                for (OrcamentoProducao outro : orcamentoProducaoRepository.findByProducaoId(producao.getId())) {
+                    if (!outro.getId().equals(vinculo.getId())) {
+                        orcamentoProducaoRepository.delete(outro);
+                    }
+                }
+            }
+            orcamentoProducaoRepository.delete(vinculo);
+        }
+    }
+
+    private Map<UUID, Boolean> validarDecisoesProducao(Orcamento orcamento, AvancaStatusRequest request) {
+        Map<UUID, Boolean> decisoes = new LinkedHashMap<>();
+        if (request.getDecisoesProducao() == null || request.getDecisoesProducao().isEmpty()) {
+            return decisoes;
+        }
+        Set<UUID> vinculadas = orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
+                .map(v -> v.getProducao().getId())
+                .collect(Collectors.toSet());
+        for (DecisaoProducaoCancelamentoRequest decisao : request.getDecisoesProducao()) {
+            if (!vinculadas.contains(decisao.getProducaoId())) {
+                // Mesma resposta para produção inexistente ou de outra conta: nunca revela o dado alheio.
+                throw new ResourceNotFoundException("Produção não encontrada neste orçamento");
+            }
+            decisoes.put(decisao.getProducaoId(), decisao.isCancelar());
+        }
+        return decisoes;
     }
 
     private void reverterEstoque(Orcamento orcamento, String motivo) {
@@ -1818,6 +1985,23 @@ public class OrcamentoService {
         }
     }
 
+    /**
+     * RN-NOVA-12 (V0.18.0, DT-NOVA-4) — "Sinal até" só existe com sinal ativo e não pode ser anterior a hoje; editar
+     * um orçamento cujo "Sinal até" já passou mantém o valor gravado sem bloquear.
+     */
+    private void validarSinalAte(OrcamentoRequest request, LocalDate sinalAteGravado) {
+        LocalDate sinalAte = request.getSinalAte();
+        if (sinalAte == null) {
+            return;
+        }
+        if (!request.isSinalAtivo()) {
+            throw new BusinessException("A data do sinal só vale quando o sinal está ativo");
+        }
+        if (sinalAte.isBefore(LocalDate.now(clock)) && !sinalAte.equals(sinalAteGravado)) {
+            throw BusinessException.noCampo("sinalAte", "A data do sinal não pode ser anterior a hoje");
+        }
+    }
+
     private TipoDesconto parseTipoDesconto(String tipoDesconto) {
         if (tipoDesconto == null || tipoDesconto.isBlank()) {
             return TipoDesconto.PERCENTUAL;
@@ -1916,10 +2100,47 @@ public class OrcamentoService {
         }
         OrcamentoDetalheResponse response = orcamentoMapper.toDetalheResponse(orcamento, itens);
         response.setItens(itensResponse);
-        response.setProducoesVinculadas(orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
-                .map(orcamentoMapper::toOrcamentoProducaoResponse)
-                .toList());
+        response.setProducoesVinculadas(montarVinculosProducao(orcamento.getId()));
         return response;
+    }
+
+    /**
+     * RN-NOVA-41 (V0.18.0, #1168) — vínculos do orçamento com situação, datas e os produtos/quantidades de
+     * cada produção, lidos de uma vez só (sem consulta por produção).
+     */
+    private List<OrcamentoProducaoResponse> montarVinculosProducao(UUID orcamentoId) {
+        List<OrcamentoProducaoResponse> respostas = orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).stream()
+                .map(orcamentoMapper::toOrcamentoProducaoResponse)
+                .toList();
+        if (respostas.isEmpty()) {
+            return respostas;
+        }
+        Map<UUID, List<OrcamentoProducaoResponse.ProdutoProducao>> porProducao = new LinkedHashMap<>();
+        for (var pp : producaoProdutoRepository.findComProdutoByProducaoIdIn(
+                respostas.stream().map(OrcamentoProducaoResponse::getProducaoId).toList())) {
+            var item = new OrcamentoProducaoResponse.ProdutoProducao();
+            item.setProdutoId(pp.getProduto().getId());
+            item.setNomeProduto(pp.getProduto().getNome());
+            item.setQuantidade(pp.getQuantidade());
+            porProducao.computeIfAbsent(pp.getProducao().getId(), k -> new ArrayList<>()).add(item);
+        }
+        for (OrcamentoProducaoResponse r : respostas) {
+            List<OrcamentoProducaoResponse.ProdutoProducao> produtos = porProducao.getOrDefault(r.getProducaoId(), List.of());
+            r.setProdutos(produtos);
+            // RN-NOVA-42 — quanto deste pedido há no lote e com quais outros pedidos ele divide a produção.
+            var pedidos = producaoService.pedidosAtendidosDaProducao(r.getProducaoId());
+            Set<String> outros = new LinkedHashSet<>();
+            for (var pedido : pedidos) {
+                if (pedido.getOrcamentoId().equals(orcamentoId)) {
+                    produtos.stream().filter(p -> p.getProdutoId().equals(pedido.getProdutoId()))
+                            .forEach(p -> p.setQuantidadePedido(pedido.getQuantidade()));
+                } else {
+                    outros.add(pedido.getIdentificadorOrcamento());
+                }
+            }
+            r.setOutrosOrcamentos(new ArrayList<>(outros));
+        }
+        return respostas;
     }
 
     /** #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition. */

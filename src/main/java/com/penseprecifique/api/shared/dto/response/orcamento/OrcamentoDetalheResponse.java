@@ -27,10 +27,18 @@ public class OrcamentoDetalheResponse {
     private boolean inicioAssimQueAprovado;
     private LocalDate dataInicioEstimada;
     private LocalDateTime dataAprovacao;
-    /** RN-ORC-VINC-04 (V0.8.2, #320) — data prometida ao cliente ({@code dataAprovacao + prazoProducaoDias},
-     * dias corridos), nulo quando falta {@code dataAprovacao} ou {@code prazoProducaoDias}. Usada para
-     * comparar contra {@code Producao.dataTerminoPrevista} de cada vínculo — ver {@code producoesVinculadas}. */
+    /** RN-NOVA-12 (V0.18.0) — data limite combinada para o sinal. */
+    private LocalDate sinalAte;
+    /** RN-NOVA-14 (V0.18.0) — passos do histórico; nulos nos orçamentos anteriores (sem registro retroativo). */
+    private LocalDateTime dataEnvio;
+    private LocalDateTime dataFinalizacao;
+    private LocalDateTime dataCancelamento;
+    /** RN-NOVA-8 (V0.18.0, #444) — entrega estimada em dias corridos a partir do sinal pago (com sinal) ou da
+     * aprovação (sem sinal), com a data de início estimada como piso; nulo sem prazo de produção ou com sinal
+     * ainda não pago. Usada também contra {@code Producao.dataTerminoPrevista} (RN-ORC-VINC-04). */
     private LocalDate dataEntregaEstimada;
+    /** RN-NOVA-11 (V0.18.0) — RASCUNHO ou ENVIADO com a data de validade já passada; calculado no servidor. */
+    private boolean vencido;
     private boolean sinalAtivo;
     private BigDecimal percentualSinal;
     private BigDecimal valorSinal;
