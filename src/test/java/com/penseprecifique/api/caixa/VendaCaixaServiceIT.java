@@ -261,6 +261,49 @@ class VendaCaixaServiceIT {
         assertEquals(0, BigDecimal.ZERO.compareTo(fechado.diferenca()));
     }
 
+    /** #1115 (CXA-009) — o esperado soma o dinheiro líquido: recebido menos o troco. */
+    @Test
+    void fechamentoDeTurnoDescontaOTrocoDoDinheiroRecebido() {
+        seedUsuario("fechamento-troco");
+        CaixaTurnoResponseDTO turno = abrirTurno(new BigDecimal("100.00"));
+        Produto produto = criarProduto("Produto Oitenta", new BigDecimal("80.00"), new BigDecimal("10"), true);
+        UUID dinheiroId = metodoIdPorTipo(TipoMetodoPagamento.DINHEIRO);
+
+        // venda de 80 paga com 100 em dinheiro: troco 20, entram 80 na gaveta.
+        vendaCaixaService.registrarVenda(new VendaCaixaRequestDTO(
+                null, List.of(new VendaCaixaItemRequestDTO(null, produto.getId(), BigDecimal.ONE, null)),
+                null, null, List.of(new VendaCaixaPagamentoRequestDTO(dinheiroId, new BigDecimal("100.00"), null)), null));
+
+        CaixaTurnoResponseDTO fechado = caixaTurnoService.fecharTurno(
+                turno.id(), new FecharCaixaTurnoRequestDTO(new BigDecimal("180.00"), null));
+
+        assertEquals(0, new BigDecimal("180.00").compareTo(fechado.valorFechamentoEsperado()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(fechado.diferenca()));
+    }
+
+    /** #1115 (CXA-009) — pagamento dividido: Pix 30 + Dinheiro 30 para total 50, troco 10. */
+    @Test
+    void fechamentoDeTurnoDescontaOTrocoEmPagamentoDividido() {
+        seedUsuario("fechamento-troco-dividido");
+        CaixaTurnoResponseDTO turno = abrirTurno(new BigDecimal("100.00"));
+        Produto produto = criarProduto("Produto Cinquenta", new BigDecimal("50.00"), new BigDecimal("10"), true);
+        UUID dinheiroId = metodoIdPorTipo(TipoMetodoPagamento.DINHEIRO);
+        UUID pixId = metodoIdPorTipo(TipoMetodoPagamento.PIX);
+
+        vendaCaixaService.registrarVenda(new VendaCaixaRequestDTO(
+                null, List.of(new VendaCaixaItemRequestDTO(null, produto.getId(), BigDecimal.ONE, null)),
+                null, null, List.of(
+                        new VendaCaixaPagamentoRequestDTO(pixId, new BigDecimal("30.00"), null),
+                        new VendaCaixaPagamentoRequestDTO(dinheiroId, new BigDecimal("30.00"), null)), null));
+
+        CaixaTurnoResponseDTO fechado = caixaTurnoService.fecharTurno(
+                turno.id(), new FecharCaixaTurnoRequestDTO(new BigDecimal("120.00"), null));
+
+        // entram 20 em dinheiro (30 recebidos - 10 de troco).
+        assertEquals(0, new BigDecimal("120.00").compareTo(fechado.valorFechamentoEsperado()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(fechado.diferenca()));
+    }
+
     /* ── #487 (V0.12.0) — cancelamento exige senha e escolha de devolução de estoque ──── */
 
     @Test
