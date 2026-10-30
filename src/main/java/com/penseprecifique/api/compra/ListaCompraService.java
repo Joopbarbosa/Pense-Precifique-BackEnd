@@ -1,5 +1,6 @@
 package com.penseprecifique.api.compra;
 
+import java.time.Clock;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.cliente.ClienteService;
@@ -61,6 +62,7 @@ import java.util.stream.Collectors;
 @Transactional
 public class ListaCompraService {
 
+    private final Clock clock;
     private final ListaCompraRepository listaCompraRepository;
     private final ListaCompraItemRepository listaCompraItemRepository;
     private final InsumoRepository insumoRepository;
@@ -334,7 +336,7 @@ public class ListaCompraService {
                 .map(i -> new CompraItemRequest(i.getInsumo().getId(),
                         i.getFornecedor() != null ? i.getFornecedor().getId() : null, i.getQuantidade(), null))
                 .toList();
-        CompraResponse rascunho = compraService.criarRascunho(new CompraRequest(LocalDate.now(), multiplos, cabecalho, false, null, null, linhas));
+        CompraResponse rascunho = compraService.criarRascunho(new CompraRequest(LocalDate.now(clock), multiplos, cabecalho, false, null, null, linhas));
         compraService.vincularLista(rascunho.id(), lista);
         return compraService.buscar(rascunho.id());
     }

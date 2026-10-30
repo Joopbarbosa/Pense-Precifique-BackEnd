@@ -1,5 +1,6 @@
 package com.penseprecifique.api.compra;
 
+import java.time.Clock;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.dashboard.VendasService;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -54,6 +55,7 @@ public class DashboardCompraService {
     static final int TOP = 10;
     private static final BigDecimal CEM = new BigDecimal("100");
 
+    private final Clock clock;
     private final CompraItemRepository compraItemRepository;
     private final InsumoRepository insumoRepository;
     private final UsuarioRepository usuarioRepository;
@@ -89,7 +91,7 @@ public class DashboardCompraService {
      * não para a página. {@code mes} consulta o mês inteiro exibido na barra (limitado por {@code ate} no último mês).
      */
     public VendasCmvResponse vendasCmv(LocalDate de, LocalDate ate, YearMonth mes, Pageable pageable) {
-        LocalDate fim = ate != null ? ate : LocalDate.now();
+        LocalDate fim = ate != null ? ate : LocalDate.now(clock);
         LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
         validarFaixa(inicio, fim);
         if (inicio.isAfter(fim)) {
@@ -126,7 +128,7 @@ public class DashboardCompraService {
 
     public DashboardComprasResponse dashboard(LocalDate de, LocalDate ate) {
         UUID usuarioId = usuarioId();
-        LocalDate fim = ate != null ? ate : LocalDate.now();
+        LocalDate fim = ate != null ? ate : LocalDate.now(clock);
         LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
         validarFaixa(inicio, fim);
         if (inicio.isAfter(fim)) {
@@ -218,7 +220,7 @@ public class DashboardCompraService {
         if (ids.size() > MAX_INSUMOS_GRAFICO) {
             throw new BusinessException("Escolha no máximo 5 insumos.");
         }
-        LocalDate fim = ate != null ? ate : LocalDate.now();
+        LocalDate fim = ate != null ? ate : LocalDate.now(clock);
         LocalDate inicio = de != null ? de : fim.minusMonths(3);
         validarFaixa(inicio, fim);
         if (inicio.isAfter(fim)) {
