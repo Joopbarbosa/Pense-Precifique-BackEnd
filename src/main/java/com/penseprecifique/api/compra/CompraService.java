@@ -52,6 +52,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -103,6 +104,7 @@ public class CompraService {
     private final StatusListaCompraService statusListaCompraService;
     private final CompraMapper compraMapper;
     private final ImpactoCompraService impactoCompraService;
+    private final Clock clock;
 
     // --------------------------------------------------------------------------------- consultas
 
@@ -163,7 +165,7 @@ public class CompraService {
                 comDesconto, filtrarFornecedor,
                 filtrarFornecedor ? fornecedorIds : List.of(new UUID(0, 0)), de, ate,
                 filtrarInsumo, filtrarInsumo ? insumoIds : List.of(new UUID(0, 0)),
-                !termo.isEmpty(), numeroBusca, "%" + termo + "%", somenteAtrasadas, LocalDate.now(), ordenado);
+                !termo.isEmpty(), numeroBusca, "%" + termo + "%", somenteAtrasadas, LocalDate.now(clock), ordenado);
 
         Map<UUID, List<CompraItem>> itensPorCompra = pagina.isEmpty() ? Map.of()
                 : compraItemRepository.findByCompraIdIn(pagina.map(Compra::getId).getContent()).stream()
@@ -347,9 +349,9 @@ public class CompraService {
         }
         List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
         LocalDate recebimento = request.dataRecebimento();
-        if (recebimento.isAfter(LocalDate.now()) || recebimento.isBefore(compra.getDataCompra())) {
+        if (recebimento.isAfter(LocalDate.now(clock)) || recebimento.isBefore(compra.getDataCompra())) {
             throw BusinessException.explicado("Data do recebimento",
-                    recebimento.isAfter(LocalDate.now()) ? "A data do recebimento não pode ser futura"
+                    recebimento.isAfter(LocalDate.now(clock)) ? "A data do recebimento não pode ser futura"
                             : "A data do recebimento não pode ser anterior à data da compra",
                     "A entrada registra uma mercadoria que já chegou, depois de a compra ter sido feita.",
                     "Use a data de hoje ou a data em que a mercadoria chegou.");
@@ -651,7 +653,7 @@ public class CompraService {
         long canceladas = compraRepository.countByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.CANCELADA);
         long pendentes = compraRepository.countByUsuarioIdAndStatusAndDeletedAtIsNull(usuarioId, StatusCompra.PENDENTE_RECEBIMENTO);
         long atrasadas = compraRepository.countByUsuarioIdAndStatusAndPrevisaoEntregaBeforeAndDeletedAtIsNull(
-                usuarioId, StatusCompra.PENDENTE_RECEBIMENTO, LocalDate.now());
+                usuarioId, StatusCompra.PENDENTE_RECEBIMENTO, LocalDate.now(clock));
         return new CompraContagensResponse(rascunhos + pendentes + confirmadas + canceladas, rascunhos, confirmadas, canceladas,
                 pendentes, atrasadas);
     }
@@ -680,7 +682,7 @@ public class CompraService {
                     "Abra o rascunho e edite, ou confirme a compra antes de duplicar.");
         }
         Compra copia = novaCompra(usuario);
-        copia.setDataCompra(LocalDate.now());
+        copia.setDataCompra(LocalDate.now(clock));
         copia.setEntregaImediata(true); // #957/RN-NOVA-4 — duplicar volta para Sim e não copia a previsão
         copia.setMultiplosFornecedores(origem.getMultiplosFornecedores());
         copia.setFornecedor(origem.getFornecedor());
@@ -908,35 +910,42 @@ public class CompraService {
         compraRepository.save(compra);
     }
 
-    private static void validarData(LocalDate dataCompra) {
+    private void validarData(LocalDate dataCompra) {
         if (dataCompra == null) {
             throw BusinessException.explicado("Data da compra", "Informe a data da compra",
                     "A data define em que mês a compra entra nos números e no custo.",
                     "Preencha a data em que a compra foi feita (ex.: a data da nota).");
         }
         // Compra agendada é #549 (fora desta versão).
-        if (dataCompra.isAfter(LocalDate.now())) {
+        if (dataCompra.isAfter(LocalDate.now(clock))) {
             throw BusinessException.explicado("Data no futuro", "A data da compra não pode ser futura",
                     "A compra registra algo que já aconteceu: dá entrada no estoque e muda o custo hoje.",
                     "Use a data de hoje ou a data em que a compra foi feita.");
         }
     }
 
+    private static final LocalDate PREVISAO_MAXIMA = LocalDate.of(2100, 12, 31);
+
     /** #957/RN-NOVA-4 — previsão informada não pode ser anterior à data da compra nem a hoje. */
-    private static void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra) {
+    private void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra) {
         validarPrevisaoInformada(previsao, dataCompra, null);
     }
 
-    private static void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra, LocalDate previsaoMantida) {
+    private void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra, LocalDate previsaoMantida) {
         if (previsao == null) {
             return;
+        }
+        if (previsao.isAfter(PREVISAO_MAXIMA)) {
+            throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega deve ser até 31/12/2100",
+                    "Uma data tão distante não é uma previsão real e quebraria a consulta da Agenda.",
+                    "Escolha uma data até 31/12/2100.");
         }
         if (dataCompra != null && previsao.isBefore(dataCompra)) {
             throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior à data da compra",
                     "A mercadoria só pode chegar depois de ser comprada.",
                     "Escolha uma data igual ou posterior à data da compra.");
         }
-        if (previsao.isBefore(LocalDate.now()) && !previsao.equals(previsaoMantida)) {
+        if (previsao.isBefore(LocalDate.now(clock)) && !previsao.equals(previsaoMantida)) {
             throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior a hoje",
                     "A previsão aponta uma entrega que ainda vai acontecer; uma data passada já a marcaria como atrasada.",
                     "Escolha a data de hoje ou uma data futura.");
