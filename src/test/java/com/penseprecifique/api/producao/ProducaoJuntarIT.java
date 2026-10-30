@@ -154,6 +154,29 @@ class ProducaoJuntarIT {
         return producaoService.juntar(prodA, juntarCom(prodB));
     }
 
+    /** #1197 — data do lote fora de 2000–2100 é recusada com produções reais (antes derrubava a consulta da Agenda). */
+    @Test
+    void loteComDataForaDaFaixaEhRecusadoESemEfeito() {
+        seed();
+        Produto p = novoProduto(1, false);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID a = producaoDoOrcamento(orcamento(p, 5, null, null), termino);
+        UUID b = producaoDoOrcamento(orcamento(p, 7, null, null), termino);
+        for (LocalDate extrema : List.of(LocalDate.of(1999, 12, 31), LocalDate.of(2101, 1, 1), LocalDate.of(9999, 12, 31))) {
+            JuntarProducoesRequest inicio = juntarCom(b);
+            inicio.setDataInicio(extrema);
+            assertThrows(BusinessException.class, () -> producaoService.juntar(a, inicio));
+            JuntarProducoesRequest fim = juntarCom(b);
+            fim.setDataTerminoPrevista(extrema);
+            assertThrows(BusinessException.class, () -> producaoService.juntar(a, fim));
+        }
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(a).orElseThrow().getEstado());
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(b).orElseThrow().getEstado());
+        JuntarProducoesRequest limite = juntarCom(b);
+        limite.setDataTerminoPrevista(LocalDate.of(2100, 12, 31));
+        assertEquals(2, producaoService.juntar(a, limite).getProducaoNova().getPedidosAtendidos().size());
+    }
+
     @Test
     void cinco_mais_sete_vira_lote_de_doze() {
         JuntarProducoesResponse r = cenario(5, 7, null, null, LocalDate.now().plusDays(3));
