@@ -32,6 +32,7 @@ class CompraClockIT {
 
     @Autowired CompraService compraService;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired DashboardCompraService dashboardCompraService;
 
     @BeforeEach
     void autenticar() {
@@ -54,6 +55,15 @@ class CompraClockIT {
     @Test
     void dataDeCompraFuturaEhRecusada() {
         assertThrows(BusinessException.class, () -> compraService.criarRascunho(request(HOJE.plusDays(1), null)));
+    }
+
+    /** #1209 (D2) — o dashboard usa o relógio injetado: com hoje = 15/06/2026, julho/2026 ainda não é um mês exibido. */
+    @Test
+    void dashboardUsaORelogioInjetado() {
+        org.springframework.data.domain.Pageable pagina = org.springframework.data.domain.PageRequest.of(0, 10);
+        dashboardCompraService.vendasCmv(null, null, java.time.YearMonth.of(2026, 6), pagina);
+        assertThrows(BusinessException.class,
+                () -> dashboardCompraService.vendasCmv(null, null, java.time.YearMonth.of(2026, 7), pagina));
     }
 
     private CompraRequest request(LocalDate dataCompra, LocalDate previsao) {

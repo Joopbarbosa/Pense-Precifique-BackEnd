@@ -1,5 +1,6 @@
 package com.penseprecifique.api.compra;
 
+import java.time.Clock;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteService;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -40,6 +41,7 @@ import java.util.UUID;
 @Transactional
 public class FornecedorInsumoService {
 
+    private final Clock clock;
     private final FornecedorInsumoRepository fornecedorInsumoRepository;
     private final InsumoRepository insumoRepository;
     private final ClienteService clienteService;
@@ -137,7 +139,7 @@ public class FornecedorInsumoService {
             return;
         }
         List<CompraItem> linhas = compraItemRepository.findConfirmadasDoPar(vinculo.getFornecedor().getId(),
-                        vinculo.getInsumo().getId(), LocalDate.now().minusMonths(JANELA_MESES)).stream()
+                        vinculo.getInsumo().getId(), LocalDate.now(clock).minusMonths(JANELA_MESES)).stream()
                 .filter(i -> i.getQuantidade() != null && i.getQuantidade().signum() > 0 && i.getPrecoTotal() != null)
                 .toList();
         if (linhas.isEmpty()) {
