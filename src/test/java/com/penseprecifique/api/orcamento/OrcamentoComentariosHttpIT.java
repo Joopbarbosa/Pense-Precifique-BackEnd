@@ -84,9 +84,9 @@ class OrcamentoComentariosHttpIT {
         assertEquals(400, comentar(t, id, "a".repeat(501)).getResponse().getStatus());
         assertEquals(201, comentar(t, id, "a".repeat(500)).getResponse().getStatus());
         // espaços das pontas não contam: 500 letras com espaços em volta passa e é gravado aparado
-        MvcResult aparado = comentar(t, id, "  " + "b".repeat(498));
+        MvcResult aparado = comentar(t, id, "  " + "b".repeat(500) + "  ");
         assertEquals(201, aparado.getResponse().getStatus());
-        assertEquals("b".repeat(498), json.readTree(aparado.getResponse().getContentAsString()).get("texto").asText());
+        assertEquals("b".repeat(500), json.readTree(aparado.getResponse().getContentAsString()).get("texto").asText());
     }
 
     @Test
