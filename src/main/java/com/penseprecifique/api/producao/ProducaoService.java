@@ -1265,9 +1265,9 @@ public class ProducaoService {
     }
 
     /**
-     * RN-NOVA-48 — candidatas a juntar com a produção informada: Aguardando início de qualquer produto,
-     * vinculadas a algum orçamento e a nenhum dos orçamentos da produção atual. Em andamento aparece
-     * marcada, sem poder ser escolhida; Travada, Finalizada e Cancelada nunca entram.
+     * RN-NOVA-48 — candidatas a juntar com a produção informada: Aguardando início ou Em andamento, de qualquer produto,
+     * vinculadas a algum orçamento e a nenhum dos orçamentos da produção atual. Em andamento também pode ser escolhida (R5);
+     * Travada, Finalizada e Cancelada nunca entram.
      */
     @Transactional(readOnly = true)
     public List<CandidataJuntarResponse> candidatasParaJuntar(UUID producaoId) {
@@ -1299,7 +1299,8 @@ public class ProducaoService {
         r.setId(producao.getId());
         r.setIdentificador(IdentificadorFormatter.formatar("PRD", producao.getNumero()));
         r.setSituacao(producao.getEstado().name());
-        r.setSelecionavel(producao.getEstado() == EstadoProducao.AGUARDANDO_INICIO);
+        r.setSelecionavel(producao.getEstado() == EstadoProducao.AGUARDANDO_INICIO
+                || producao.getEstado() == EstadoProducao.EM_ANDAMENTO);
         r.setDataInicio(producao.getDataInicio());
         r.setDataTerminoPrevista(producao.getDataTerminoPrevista());
         r.setProdutos(producaoProdutoRepository.findByProducaoId(producao.getId()).stream().map(pp -> {
@@ -1317,7 +1318,7 @@ public class ProducaoService {
     /**
      * RN-NOVA-49 — produções de outros orçamentos cujo início ou término previsto cai entre a aprovação
      * do orçamento e a entrega estimada dele (inclusive os dois dias). Cancelada e não realizada não
-     * aparecem; só Aguardando início pode ser juntada. Sem aprovação ou sem entrega estimada, o período
+     * aparecem; só Aguardando início e Em andamento podem ser juntadas. Sem aprovação ou sem entrega estimada, o período
      * não existe.
      */
     @Transactional(readOnly = true)
@@ -1361,39 +1362,57 @@ public class ProducaoService {
     }
 
     /**
-     * RN-NOVA-42 — junta duas produções de pedidos diferentes num lote (usa {@link #agrupar}, PDC-015).
+     * RN-NOVA-42 — junta duas ou mais produções (Aguardando início ou Em andamento) de pedidos diferentes num lote (usa {@link #agrupar}, PDC-015).
      * A quantidade do lote é recalculada a partir dos pedidos (não das quantidades já arredondadas das
      * originais): soma dos pedidos, arredondada ao menor múltiplo do rendimento quando o produto exige
      * (PDC-027). A sobra é permitida. A data posterior ao prazo de um pedido só gera AVISO.
      */
     public JuntarProducoesResponse juntar(UUID producaoId, JuntarProducoesRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
-        if (producaoId.equals(request.getProducaoOutraId())) {
-            throw new BusinessException("Escolha outra produção para juntar");
+        List<UUID> ids = new ArrayList<>();
+        ids.add(producaoId);
+        for (UUID outra : request.getProducaoOutraIds()) {
+            if (ids.contains(outra)) {
+                throw new BusinessException("Escolha produções diferentes para juntar");
+            }
+            ids.add(outra);
         }
-        List<Producao> duas = new ArrayList<>();
-        for (UUID id : List.of(producaoId, request.getProducaoOutraId())) {
+        Set<UUID> orcamentosUsados = new HashSet<>();
+        Map<UUID, List<ConsumoRealRequest>> estornoTotal = new LinkedHashMap<>();
+        for (UUID id : ids) {
             Producao p = producaoRepository.findByIdAndUsuarioId(id, usuarioId)
                     .orElseThrow(() -> new ResourceNotFoundException("Produção não encontrada"));
-            if (p.getEstado() != EstadoProducao.AGUARDANDO_INICIO) {
-                throw new BusinessException("Só produções aguardando início podem ser juntadas ("
+            if (p.getEstado() != EstadoProducao.AGUARDANDO_INICIO && p.getEstado() != EstadoProducao.EM_ANDAMENTO) {
+                throw new BusinessException("Só produções aguardando início ou em andamento podem ser juntadas ("
                         + IdentificadorFormatter.formatar("PRD", p.getNumero()) + " está em " + p.getEstado() + ")");
             }
-            duas.add(p);
-        }
-        Set<UUID> orcamentosA = new HashSet<>();
-        orcamentoProducaoRepository.findByProducaoId(duas.get(0).getId()).forEach(v -> orcamentosA.add(v.getOrcamento().getId()));
-        List<OrcamentoProducao> vinculosB = orcamentoProducaoRepository.findByProducaoId(duas.get(1).getId());
-        if (orcamentosA.isEmpty() || vinculosB.isEmpty()) {
-            throw new BusinessException("Só é possível juntar produções vinculadas a orçamentos");
-        }
-        if (vinculosB.stream().anyMatch(v -> orcamentosA.contains(v.getOrcamento().getId()))) {
-            throw new BusinessException("As produções precisam ser de orçamentos diferentes");
+            List<OrcamentoProducao> vinculos = orcamentoProducaoRepository.findByProducaoId(p.getId());
+            if (vinculos.isEmpty()) {
+                throw new BusinessException("Só é possível juntar produções vinculadas a orçamentos");
+            }
+            for (OrcamentoProducao v : vinculos) {
+                if (!orcamentosUsados.add(v.getOrcamento().getId())) {
+                    throw new BusinessException("As produções precisam ser de orçamentos diferentes");
+                }
+            }
+            if (p.getEstado() == EstadoProducao.EM_ANDAMENTO) {
+                // O lote nasce aguardando início e baixa de novo ao iniciar: devolve ao estoque o que já foi baixado.
+                List<ConsumoRealRequest> zerados = new ArrayList<>();
+                for (ProducaoInsumoConsumido c : producaoInsumoConsumidoRepository.findByProducaoId(p.getId())) {
+                    ConsumoRealRequest item = new ConsumoRealRequest();
+                    item.setInsumoId(c.getInsumo() != null ? c.getInsumo().getId() : null);
+                    item.setProdutoBaseId(c.getProdutoBase() != null ? c.getProdutoBase().getId() : null);
+                    item.setQuantidadeConsumida(BigDecimal.ZERO);
+                    zerados.add(item);
+                }
+                estornoTotal.put(p.getId(), zerados);
+            }
         }
 
         AgruparProducoesRequest agrupar = new AgruparProducoesRequest();
-        agrupar.setProducaoIds(List.of(duas.get(0).getId(), duas.get(1).getId()));
+        agrupar.setProducaoIds(ids);
         agrupar.setEstadoDestino(EstadoProducao.AGUARDANDO_INICIO);
+        agrupar.setConsumoRealPorProducao(estornoTotal);
         agrupar.setDataInicio(request.getDataInicio());
         agrupar.setDataTerminoPrevista(request.getDataTerminoPrevista());
         agrupar.setJustificativa("Juntadas num lote de pedidos diferentes (RN-NOVA-42)");
