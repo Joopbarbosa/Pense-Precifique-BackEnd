@@ -121,7 +121,7 @@ public class CaixaTurnoService {
 
         BigDecimal somaSuprimento = caixaMovimentoRepository.somarPorTipo(turno.getId(), TipoCaixaMovimento.SUPRIMENTO);
         BigDecimal somaSangria = caixaMovimentoRepository.somarPorTipo(turno.getId(), TipoCaixaMovimento.SANGRIA);
-        BigDecimal somaVendasDinheiro = vendaCaixaPagamentoRepository.somarPagamentosDinheiroPorTurno(turno.getId());
+        BigDecimal somaVendasDinheiro = vendaCaixaPagamentoRepository.somarDinheiroLiquidoPorTurno(turno.getId());
 
         return new FechamentoPreviaResponseDTO(
                 turno.getValorAbertura(), somaSuprimento, somaSangria, somaVendasDinheiro,
@@ -144,7 +144,7 @@ public class CaixaTurnoService {
         BigDecimal somaSangria = caixaMovimentoRepository.somarPorTipo(turno.getId(), TipoCaixaMovimento.SANGRIA);
         // RN-NOVA-9 — completa a fórmula com as vendas em DINHEIRO do turno, agora que
         // VendaCaixaPagamento existe (#487, mesmo pocket — ver decisoes-caixa.md).
-        BigDecimal somaVendasDinheiro = vendaCaixaPagamentoRepository.somarPagamentosDinheiroPorTurno(turno.getId());
+        BigDecimal somaVendasDinheiro = vendaCaixaPagamentoRepository.somarDinheiroLiquidoPorTurno(turno.getId());
         BigDecimal valorEsperado = calcularValorEsperado(turno, somaSuprimento, somaSangria, somaVendasDinheiro);
         BigDecimal diferenca = request.valorFechamentoInformado().subtract(valorEsperado);
 

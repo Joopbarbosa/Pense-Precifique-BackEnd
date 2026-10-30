@@ -24,4 +24,16 @@ public interface VendaCaixaPagamentoRepository extends JpaRepository<VendaCaixaP
             "AND p.vendaCaixa.status = com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa.CONCLUIDA " +
             "AND p.metodoPagamento.tipo = com.penseprecifique.api.shared.domain.enums.TipoMetodoPagamento.DINHEIRO")
     BigDecimal somarPagamentosDinheiroPorTurno(@Param("turnoId") UUID turnoId);
+
+    /** #1115 (CXA-009) — troco devolvido nas vendas CONCLUIDA do turno. O troco só existe quando há
+     * linha em dinheiro (RN-NOVA-7), então sai da gaveta e deve ser descontado do dinheiro recebido. */
+    @Query("SELECT COALESCE(SUM(v.troco), 0) FROM VendaCaixa v " +
+            "WHERE v.caixaTurno.id = :turnoId " +
+            "AND v.status = com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa.CONCLUIDA")
+    BigDecimal somarTrocoPorTurno(@Param("turnoId") UUID turnoId);
+
+    /** #1115 — dinheiro líquido que entrou na gaveta: recebido em dinheiro menos o troco. */
+    default BigDecimal somarDinheiroLiquidoPorTurno(UUID turnoId) {
+        return somarPagamentosDinheiroPorTurno(turnoId).subtract(somarTrocoPorTurno(turnoId));
+    }
 }
