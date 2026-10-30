@@ -473,6 +473,28 @@ class ProducaoJuntarIT {
 
     /** CEN-NOVO-150 — falta de insumo trava o lote inteiro e não oferece divisão. */
     @Test
+    void producaoDeOutraContaNaoEhLidaNemAlteradaPelosEndpointsDoLote() {
+        seed();
+        Produto bolo = novoProduto(1, false);
+        UUID a = producaoDoOrcamento(orcamento(bolo, 2, LocalDate.now(), 3), LocalDate.now().plusDays(5));
+        UUID b = producaoDoOrcamento(orcamento(bolo, 3, LocalDate.now(), 3), LocalDate.now().plusDays(5));
+        // outra conta autenticada: nada do lote da primeira é visível, e nada muda
+        Usuario intrusa = usuarioRepository.save(Usuario.builder()
+                .email("prod-intrusa-" + UUID.randomUUID() + "@test.com").senhaHash("x").ativo(true).build());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(intrusa.getEmail(), null, List.of()));
+        ResolverExcedenteRequest cancelar = new ResolverExcedenteRequest();
+        cancelar.setCancelarLote(true);
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.candidatasParaJuntar(a));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.excedentesDoLote(a));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.avisosDePrazoDaProducao(a));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.resolverExcedente(a, cancelar));
+        assertThrows(ResourceNotFoundException.class, () -> producaoService.juntar(a, juntarCom(b)));
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(a).orElseThrow().getEstado());
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(b).orElseThrow().getEstado());
+    }
+
+    @Test
     void loteComInsumoFaltandoTravaInteiroESemDividir() {
         UUID[] l = lote();
         for (Insumo i : insumoRepository.findAll()) {

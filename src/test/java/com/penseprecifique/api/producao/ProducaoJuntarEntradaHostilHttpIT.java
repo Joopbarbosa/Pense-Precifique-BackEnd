@@ -105,6 +105,28 @@ class ProducaoJuntarEntradaHostilHttpIT {
     }
 
     @Test
+    void excedentesResolverEAvisosPrazoComEntradaHostilNuncaDa500() throws Exception {
+        String json = MediaType.APPLICATION_JSON_VALUE;
+        String inexistente = "/producoes/" + UUID.randomUUID();
+        List<String> falhas = new ArrayList<>();
+        esperar4xx(falhas, "excedentes id inexistente", enviar(HttpMethod.GET, inexistente + "/excedentes", null, null));
+        esperar4xx(falhas, "excedentes id inválido", enviar(HttpMethod.GET, "/producoes/abc/excedentes", null, null));
+        esperar4xx(falhas, "avisos-prazo id inexistente", enviar(HttpMethod.GET, inexistente + "/avisos-prazo", null, null));
+        esperar4xx(falhas, "avisos-prazo id inválido", enviar(HttpMethod.GET, "/producoes/abc/avisos-prazo", null, null));
+        esperar4xx(falhas, "avisos-prazo injeção", enviar(HttpMethod.GET, "/producoes/%27%20OR%201%3D1--/avisos-prazo", null, null));
+        String alvo = inexistente + "/resolver-excedente";
+        esperar4xx(falhas, "resolver sem corpo", enviar(HttpMethod.POST, alvo, json, null));
+        esperar4xx(falhas, "resolver json quebrado", enviar(HttpMethod.POST, alvo, json, "{\"cancelarLote\":"));
+        esperar4xx(falhas, "resolver texto puro", enviar(HttpMethod.POST, alvo, MediaType.TEXT_PLAIN_VALUE, "true"));
+        esperar4xx(falhas, "resolver xml", enviar(HttpMethod.POST, alvo, MediaType.APPLICATION_XML_VALUE, "<a/>"));
+        esperar4xx(falhas, "resolver flag nula", enviar(HttpMethod.POST, alvo, json, "{\"cancelarLote\":null}"));
+        esperar4xx(falhas, "resolver flag texto", enviar(HttpMethod.POST, alvo, json, "{\"cancelarLote\":\"talvez\"}"));
+        esperar4xx(falhas, "resolver id inexistente", enviar(HttpMethod.POST, alvo, json, "{\"cancelarLote\":true}"));
+        esperar4xx(falhas, "resolver id inválido", enviar(HttpMethod.POST, "/producoes/abc/resolver-excedente", json, "{\"cancelarLote\":true}"));
+        assertTrue(falhas.isEmpty(), "excedentes/resolver/avisos: " + falhas);
+    }
+
+    @Test
     void semTokenDa401() throws Exception {
         int s = mvc.perform(MockMvcRequestBuilders.get("/producoes/do-periodo?orcamentoId=" + UUID.randomUUID()))
                 .andReturn().getResponse().getStatus();
