@@ -140,9 +140,9 @@ class ProducaoJuntarIT {
         return orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).get(0).getProducao().getId();
     }
 
-    private JuntarProducoesRequest juntarCom(UUID outra) {
+    private JuntarProducoesRequest juntarCom(UUID... outras) {
         JuntarProducoesRequest r = new JuntarProducoesRequest();
-        r.setProducaoOutraId(outra);
+        r.setProducaoOutraIds(List.of(outras));
         return r;
     }
 
@@ -179,7 +179,7 @@ class ProducaoJuntarIT {
         assertTrue(r.getAvisos().get(0).contains("posterior ao prazo de entrega de Maria"));
     }
 
-    /** CEN-NOVO-164 e CEN-NOVO-151 revisado (RN-NOVA-48) — qualquer produto entra; Em andamento aparece marcada e sem poder ser escolhida. */
+    /** CEN-NOVO-164 e CEN-NOVO-151 revisado (RN-NOVA-48) — qualquer produto entra; Em andamento aparece e pode ser escolhida (R5). */
     @Test
     void candidatasTrazemQualquerProdutoEMarcamEmAndamento() {
         seed();
@@ -198,9 +198,53 @@ class ProducaoJuntarIT {
         assertTrue(deOutroProduto.isSelecionavel());
         assertEquals("AGUARDANDO_INICIO", deOutroProduto.getSituacao());
         CandidataJuntarResponse andamento = lista.stream().filter(x -> x.getId().equals(c)).findFirst().orElseThrow();
-        assertFalse(andamento.isSelecionavel());
+        assertTrue(andamento.isSelecionavel());
         assertEquals("EM_ANDAMENTO", andamento.getSituacao());
-        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(c)));
+        JuntarProducoesResponse r = producaoService.juntar(a, juntarCom(b, c));
+        assertEquals(3, r.getProducaoNova().getPedidosAtendidos().size());
+        assertEquals(3, r.getProducoesOriginais().size());
+    }
+
+    /** CEN-NOVO-171 (R5) — junta de uma vez a produção atual com duas outras, uma delas Em andamento com insumo já baixado. */
+    @Test
+    void juntaVariasDeUmaVezDevolvendoOInsumoDaEmAndamento() {
+        seed();
+        Produto p = novoProduto(1, false);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID a = producaoDoOrcamento(orcamento(p, 5, null, null), termino);
+        UUID b = producaoDoOrcamento(orcamento(p, 4, null, null), termino);
+        UUID c = producaoDoOrcamento(orcamento(p, 3, null, null), termino);
+        Insumo ovos = fichaTecnicaItemRepository.findByProdutoId(p.getId()).get(0).getInsumo();
+        BigDecimal antes = insumoRepository.findById(ovos.getId()).orElseThrow().getEstoqueAtual();
+        producaoService.iniciar(c, new com.penseprecifique.api.shared.dto.request.producao.IniciarProducaoRequest());
+        BigDecimal baixado = insumoRepository.findById(ovos.getId()).orElseThrow().getEstoqueAtual();
+        assertTrue(baixado.compareTo(antes) < 0);
+        JuntarProducoesResponse r = producaoService.juntar(a, juntarCom(b, c));
+        assertEquals(0, new BigDecimal("12").compareTo(r.getProducaoNova().getProdutos().get(0).getQuantidade()));
+        assertEquals(3, r.getProducaoNova().getPedidosAtendidos().size());
+        assertEquals(0, antes.compareTo(insumoRepository.findById(ovos.getId()).orElseThrow().getEstoqueAtual()));
+    }
+
+    /** CEN-NOVO-172 (R5, negativo) — travada/finalizada, repetida, de mesmo pedido ou lista vazia/grande: erro de negócio, nunca 500. */
+    @Test
+    void juntarVariasHostil() {
+        seed();
+        Produto p = novoProduto(1, false);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID oa = orcamento(p, 12, null, null);
+        UUID a = producaoDoOrcamento(oa, termino);
+        UUID b = producaoDoOrcamento(orcamento(p, 4, null, null), termino);
+        UUID travada = producaoDoOrcamento(orcamento(p, 3, null, null), termino);
+        var t = producaoRepository.findById(travada).orElseThrow();
+        t.setEstado(EstadoProducao.TRAVADA);
+        producaoRepository.save(t);
+        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(b, travada)));
+        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(b, b)));
+        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(a, b)));
+        UUID mesmoPedido = criarProducao(p, "12", termino);
+        vincular(oa, mesmoPedido);
+        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(b, mesmoPedido)));
+        assertThrows(BusinessException.class, () -> producaoService.juntar(a, juntarCom(criarProducao(p, "12", termino))));
     }
 
     /** CEN-NOVO-163 (RN-NOVA-48) — Brownie 5 + 7 vira uma linha de 12; Necessaire (rendimento 1) fica 4 numa linha separada. */
@@ -301,7 +345,7 @@ class ProducaoJuntarIT {
         assertFalse(ids.contains(depois));
         assertFalse(ids.contains(cancelada));
         assertTrue(r.getProducoes().stream().filter(x -> x.getId().equals(aguardando)).findFirst().orElseThrow().isSelecionavel());
-        assertFalse(r.getProducoes().stream().filter(x -> x.getId().equals(andamento)).findFirst().orElseThrow().isSelecionavel());
+        assertTrue(r.getProducoes().stream().filter(x -> x.getId().equals(andamento)).findFirst().orElseThrow().isSelecionavel());
         assertFalse(r.getProducoes().stream().filter(x -> x.getId().equals(travada)).findFirst().orElseThrow().isSelecionavel());
     }
 
