@@ -1361,6 +1361,16 @@ public class ProducaoService {
         return data != null && !data.isBefore(inicio) && !data.isAfter(fim);
     }
 
+    private static final LocalDate LOTE_DATA_MINIMA = LocalDate.of(2000, 1, 1);
+    private static final LocalDate LOTE_DATA_MAXIMA = LocalDate.of(2100, 12, 31);
+
+    /** Data extrema derrubaria a consulta da Agenda: fora de 2000–2100 é 400 (e nunca chega ao banco). */
+    private static void validarFaixaDataLote(String campo, LocalDate data) {
+        if (data != null && (data.isBefore(LOTE_DATA_MINIMA) || data.isAfter(LOTE_DATA_MAXIMA))) {
+            throw BusinessException.noCampo(campo, "A data deve estar entre 01/01/2000 e 31/12/2100");
+        }
+    }
+
     /**
      * RN-NOVA-42 — junta duas ou mais produções (Aguardando início ou Em andamento) de pedidos diferentes num lote (usa {@link #agrupar}, PDC-015).
      * A quantidade do lote é recalculada a partir dos pedidos (não das quantidades já arredondadas das
@@ -1369,6 +1379,8 @@ public class ProducaoService {
      */
     public JuntarProducoesResponse juntar(UUID producaoId, JuntarProducoesRequest request) {
         UUID usuarioId = getUsuarioIdAutenticado();
+        validarFaixaDataLote("dataInicio", request.getDataInicio());
+        validarFaixaDataLote("dataTerminoPrevista", request.getDataTerminoPrevista());
         List<UUID> ids = new ArrayList<>();
         ids.add(producaoId);
         for (UUID outra : request.getProducaoOutraIds()) {
