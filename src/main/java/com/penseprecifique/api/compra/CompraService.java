@@ -922,6 +922,8 @@ public class CompraService {
         }
     }
 
+    private static final LocalDate PREVISAO_MAXIMA = LocalDate.of(2100, 12, 31);
+
     /** #957/RN-NOVA-4 — previsão informada não pode ser anterior à data da compra nem a hoje. */
     private static void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra) {
         validarPrevisaoInformada(previsao, dataCompra, null);
@@ -930,6 +932,11 @@ public class CompraService {
     private static void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra, LocalDate previsaoMantida) {
         if (previsao == null) {
             return;
+        }
+        if (previsao.isAfter(PREVISAO_MAXIMA)) {
+            throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega deve ser até 31/12/2100",
+                    "Uma data tão distante não é uma previsão real e quebraria a consulta da Agenda.",
+                    "Escolha uma data até 31/12/2100.");
         }
         if (dataCompra != null && previsao.isBefore(dataCompra)) {
             throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior à data da compra",
