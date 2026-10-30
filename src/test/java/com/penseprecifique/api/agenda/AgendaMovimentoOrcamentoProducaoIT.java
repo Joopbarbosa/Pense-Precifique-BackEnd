@@ -343,6 +343,17 @@ class AgendaMovimentoOrcamentoProducaoIT {
         assertEquals(hoje.plusDays(2), recarregar(finalizada).getDataTerminoPrevista());
     }
 
+    @Test
+    void terminoDeProducaoCanceladaOuNaoRealizadaEhRecusadoESemEfeito() {
+        seed();
+        for (EstadoProducao estado : List.of(EstadoProducao.CANCELADA, EstadoProducao.NAO_REALIZADA)) {
+            Producao p = producao(estado, 0, 2);
+            assertThrows(BusinessException.class, () -> service.simular(pedido(TipoCompromisso.TERMINO_PRODUCAO, p.getId(), hoje.plusDays(5))));
+            assertThrows(BusinessException.class, () -> service.mover(pedido(TipoCompromisso.TERMINO_PRODUCAO, p.getId(), hoje.plusDays(5))));
+            assertEquals(hoje.plusDays(2), recarregar(p).getDataTerminoPrevista());
+        }
+    }
+
     // ------------------------------------------------------------------------------------- entrada hostil
 
     @Test

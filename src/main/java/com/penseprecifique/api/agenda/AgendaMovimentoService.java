@@ -178,8 +178,10 @@ public class AgendaMovimentoService {
     }
 
     private Avaliacao terminoProducao(Producao p, LocalDate nova, LocalDate hoje) {
-        if (p.getEstado() == EstadoProducao.FINALIZADA || p.getDataTerminoPrevista() == null) {
-            throw naoMove("O término de uma produção finalizada");
+        boolean encerrada = p.getEstado() == EstadoProducao.FINALIZADA || p.getEstado() == EstadoProducao.CANCELADA
+                || p.getEstado() == EstadoProducao.NAO_REALIZADA;
+        if (encerrada || p.getDataTerminoPrevista() == null) {
+            throw naoMove("O término de uma produção finalizada, cancelada ou não realizada");
         }
         List<String> avisos = new ArrayList<>();
         if (p.getDataInicio() != null && nova.isBefore(p.getDataInicio())) {
