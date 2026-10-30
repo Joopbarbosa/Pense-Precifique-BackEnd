@@ -49,8 +49,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** RN-NOVA-42 (#1169) — juntar produções de pedidos diferentes num lote. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 class ProducaoJuntarIT {
+
+    @Autowired org.springframework.test.web.servlet.MockMvc mvc;
 
     @Autowired ProducaoService producaoService;
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
@@ -176,6 +179,40 @@ class ProducaoJuntarIT {
         JuntarProducoesRequest limite = juntarCom(b);
         limite.setDataTerminoPrevista(LocalDate.of(2100, 12, 31));
         assertEquals(2, producaoService.juntar(a, limite).getProducaoNova().getPedidosAtendidos().size());
+    }
+
+    /** #1211 (B1) — pela rota: POST /producoes/{id}/juntar com produções reais e data fora de 2000–2100 responde 400, sem efeito. */
+    @Test
+    void juntarPelaRotaComDataExtremaRecusaCom400ESemEfeito() throws Exception {
+        seed();
+        Produto p = novoProduto(1, false);
+        LocalDate termino = LocalDate.now().plusDays(3);
+        UUID a = producaoDoOrcamento(orcamento(p, 5, null, null), termino);
+        UUID b = producaoDoOrcamento(orcamento(p, 7, null, null), termino);
+        String caminho = "/producoes/" + a + "/juntar";
+        java.util.function.BiFunction<String, String, Integer> enviar = (campo, valor) -> {
+            try {
+                return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(caminho)
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(usuario.getEmail()))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"producaoOutraIds\":[\"" + b + "\"],\"" + campo + "\":" + valor + "}"))
+                        .andReturn().getResponse().getStatus();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        for (String campo : List.of("dataInicio", "dataTerminoPrevista")) {
+            for (String data : List.of("\"1999-12-31\"", "\"2101-01-01\"", "\"9999-12-31\"")) {
+                assertEquals(400, enviar.apply(campo, data), campo + " " + data);
+            }
+            for (String hostil : List.of("\"+999999999-01-01\"", "\"31/12/2026\"", "\"amanhã\"", "\"2026-02-30\"", "20261201", "null0")) {
+                int s = enviar.apply(campo, hostil);
+                assertTrue(s >= 400 && s < 500, campo + " " + hostil + " → " + s);
+            }
+        }
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(a).orElseThrow().getEstado());
+        assertEquals(EstadoProducao.AGUARDANDO_INICIO, producaoRepository.findById(b).orElseThrow().getEstado());
+        assertEquals(200, enviar.apply("dataTerminoPrevista", "\"2100-12-31\""));
     }
 
     @Test
