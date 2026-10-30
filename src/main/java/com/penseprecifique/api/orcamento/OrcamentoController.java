@@ -76,7 +76,6 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.itensSemEstoque(id));
     }
 
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping
     public ResponseEntity<OrcamentoDetalheResponse> criar(
             @Valid @RequestBody OrcamentoRequest request) {
@@ -99,6 +98,7 @@ public class OrcamentoController {
         return ResponseEntity.ok(comentarioService.listar(id, pageable));
     }
 
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Criado")
     @PostMapping("/{id}/comentarios")
     public ResponseEntity<com.penseprecifique.api.shared.dto.response.orcamento.ComentarioOrcamentoResponse> comentar(
             @PathVariable UUID id,
