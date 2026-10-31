@@ -17,6 +17,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -125,6 +126,60 @@ class LancamentoFinanceiroIT {
         assertFalse(r.vazioDeLancamentos());
         ListaParcelasResponse so = consulta.listar(TipoLancamento.A_PAGAR, de, ate, FiltroSituacaoParcela.VENCIDAS, PageRequest.of(0, 10));
         assertEquals(1, so.itens().size());
+    }
+
+    /** PP-697 (CEN-NOVO-8) — padrão = mês atual + todas as vencidas de qualquer mês; cartão Vencido completo. */
+    @Test
+    void periodoPadraoIncluiVencidasDeMesesAnteriores() {
+        seed();
+        LocalDate fimDoMes = YearMonth.from(hoje).atEndOfMonth();
+        criar(TipoLancamento.A_PAGAR, "500.00", 1, hoje.minusDays(45));
+        criar(TipoLancamento.A_PAGAR, "80.00", 1, fimDoMes);
+        criar(TipoLancamento.A_PAGAR, "999.00", 1, fimDoMes.plusDays(5));
+        criar(TipoLancamento.A_RECEBER, "700.00", 1, hoje.minusDays(60));
+        ListaParcelasResponse r = consulta.listar(TipoLancamento.A_PAGAR, null, null, null, PageRequest.of(0, 10));
+        assertEquals(2, r.itens().size());
+        assertEquals("VENCIDA", r.itens().get(0).situacaoExibida());
+        assertEquals(new BigDecimal("500.00"), r.itens().get(0).valor());
+        assertEquals(new BigDecimal("580.00"), r.totalEmAberto());
+        assertEquals(new BigDecimal("500.00"), r.totalVencido());
+        ListaParcelasResponse so = consulta.listar(TipoLancamento.A_PAGAR, null, null, FiltroSituacaoParcela.VENCIDAS, PageRequest.of(0, 10));
+        assertEquals(1, so.itens().size());
+        assertEquals(new BigDecimal("500.00"), so.totalVencido());
+    }
+
+    /** PP-697 — período escolhido pela usuária continua exato; baixadas e canceladas antigas não entram no padrão. */
+    @Test
+    void periodoEscolhidoNaoTrazVencidasEBaixadasAntigasFicamFora() {
+        seed();
+        Lancamento antiga = criar(TipoLancamento.A_PAGAR, "500.00", 1, hoje.minusDays(45));
+        Lancamento paga = criar(TipoLancamento.A_PAGAR, "40.00", 1, hoje.minusDays(50));
+        service.baixar(parcelas(paga).get(0).getId(), null, metodo.getId());
+        Lancamento cancelada = criar(TipoLancamento.A_PAGAR, "30.00", 1, hoje.minusDays(55));
+        service.cancelar(cancelada.getId());
+        ListaParcelasResponse explicito = consulta.listar(TipoLancamento.A_PAGAR, hoje, hoje.plusDays(1), null, PageRequest.of(0, 10));
+        assertTrue(explicito.itens().isEmpty());
+        assertEquals(0, explicito.totalVencido().compareTo(BigDecimal.ZERO));
+        ListaParcelasResponse soDe = consulta.listar(TipoLancamento.A_PAGAR, hoje, null, null, PageRequest.of(0, 10));
+        assertTrue(soDe.itens().isEmpty());
+        ListaParcelasResponse todas = consulta.listar(TipoLancamento.A_PAGAR, null, null, FiltroSituacaoParcela.TODAS, PageRequest.of(0, 10));
+        assertEquals(1, todas.itens().size());
+        assertEquals(parcelas(antiga).get(0).getId(), todas.itens().get(0).id());
+        ListaParcelasResponse pagas = consulta.listar(TipoLancamento.A_PAGAR, null, null, FiltroSituacaoParcela.BAIXADAS, PageRequest.of(0, 10));
+        assertTrue(pagas.itens().isEmpty());
+    }
+
+    /** PP-697 — isolamento: vencida antiga de outra usuária não aparece nem soma. */
+    @Test
+    void vencidaAntigaDeOutraUsuariaNaoAparece() {
+        seed();
+        Usuario outra = novaUsuaria();
+        entrar(outra);
+        criar(TipoLancamento.A_PAGAR, "123.45", 1, hoje.minusDays(90));
+        entrar(usuario);
+        ListaParcelasResponse r = consulta.listar(TipoLancamento.A_PAGAR, null, null, null, PageRequest.of(0, 10));
+        assertTrue(r.itens().isEmpty());
+        assertEquals(0, r.totalVencido().compareTo(BigDecimal.ZERO));
     }
 
     @Test

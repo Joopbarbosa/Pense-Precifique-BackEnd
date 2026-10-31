@@ -40,6 +40,8 @@ public class ParcelaFinanceiraService {
         UUID usuarioId = usuarioId();
         LocalDate hoje = LocalDate.now(relogioBrasilia);
         YearMonth mes = YearMonth.from(hoje);
+        // PP-697: sem período informado, vale "mês atual + todas as vencidas de qualquer mês"
+        boolean periodoPadrao = de == null && ate == null;
         LocalDate inicio = de != null ? de : mes.atDay(1);
         LocalDate fim = ate != null ? ate : mes.atEndOfMonth();
         if (!FaixaDataPermitida.contem(inicio) || !FaixaDataPermitida.contem(fim)) {
@@ -57,13 +59,13 @@ public class ParcelaFinanceiraService {
         // a ordenação é fixa (vencidas primeiro, depois vencimento): o sort do pedido é ignorado
         Pageable pagina = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<Parcela> parcelas = parcelaRepository.listar(usuarioId, tipo, inicio, fim, situacoes,
-                f == FiltroSituacaoParcela.VENCIDAS, hoje, pagina);
+                f == FiltroSituacaoParcela.VENCIDAS, periodoPadrao, hoje, pagina);
         Map<UUID, Integer> totais = totaisPorLancamento(parcelas.getContent());
         List<ParcelaFinanceiraResponse> itens = parcelas.getContent().stream()
                 .map(p -> paraResposta(p, totais.getOrDefault(p.getLancamento().getId(), 1), hoje)).toList();
         return new ListaParcelasResponse(itens, parcelas.getTotalElements(), parcelas.getNumber(), parcelas.getSize(),
-                parcelaRepository.totalEmAberto(usuarioId, tipo, inicio, fim),
-                parcelaRepository.totalVencido(usuarioId, tipo, inicio, fim, hoje),
+                parcelaRepository.totalEmAberto(usuarioId, tipo, inicio, fim, periodoPadrao, hoje),
+                parcelaRepository.totalVencido(usuarioId, tipo, inicio, fim, periodoPadrao, hoje),
                 !lancamentoRepository.existsByUsuarioId(usuarioId));
     }
 

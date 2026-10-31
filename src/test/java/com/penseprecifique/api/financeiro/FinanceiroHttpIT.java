@@ -98,6 +98,27 @@ class FinanceiroHttpIT {
         assertEquals(400, status(mvc.perform(post("/financeiro/parcelas/" + id + "/desfazer-baixa").header("Authorization", "Bearer " + c.token())).andReturn()));
     }
 
+    /** PP-697 — sem período, a lista traz a vencida de mês anterior e o cartão Vencido a soma, com 2 casas; outra conta não vê. */
+    @Test
+    void padraoIncluiVencidaDeMesAnteriorPeloHttp() throws Exception {
+        Conta c = conta();
+        Conta outra = conta();
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(c.email(), null, List.of()));
+        service.criar(new NovoLancamento(TipoLancamento.A_PAGAR, "Boleto", OrigemLancamento.AVULSO, null, null,
+                DivisaoParcelas.dividir(new BigDecimal("500.00"), 1, LocalDate.now(relogioBrasilia).minusDays(45))));
+        MvcResult r = mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR").header("Authorization", "Bearer " + c.token())).andReturn();
+        assertEquals(200, status(r), r.getResponse().getContentAsString());
+        JsonNode corpo = json.readTree(r.getResponse().getContentAsString());
+        assertEquals(1, corpo.get("itens").size());
+        assertEquals("VENCIDA", corpo.get("itens").get(0).get("situacaoExibida").asText());
+        assertEquals(new BigDecimal("500.00"), corpo.get("totalVencido").decimalValue().setScale(2));
+        assertEquals(new BigDecimal("500.00"), corpo.get("totalEmAberto").decimalValue().setScale(2));
+        MvcResult explicito = mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&de=2000-01-01&ate=2000-01-31").header("Authorization", "Bearer " + c.token())).andReturn();
+        assertEquals(0, json.readTree(explicito.getResponse().getContentAsString()).get("itens").size());
+        MvcResult alheia = mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR").header("Authorization", "Bearer " + outra.token())).andReturn();
+        assertEquals(0, json.readTree(alheia.getResponse().getContentAsString()).get("itens").size());
+    }
+
     @Test
     void semTokenNaoEntra() throws Exception {
         int s = status(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR")).andReturn());
