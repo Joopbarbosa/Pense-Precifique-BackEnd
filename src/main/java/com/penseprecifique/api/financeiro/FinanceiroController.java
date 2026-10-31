@@ -28,6 +28,7 @@ public class FinanceiroController {
 
     private final ParcelaFinanceiraService parcelaService;
     private final LancamentoFinanceiroService lancamentoService;
+    private final com.penseprecifique.api.orcamento.OrcamentoService orcamentoService;
 
     @PostMapping("/lancamentos-avulsos")
     public ResponseEntity<Void> criarAvulso(@Valid @RequestBody ContaAvulsaRequest request) {
@@ -79,6 +80,12 @@ public class FinanceiroController {
 
     @PostMapping("/parcelas/{id}/baixa")
     public ResponseEntity<ParcelaFinanceiraResponse> baixar(@PathVariable UUID id, @Valid @RequestBody BaixaParcelaRequest request) {
+        // V0.19.0 (#1174, RN-NOVA-11) — Sinal/Saldo/Total de orçamento são recebidos pela transição do orçamento
+        var doOrcamento = lancamentoService.orcamentoDaParcela(id);
+        if (doOrcamento.isPresent()) {
+            orcamentoService.receberParcela(doOrcamento.get(), request.dataBaixa(), request.metodoPagamentoId());
+            return ResponseEntity.ok(parcelaService.buscar(id));
+        }
         Parcela p = lancamentoService.baixar(id, request.dataBaixa(), request.metodoPagamentoId());
         return ResponseEntity.ok(parcelaService.paraResposta(p));
     }

@@ -71,6 +71,11 @@ import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.producao.ProducaoService;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
+import com.penseprecifique.api.financeiro.LancamentoFinanceiroService;
+import com.penseprecifique.api.financeiro.OrcamentoDaParcela;
+import com.penseprecifique.api.financeiro.PagamentoDoOrcamento;
+import com.penseprecifique.api.financeiro.PapelParcela;
+import com.penseprecifique.api.shared.dto.response.orcamento.PagamentoOrcamentoValidadoResponse;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -160,6 +165,7 @@ public class OrcamentoService {
     private final OrcamentoMapper orcamentoMapper;
     private final CustoMaterialService custoMaterialService;
     private final PagamentoOrcamentoValidador pagamentoValidador; // #1185
+    private final LancamentoFinanceiroService lancamentoFinanceiroService; // #1174
 
     /**
      * Frente 3/P-BE-CONSOLIDADO-001 — filtro opcional de intervalo de data de criação
@@ -905,13 +911,16 @@ public class OrcamentoService {
                 break;
 
             case ENVIADO:
+                // V0.19.0 (#1174, RN-NOVA-38) — aprovar exige o passo Pagamento; validado antes de qualquer gravação.
+                PagamentoOrcamentoValidadoResponse pagamentoAprovado = validarPagamentoDaAprovacao(orcamento, request, usuarioId);
                 // RN-NOVA-2 (V0.8.2) — atalho: sinal inativo + sem prazo de produção + estoque
                 // suficiente pula APROVADO/AGUARDANDO_SINAL/SINAL_PAGO/EM_PRODUCAO e vai direto pra
                 // FINALIZADO, reaproveitando a mesma checagem/baixa de estoque de EM_PRODUCAO→FINALIZADO.
                 // Exceção deliberada ao invariante de ORC-005 (fluxo unidirecional, um passo por vez).
                 // RN-NOVA-2 (revisada, P-B012) — ignorarAtalhoAprovacaoDireta=true força o fluxo normal
                 // mesmo elegível: usuário recusou o atalho na modal de confirmação do frontend.
-                if (!request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento)) {
+                if (!request.isIgnorarAtalhoAprovacaoDireta()
+                        && elegivelParaAtalhoAprovacaoDireta(orcamento, !pagamentoAprovado.temSinal())) {
                     List<OrcamentoItem> itensAtalho = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                     List<UUID> confirmadosAtalho = request.getConfirmarEstoqueNegativoProdutoIds() != null
                             ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
@@ -926,6 +935,7 @@ public class OrcamentoService {
                         // APROVADO persistido: o orçamento passou pela aprovação conceitualmente, e
                         // essa data aparece nos PDFs de recibo/multa gerados depois de FINALIZADO.
                         orcamento.setDataAprovacao(LocalDateTime.now(clock));
+                        gravarPagamentoDaAprovacao(orcamento, pagamentoAprovado, usuarioId);
                         baixarEstoque(orcamento, itensAtalho);
                         orcamento.setStatus(StatusOrcamento.FINALIZADO);
                         if (orcamento.getDataFinalizacao() == null) {
@@ -938,6 +948,7 @@ public class OrcamentoService {
                 }
                 orcamento.setStatus(StatusOrcamento.APROVADO);
                 orcamento.setDataAprovacao(LocalDateTime.now(clock));
+                gravarPagamentoDaAprovacao(orcamento, pagamentoAprovado, usuarioId);
                 break;
 
             case APROVADO:
@@ -957,6 +968,23 @@ public class OrcamentoService {
                 orcamento.setStatus(StatusOrcamento.SINAL_PAGO);
                 orcamento.setDataSinalPago(LocalDateTime.now(clock));
                 orcamento.setMetodoSinalRecebido(metodoSinal);
+                // RN-NOVA-11 — "Recebi" do sinal baixa a parcela Sinal (ORC-014)
+                lancamentoFinanceiroService.baixarDoOrcamento(orcamento, Set.of(PapelParcela.SINAL),
+                        request.getDataRecebimento(), metodoSinal.getId());
+                // RN-NOVA-40 — sinal de 100%: não há saldo; vai direto a PAGO, com o recibo
+                if (orcamento.getValorSinal() != null && orcamento.getTotal() != null
+                        && orcamento.getValorSinal().compareTo(orcamento.getTotal()) >= 0) {
+                    reciboPagamentoRepository.save(ReciboPagamento.builder()
+                            .orcamento(orcamento)
+                            .valorTotal(orcamento.getTotal())
+                            .valorSinalPago(orcamento.getValorSinal())
+                            .valorRestantePago(BigDecimal.ZERO.setScale(2))
+                            .totalQuitado(orcamento.getTotal())
+                            .metodoPagamento(metodoSinal)
+                            .build());
+                    orcamento.setDataPagamento(LocalDateTime.now(clock));
+                    orcamento.setStatus(StatusOrcamento.PAGO);
+                }
                 break;
 
             case SINAL_PAGO:
@@ -1033,13 +1061,21 @@ public class OrcamentoService {
                         : BigDecimal.ZERO;
                 BigDecimal valorRestantePago = orcamento.getTotal().subtract(valorSinalPago);
 
+                // RN-NOVA-43 — forma realmente recebida (se informada); na falta, vale a combinada
+                MetodoPagamentoConfiguravel metodoRecebido = request.getMetodoRecebidoId() == null ? null
+                        : pagamentoValidador.validarMetodo(request.getMetodoRecebidoId(), usuarioId);
                 reciboPagamentoRepository.save(ReciboPagamento.builder()
                         .orcamento(orcamento)
                         .valorTotal(orcamento.getTotal())
                         .valorSinalPago(valorSinalPago)
                         .valorRestantePago(valorRestantePago)
                         .totalQuitado(orcamento.getTotal())
+                        .metodoPagamento(metodoRecebido)
                         .build());
+                // RN-NOVA-11 — "Recebi" do saldo/total baixa a parcela correspondente (ORC-007)
+                MetodoPagamentoConfiguravel metodoDaBaixa = metodoRecebido != null ? metodoRecebido : orcamento.getMetodoPagamento();
+                lancamentoFinanceiroService.baixarDoOrcamento(orcamento, Set.of(PapelParcela.SALDO, PapelParcela.TOTAL),
+                        request.getDataRecebimento(), metodoDaBaixa == null ? null : metodoDaBaixa.getId());
 
                 // DT-NOVA-4 (V0.10.0, #466) — setado uma única vez, nunca sobrescrito depois; o
                 // frontend passa a checar este campo (não o status atual) pra manter o Recibo de
@@ -1087,7 +1123,10 @@ public class OrcamentoService {
         SimulacaoAvancoStatusResponse resposta = new SimulacaoAvancoStatusResponse();
         resposta.setStatusAtual(StatusOrcamento.ENVIADO);
 
-        boolean elegivel = !request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento);
+        boolean semSinal = request.getPagamento() != null
+                ? !Boolean.TRUE.equals(request.getPagamento().getTemSinal())
+                : !Boolean.TRUE.equals(orcamento.getSinalAtivo());
+        boolean elegivel = !request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento, semSinal);
         if (!elegivel) {
             resposta.setAtalhoAplicavel(false);
             resposta.setStatusResultante(StatusOrcamento.APROVADO);
@@ -1511,8 +1550,8 @@ public class OrcamentoService {
      * liberando o atalho, deliberadamente — RN-NOVA-20 é só um AVISO informativo (nunca bloqueio), e
      * o atalho já pula por natureza vários passos/avisos intermediários do fluxo normal.
      */
-    private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento) {
-        if (Boolean.TRUE.equals(orcamento.getSinalAtivo()) || orcamento.getPrazoProducaoDias() != null) {
+    private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento, boolean semSinal) {
+        if (!semSinal || orcamento.getPrazoProducaoDias() != null) {
             return false;
         }
         return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
@@ -1616,6 +1655,11 @@ public class OrcamentoService {
 
         StatusOrcamento atual = orcamento.getStatus();
         LocalDateTime now = LocalDateTime.now(clock);
+        // V0.19.0 (#1174, RN-NOVA-12/51) — o que o cancelamento faz no financeiro
+        boolean tocaFinanceiro = true;
+        BigDecimal estornoValor = null;
+        LocalDate estornoData = null;
+        BigDecimal multaAReceber = null;
         // Já cancelado cai no erro de negócio do switch; as decisões só são validadas quando há o que decidir.
         Map<UUID, Boolean> decisoes = atual == StatusOrcamento.CANCELADO
                 ? new LinkedHashMap<>() : validarDecisoesProducao(orcamento, request);
@@ -1643,6 +1687,8 @@ public class OrcamentoService {
                             .build());
                     orcamento.setEstornoSinal(true);
                     orcamento.setDataEstornoSinal(request.getDataEstornoSinal());
+                    estornoValor = orcamento.getValorSinal();
+                    estornoData = request.getDataEstornoSinal().toLocalDate();
                 }
                 break;
 
@@ -1654,6 +1700,9 @@ public class OrcamentoService {
                 ResultadoMulta resultadoMulta = calcularResultadoMulta(orcamento);
                 orcamento.setValorMulta(resultadoMulta.valorMulta());
                 orcamento.setValorDevolvidoMulta(resultadoMulta.valorDevolvido());
+                multaAReceber = resultadoMulta.valorMulta();
+                estornoValor = resultadoMulta.valorDevolvido();
+                estornoData = LocalDate.now(clock);
                 if (atual == StatusOrcamento.FINALIZADO) {
                     reverterEstoque(orcamento, request.getMotivoCancelamento());
                 }
@@ -1668,6 +1717,7 @@ public class OrcamentoService {
                 }
                 orcamento.setCancelamentoTipo(TipoCancelamento.JUSTIFICATIVA);
                 orcamento.setCancelamentoMotivo(justificativa);
+                tocaFinanceiro = false; // dinheiro já recebido: tratado na tarefa PP-692
                 break;
 
             case CANCELADO:
@@ -1680,6 +1730,12 @@ public class OrcamentoService {
         orcamento.setStatus(StatusOrcamento.CANCELADO);
         orcamento.setDataCancelamento(now);
         orcamento = orcamentoRepository.save(orcamento);
+        if (tocaFinanceiro) {
+            MetodoPagamentoConfiguravel metodoEstorno = orcamento.getMetodoSinalRecebido() != null
+                    ? orcamento.getMetodoSinalRecebido() : orcamento.getMetodoPagamento();
+            lancamentoFinanceiroService.cancelarDoOrcamento(orcamento, estornoValor, estornoData,
+                    metodoEstorno == null ? null : metodoEstorno.getId(), multaAReceber, LocalDate.now(clock));
+        }
         aplicarDecisoesProducaoNoCancelamento(orcamento, decisoes);
         return montarDetalhe(orcamento);
     }
@@ -2079,6 +2135,7 @@ public class OrcamentoService {
         OrcamentoDetalheResponse response = orcamentoMapper.toDetalheResponse(orcamento, itens);
         response.setItens(itensResponse);
         response.setProducoesVinculadas(montarVinculosProducao(orcamento.getId()));
+        response.setParcelas(lancamentoFinanceiroService.parcelasDoOrcamento(orcamento.getId()));
         return response;
     }
 
@@ -2127,6 +2184,85 @@ public class OrcamentoService {
         return orcamentoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId)
                 .map(o -> o.getNumero() != null ? o.getNumero() + 1 : 1)
                 .orElse(1);
+    }
+
+    /** RN-NOVA-38 — sem o passo Pagamento não há aprovação; valida sem gravar nada. */
+    private PagamentoOrcamentoValidadoResponse validarPagamentoDaAprovacao(Orcamento orcamento, AvancaStatusRequest request, UUID usuarioId) {
+        if (request.getPagamento() == null) {
+            throw BusinessException.noCampo("pagamento", "Informe como será o pagamento para aprovar.");
+        }
+        return pagamentoValidador.validar(orcamento, request.getPagamento(), usuarioId);
+    }
+
+    /** RN-NOVA-38/10 — na transação da aprovação: grava o pagamento no orçamento e cria as parcelas, antes de mudar o status. */
+    private void gravarPagamentoDaAprovacao(Orcamento orcamento, PagamentoOrcamentoValidadoResponse v, UUID usuarioId) {
+        aplicarPagamento(orcamento, v);
+        lancamentoFinanceiroService.gerarParcelasDoOrcamento(orcamento,
+                new PagamentoDoOrcamento(v.total(), v.valorSinal(), v.sinalAte(), v.vencimentoSaldo()));
+    }
+
+    private void aplicarPagamento(Orcamento orcamento, PagamentoOrcamentoValidadoResponse v) {
+        orcamento.setMetodoPagamento(pagamentoValidador.validarMetodo(v.metodoPagamento().id(), getUsuarioIdAutenticado()));
+        orcamento.setSinalAtivo(v.temSinal());
+        orcamento.setPercentualSinal(v.percentualSinal());
+        orcamento.setValorSinal(v.valorSinal());
+        orcamento.setSinalAte(v.sinalAte());
+    }
+
+    /**
+     * V0.19.0 (#1174, RN-NOVA-41, CEN-NOVO-20/21) — "Alterar pagamento" depois de aprovado: só sem parcela Recebida; o sinal não
+     * pode ser incluído se a aprovação foi sem sinal; removê-lo em AGUARDANDO_SINAL leva a EM_PRODUCAO. As parcelas Em aberto são refeitas.
+     */
+    public OrcamentoDetalheResponse alterarPagamento(UUID id, PagamentoOrcamentoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        StatusOrcamento status = orcamento.getStatus();
+        if (status == StatusOrcamento.RASCUNHO || status == StatusOrcamento.ENVIADO || status == StatusOrcamento.CANCELADO) {
+            throw new BusinessException("O pagamento só pode ser alterado depois da aprovação, em um orçamento não cancelado.");
+        }
+        if (request == null) {
+            throw BusinessException.noCampo("pagamento", "Informe como será o pagamento.");
+        }
+        if (status == StatusOrcamento.SINAL_PAGO || status == StatusOrcamento.PAGO || status == StatusOrcamento.ENTREGUE
+                || lancamentoFinanceiroService.orcamentoTemParcelaRecebida(orcamento.getId())) {
+            throw new BusinessException("Já há pagamento recebido; use o estorno para desfazer.");
+        }
+        PagamentoOrcamentoValidadoResponse v = pagamentoValidador.validar(orcamento, request, usuarioId);
+        if (v.temSinal() && !Boolean.TRUE.equals(orcamento.getSinalAtivo())) {
+            throw new BusinessException("O sinal é combinado na aprovação; esta já foi feita sem sinal.");
+        }
+        aplicarPagamento(orcamento, v);
+        lancamentoFinanceiroService.gerarParcelasDoOrcamento(orcamento,
+                new PagamentoDoOrcamento(v.total(), v.valorSinal(), v.sinalAte(), v.vencimentoSaldo()));
+        if (status == StatusOrcamento.AGUARDANDO_SINAL && !v.temSinal()) {
+            orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
+        }
+        return montarDetalhe(orcamentoRepository.save(orcamento));
+    }
+
+    /**
+     * V0.19.0 (#1174, RN-NOVA-11) — "Recebi" na tela do Financeiro numa parcela de orçamento: executa a mesma transição do
+     * orçamento (ORC-014 no Sinal; ORC-007 no Saldo/Total), que baixa a parcela. Fora do passo certo é BLOQUEIO.
+     */
+    public void receberParcela(OrcamentoDaParcela parcela, java.time.LocalDate dataBaixa, UUID metodoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(parcela.orcamentoId(), usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Parcela não encontrada."));
+        AvancaStatusRequest pedido = new AvancaStatusRequest();
+        pedido.setDataRecebimento(dataBaixa);
+        if (parcela.papel() == PapelParcela.SINAL) {
+            if (orcamento.getStatus() != StatusOrcamento.AGUARDANDO_SINAL) {
+                throw new BusinessException("O sinal só pode ser recebido com o orçamento aguardando o sinal.");
+            }
+            pedido.setMetodoSinalRecebidoId(metodoId);
+        } else {
+            if (orcamento.getStatus() != StatusOrcamento.FINALIZADO) {
+                throw new BusinessException("O saldo só pode ser recebido com o orçamento finalizado.");
+            }
+            pedido.setMetodoRecebidoId(metodoId);
+        }
+        avancarStatus(orcamento.getId(), pedido);
     }
 
     /**

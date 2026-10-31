@@ -100,6 +100,9 @@ public class CategoriaFinanceiraService {
             }
             return null;
         }
+        if (origem == OrigemLancamento.ORCAMENTO && categoriaId == null) {
+            return null; // #1174: saída do estorno do sinal nasce sem categoria (RN-NOVA-12)
+        }
         semente.garantir(usuarioId);
         String padrao = origem == OrigemLancamento.COMPRA ? SementeCategoriasService.INSUMOS
                 : origem == OrigemLancamento.AVULSO ? SementeCategoriasService.OUTROS : null;

@@ -46,6 +46,11 @@ public class Lancamento {
     @Column(name = "valor_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal valorTotal;
 
+    /** V0.19.0 (#1174, RN-NOVA-12) — ESTORNO_SINAL marca a saída do estorno; nulo nos demais. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, updatable = false)
+    private SubtipoLancamento subtipo;
+
     @Column(name = "fora_projecao", nullable = false)
     @Builder.Default
     private boolean foraProjecao = false;

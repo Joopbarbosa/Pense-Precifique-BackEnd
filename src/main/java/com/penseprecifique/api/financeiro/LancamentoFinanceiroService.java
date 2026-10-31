@@ -4,6 +4,8 @@ import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.compra.CompraRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
+import com.penseprecifique.api.orcamento.ReciboPagamentoRepository;
+import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.domain.enums.StatusCompra;
@@ -23,6 +25,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,6 +42,7 @@ public class LancamentoFinanceiroService {
     private final ParcelaRepository parcelaRepository;
     private final CompraRepository compraRepository;
     private final OrcamentoRepository orcamentoRepository;
+    private final ReciboPagamentoRepository reciboPagamentoRepository;
     private final MetodoPagamentoConfiguravelRepository metodoRepository;
     private final CategoriaFinanceiraService categoriaService;
     private final Clock relogioBrasilia;
@@ -194,7 +198,7 @@ public class LancamentoFinanceiroService {
         CategoriaFinanceira categoria = categoriaService.resolverParaLancamento(usuario.getId(), pedido.tipo(), pedido.origem(),
                 pedido.categoriaId());
         Lancamento lancamento = Lancamento.builder()
-                .usuario(usuario).categoria(categoria).tipo(pedido.tipo()).descricao(descricao).origem(pedido.origem()).valorTotal(total.setScale(2))
+                .usuario(usuario).categoria(categoria).tipo(pedido.tipo()).descricao(descricao).origem(pedido.origem()).valorTotal(total.setScale(2)).subtipo(pedido.subtipo())
                 .compra(pedido.origem() == OrigemLancamento.COMPRA ? compraRepository
                         .findByIdAndUsuarioIdAndDeletedAtIsNull(exigirId(pedido.compraId(), "Compra"), usuario.getId())
                         .orElseThrow(() -> new ResourceNotFoundException("Compra não encontrada.")) : null)
@@ -210,7 +214,7 @@ public class LancamentoFinanceiroService {
         int numero = 1;
         for (NovaParcela n : novas) {
             Parcela p = Parcela.builder().lancamento(lancamento).usuario(usuario).numero(numero++)
-                    .valor(n.valor().setScale(2)).vencimento(n.vencimento()).build();
+                    .valor(n.valor().setScale(2)).vencimento(n.vencimento()).papel(n.papel()).build();
             if (n.baixaInicial() != null) {
                 aplicarBaixa(p, n.baixaInicial().data(), n.baixaInicial().metodoPagamentoId(), usuario.getId(), hoje, OrigemBaixa.AUTOMATICA);
             }
@@ -228,6 +232,9 @@ public class LancamentoFinanceiroService {
         Usuario usuario = usuarioAutenticado();
         Parcela p = parcelaDaUsuariaParaAlterar(parcelaId, usuario.getId());
         exigirLancamentoAtivo(p);
+        if (recebidaPeloOrcamento(p)) {
+            throw new BusinessException("Receba esta parcela pelo orçamento.");
+        }
         if (p.getSituacao() != SituacaoParcela.EM_ABERTO) {
             throw new BusinessException(p.getSituacao() == SituacaoParcela.BAIXADA
                     ? "Esta parcela já foi baixada." : "Esta parcela está cancelada e não pode ser baixada.");
@@ -247,6 +254,7 @@ public class LancamentoFinanceiroService {
         if (p.getSituacao() != SituacaoParcela.BAIXADA) {
             throw new BusinessException("Só é possível desfazer a baixa de uma parcela baixada.");
         }
+        exigirSemReciboEmitido(p);
         p.setSituacao(SituacaoParcela.EM_ABERTO);
         p.setDataBaixa(null);
         p.setMetodoPagamento(null);
@@ -413,6 +421,165 @@ public class LancamentoFinanceiroService {
             }
         }
         compraRepository.save(compra);
+    }
+
+
+    // ------------------------------------------------------------------------------- ganchos do orçamento (#1174)
+
+    /**
+     * RN-NOVA-10/38/41 — gera, na transação da aprovação, as parcelas a receber do orçamento (Sinal e Saldo, só Sinal ou só
+     * Total). Se o orçamento já tem lançamento (pagamento alterado depois de aprovado), as parcelas Em aberto viram
+     * Canceladas e as novas nascem a seguir; havendo parcela baixada, é BLOQUEIO. Total zerado não gera lançamento.
+     */
+    @Transactional
+    public Lancamento gerarParcelasDoOrcamento(Orcamento orcamento, PagamentoDoOrcamento pagamento) {
+        Usuario usuario = usuarioAutenticado();
+        if (pagamento.total().signum() <= 0) {
+            return null;
+        }
+        Optional<Lancamento> existente = lancamentoRepository.buscarDoOrcamentoParaAlterar(orcamento.getId(), usuario.getId());
+        if (existente.isEmpty()) {
+            return criar(new NovoLancamento(TipoLancamento.A_RECEBER, descricaoDoOrcamento(orcamento), OrigemLancamento.ORCAMENTO,
+                    null, orcamento.getId(), pagamento.parcelas()));
+        }
+        Lancamento l = existente.get();
+        List<Parcela> todas = new ArrayList<>(parcelaRepository.findByLancamentoIdOrderByNumeroAsc(l.getId()));
+        exigirSemRecebido(todas);
+        todas.stream().filter(p -> p.getSituacao() == SituacaoParcela.EM_ABERTO).forEach(p -> p.setSituacao(SituacaoParcela.CANCELADA));
+        int numero = todas.stream().mapToInt(Parcela::getNumero).max().orElse(0);
+        for (NovaParcela n : pagamento.parcelas()) {
+            ValidacaoFinanceira.exigirValor(n.valor(), "valor");
+            ValidacaoFinanceira.exigirVencimento(n.vencimento(), "vencimento");
+            todas.add(Parcela.builder().lancamento(l).usuario(usuario).numero(++numero).valor(n.valor().setScale(2))
+                    .vencimento(n.vencimento()).papel(n.papel()).build());
+        }
+        parcelaRepository.saveAll(todas);
+        l.setSituacao(SituacaoLancamento.ATIVO);
+        l.setValorTotal(somaAtivas(todas));
+        return lancamentoRepository.save(l);
+    }
+
+    /** RN-NOVA-11 — a parcela (da usuária) é Sinal/Saldo/Total de orçamento? Então o "Recebi" passa pelo orçamento. */
+    @Transactional(readOnly = true)
+    public Optional<OrcamentoDaParcela> orcamentoDaParcela(UUID parcelaId) {
+        if (parcelaId == null) {
+            return Optional.empty();
+        }
+        return parcelaRepository.buscarDaUsuaria(parcelaId, usuarioAutenticado().getId())
+                .filter(LancamentoFinanceiroService::recebidaPeloOrcamento)
+                .map(p -> new OrcamentoDaParcela(p.getLancamento().getOrcamento().getId(), p.getPapel()));
+    }
+
+    /** RN-NOVA-41 — há parcela Recebida no lançamento do orçamento? Sem lançamento (orçamento anterior à versão), não. */
+    @Transactional(readOnly = true)
+    public boolean orcamentoTemParcelaRecebida(UUID orcamentoId) {
+        UUID usuarioId = usuarioAutenticado().getId();
+        return lancamentoRepository.findByOrcamentoIdAndUsuarioIdAndSubtipoIsNull(orcamentoId, usuarioId)
+                .map(l -> parcelaRepository.findByLancamentoIdOrderByNumeroAsc(l.getId()).stream()
+                        .anyMatch(p -> p.getSituacao() == SituacaoParcela.BAIXADA))
+                .orElse(false);
+    }
+
+    /** RN-NOVA-11 — parcelas do lançamento a receber do orçamento, em ordem, para o detalhe. */
+    @Transactional(readOnly = true)
+    public List<ParcelaOrcamentoResponse> parcelasDoOrcamento(UUID orcamentoId) {
+        UUID usuarioId = usuarioAutenticado().getId();
+        return lancamentoRepository.findByOrcamentoIdAndUsuarioIdAndSubtipoIsNull(orcamentoId, usuarioId)
+                .map(l -> parcelaRepository.findByLancamentoIdOrderByNumeroAsc(l.getId()).stream()
+                        .map(p -> new ParcelaOrcamentoResponse(p.getId(), p.getPapel(), p.getValor(), p.getVencimento(), p.getSituacao(),
+                                p.getDataBaixa(), p.getMetodoPagamento() == null ? null
+                                : (p.getMetodoPagamento().getNome() != null ? p.getMetodoPagamento().getNome() : p.getMetodoPagamento().getTipo().name())))
+                        .toList())
+                .orElse(List.of());
+    }
+
+    /**
+     * RN-NOVA-11 — "Recebi" feito pelo orçamento (ORC-014/ORC-007) baixa a parcela correspondente (Sinal; Saldo ou Total).
+     * Sem parcela Em aberto desse papel (orçamento anterior à versão) não faz nada.
+     */
+    @Transactional
+    public void baixarDoOrcamento(Orcamento orcamento, Set<PapelParcela> papeis, LocalDate dataBaixa, UUID metodoPagamentoId) {
+        Usuario usuario = usuarioAutenticado();
+        Optional<Lancamento> lancamento = lancamentoRepository.buscarDoOrcamentoParaAlterar(orcamento.getId(), usuario.getId());
+        if (lancamento.isEmpty()) {
+            return;
+        }
+        List<Parcela> alvo = parcelaRepository.findByLancamentoIdOrderByNumeroAsc(lancamento.get().getId()).stream()
+                .filter(p -> p.getSituacao() == SituacaoParcela.EM_ABERTO && p.getPapel() != null && papeis.contains(p.getPapel())).toList();
+        for (Parcela p : alvo) {
+            aplicarBaixa(p, dataBaixa, metodoPagamentoId, usuario.getId(), hoje(), OrigemBaixa.USUARIA);
+        }
+        parcelaRepository.saveAll(alvo);
+    }
+
+    /**
+     * RN-NOVA-12 e 51 — cancela as parcelas Em aberto do orçamento (Sinal já Recebido continua Recebido), cria a parcela Multa
+     * Em aberto quando {@code multaAReceber} é maior que zero e registra, uma única vez, a saída já Paga do estorno do sinal
+     * ({@code valorEstorno} maior que zero, na data {@code dataEstorno}, sem categoria). Sem parcela Multa, o lançamento passa a
+     * Cancelado com total igual ao já recebido (R$ 0,00 se nada).
+     */
+    @Transactional
+    public void cancelarDoOrcamento(Orcamento orcamento, BigDecimal valorEstorno, LocalDate dataEstorno, UUID metodoEstornoId,
+                                    BigDecimal multaAReceber, LocalDate vencimentoMulta) {
+        Usuario usuario = usuarioAutenticado();
+        Optional<Lancamento> lancamento = lancamentoRepository.buscarDoOrcamentoParaAlterar(orcamento.getId(), usuario.getId());
+        if (lancamento.isPresent()) {
+            Lancamento l = lancamento.get();
+            List<Parcela> todas = new ArrayList<>(parcelaRepository.findByLancamentoIdOrderByNumeroAsc(l.getId()));
+            todas.stream().filter(p -> p.getSituacao() == SituacaoParcela.EM_ABERTO).forEach(p -> p.setSituacao(SituacaoParcela.CANCELADA));
+            boolean comMulta = multaAReceber != null && multaAReceber.signum() > 0;
+            if (comMulta) {
+                int numero = todas.stream().mapToInt(Parcela::getNumero).max().orElse(0);
+                todas.add(Parcela.builder().lancamento(l).usuario(usuario).numero(numero + 1).valor(multaAReceber.setScale(2))
+                        .vencimento(vencimentoMulta).papel(PapelParcela.MULTA).build());
+            }
+            parcelaRepository.saveAll(todas);
+            l.setSituacao(comMulta ? SituacaoLancamento.ATIVO : SituacaoLancamento.CANCELADO);
+            l.setValorTotal(somaAtivas(todas));
+            lancamentoRepository.save(l);
+        }
+        if (valorEstorno != null && valorEstorno.signum() > 0 && metodoEstornoId != null
+                && !lancamentoRepository.existsByOrcamentoIdAndSubtipo(orcamento.getId(), SubtipoLancamento.ESTORNO_SINAL)) {
+            criar(new NovoLancamento(TipoLancamento.A_PAGAR, "Estorno de sinal - " + descricaoDoOrcamento(orcamento), OrigemLancamento.ORCAMENTO,
+                    null, orcamento.getId(),
+                    List.of(new NovaParcela(valorEstorno, dataEstorno, new NovaParcela.BaixaInicial(dataEstorno, metodoEstornoId))),
+                    null, SubtipoLancamento.ESTORNO_SINAL));
+        }
+    }
+
+    private static String descricaoDoOrcamento(Orcamento orcamento) {
+        return "Orçamento " + com.penseprecifique.api.util.IdentificadorFormatter.formatar("ORC", orcamento.getNumero());
+    }
+
+    private static boolean recebidaPeloOrcamento(Parcela p) {
+        return p.getLancamento().getOrigem() == OrigemLancamento.ORCAMENTO && p.getPapel() != null && p.getPapel() != PapelParcela.MULTA;
+    }
+
+    private static void exigirSemRecebido(List<Parcela> parcelas) {
+        if (parcelas.stream().anyMatch(p -> p.getSituacao() == SituacaoParcela.BAIXADA)) {
+            throw new BusinessException("Já há pagamento recebido; use o estorno para desfazer.");
+        }
+    }
+
+    /** RN-NOVA-11 — desfazer a baixa de Sinal/Saldo/Total com recibo emitido é BLOQUEIO; a saída do estorno nunca se desfaz. */
+    private void exigirSemReciboEmitido(Parcela p) {
+        Lancamento l = p.getLancamento();
+        if (l.getOrigem() != OrigemLancamento.ORCAMENTO) {
+            return;
+        }
+        if (l.getSubtipo() == SubtipoLancamento.ESTORNO_SINAL) {
+            throw new BusinessException("O estorno do sinal já foi registrado e não pode ser desfeito.");
+        }
+        if (p.getPapel() == null || p.getPapel() == PapelParcela.MULTA) {
+            return;
+        }
+        Orcamento o = l.getOrcamento();
+        boolean emitido = p.getPapel() == PapelParcela.SINAL
+                ? o.getDataSinalPago() != null && o.getMetodoSinalRecebido() != null
+                : reciboPagamentoRepository.findByOrcamentoId(o.getId()).isPresent();
+        if (emitido) {
+            throw new BusinessException("O recibo já foi emitido; use o estorno do orçamento.");
+        }
     }
 
     // ------------------------------------------------------------------------------------------ internos

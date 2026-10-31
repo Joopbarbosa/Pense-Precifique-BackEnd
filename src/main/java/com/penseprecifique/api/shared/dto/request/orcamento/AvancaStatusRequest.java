@@ -55,4 +55,14 @@ public class AvancaStatusRequest {
     @Valid
     @Size(max = 50, message = "Decisões de produção em excesso")
     private List<DecisaoProducaoCancelamentoRequest> decisoesProducao;
+
+    /** V0.19.0 (#1174, RN-NOVA-38) — passo Pagamento; obrigatório ao aprovar (APROVADO ou atalho ao FINALIZADO). */
+    @Valid
+    private PagamentoOrcamentoRequest pagamento;
+
+    /** V0.19.0 (#1174, RN-NOVA-43) — forma realmente recebida no "Recebi" do saldo/total (ORC-007). */
+    private UUID metodoRecebidoId;
+
+    /** V0.19.0 (#1174) — data do recebimento no "Recebi"; ausente = hoje. */
+    private java.time.LocalDate dataRecebimento;
 }
