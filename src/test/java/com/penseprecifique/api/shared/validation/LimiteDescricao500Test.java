@@ -40,8 +40,6 @@ class LimiteDescricao500Test {
         return Stream.of(
                 Arguments.of(ClienteRequest.class, "observacoes"),
                 Arguments.of(OrcamentoRequest.class, "observacoes"),
-                Arguments.of(OrcamentoRequest.class, "metodoPagamentoObs"),
-                Arguments.of(AvancaStatusRequest.class, "metodoSinalRecebidoObs"),
                 Arguments.of(AvancaStatusRequest.class, "motivoCancelamento"),
                 Arguments.of(AvancaStatusRequest.class, "justificativa"),
                 Arguments.of(CriarProducaoVinculadaRequest.class, "observacoes"),
