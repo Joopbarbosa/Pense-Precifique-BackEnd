@@ -42,7 +42,7 @@ class ClienteConsentimentoHttpIT {
         Usuario u = usuario();
         String token = token(u);
         UUID recusado = criarCliente(token, "(11) 91234-5678");
-        UUID duplicado = criarCliente(token, "5511912345678");
+        UUID duplicado = criarCliente(token, "+55 11 91234-5678");
 
         mockMvc.perform(post("/clientes/{id}/consentimento/recusa", recusado).header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"data\":\"2026-10-30\"}"))
