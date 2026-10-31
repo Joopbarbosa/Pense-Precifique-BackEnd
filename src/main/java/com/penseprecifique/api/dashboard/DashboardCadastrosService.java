@@ -1,5 +1,6 @@
 package com.penseprecifique.api.dashboard;
 
+import java.time.Clock;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.compra.CompraItemRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -53,6 +54,7 @@ public class DashboardCadastrosService {
     private static final BigDecimal NOVENTA_E_CINCO = new BigDecimal("95");
 
     private final VendasService vendasService;
+    private final Clock clock;
     private final CompraItemRepository compraItemRepository;
     private final ProdutoRepository produtoRepository;
     private final InsumoRepository insumoRepository;
@@ -71,7 +73,7 @@ public class DashboardCadastrosService {
 
     public DashboardCadastrosResponse dashboard(LocalDate de, LocalDate ate, UUID insumoEvolucao) {
         UUID usuarioId = usuarioId();
-        PeriodoDashboard p = PeriodoDashboard.de(de, ate);
+        PeriodoDashboard p = PeriodoDashboard.de(de, ate, clock);
 
         List<CompraItem> compras = compraItemRepository.findPorStatus(usuarioId, StatusCompra.CONFIRMADA);
         List<CompraItem> comprasPeriodo = comprasEntre(compras, p.inicio(), p.fim());
@@ -185,7 +187,7 @@ public class DashboardCadastrosService {
     /** Evolução do preço de um insumo escolhido, mês a mês (o seletor da tela chama só este pedaço). */
     public DashboardCadastrosResponse.EvolucaoPreco evolucaoDoInsumo(UUID insumoId, LocalDate de, LocalDate ate) {
         UUID usuarioId = usuarioId();
-        PeriodoDashboard p = PeriodoDashboard.de(de, ate);
+        PeriodoDashboard p = PeriodoDashboard.de(de, ate, clock);
         Insumo insumo = insumoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(insumoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo não encontrado: " + insumoId));
         return evolucaoPreco(insumo, compraItemRepository.findPorStatus(usuarioId, StatusCompra.CONFIRMADA), p.inicio(), p.fim());
@@ -207,7 +209,7 @@ public class DashboardCadastrosService {
             throw new BusinessException("Escolha no máximo " + MAX_INSUMOS_EVOLUCAO + " insumos");
         }
         UUID usuarioId = usuarioId();
-        PeriodoDashboard p = PeriodoDashboard.de(de, ate);
+        PeriodoDashboard p = PeriodoDashboard.de(de, ate, clock);
         List<CompraItem> compras = compraItemRepository.findPorStatus(usuarioId, StatusCompra.CONFIRMADA);
         List<DashboardCadastrosResponse.EvolucaoPreco> series = new ArrayList<>();
         for (UUID id : ids) {

@@ -30,35 +30,38 @@ public interface ParcelaRepository extends JpaRepository<Parcela, UUID> {
     List<Parcela> findByLancamentoIdOrderByNumeroAsc(UUID lancamentoId);
 
     /**
-     * RN-NOVA-4 / DT-NOVA-2 — uma linha por parcela. Vencidas (Em aberto com vencimento anterior a {@code hoje}) primeiro,
+     * RN-NOVA-4 / DT-NOVA-2 — {@code incluirVencidas} (período padrão, PP-697) soma ao intervalo toda parcela Em aberto vencida de qualquer mês. Uma linha por parcela. Vencidas (Em aberto com vencimento anterior a {@code hoje}) primeiro,
      * depois vencimento crescente. {@code somenteVencidas} é filtro de consulta; "Vencida" nunca é gravada.
      */
     @EntityGraph(attributePaths = {"lancamento", "metodoPagamento"})
     @Query(value = "SELECT p FROM Parcela p WHERE p.usuario.id = :usuarioId AND p.lancamento.tipo = :tipo " +
-            "AND p.vencimento BETWEEN :de AND :ate AND p.situacao IN :situacoes " +
+            "AND (p.vencimento BETWEEN :de AND :ate OR (:incluirVencidas = true AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND p.vencimento < :hoje)) AND p.situacao IN :situacoes " +
             "AND (:somenteVencidas = false OR p.vencimento < :hoje) " +
             "ORDER BY CASE WHEN p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND p.vencimento < :hoje THEN 0 ELSE 1 END, " +
             "p.vencimento, p.lancamento.createdAt, p.numero",
             countQuery = "SELECT COUNT(p) FROM Parcela p WHERE p.usuario.id = :usuarioId AND p.lancamento.tipo = :tipo " +
-                    "AND p.vencimento BETWEEN :de AND :ate AND p.situacao IN :situacoes " +
+                    "AND (p.vencimento BETWEEN :de AND :ate OR (:incluirVencidas = true AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND p.vencimento < :hoje)) AND p.situacao IN :situacoes " +
                     "AND (:somenteVencidas = false OR p.vencimento < :hoje)")
     Page<Parcela> listar(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoLancamento tipo,
                          @Param("de") LocalDate de, @Param("ate") LocalDate ate,
                          @Param("situacoes") Collection<SituacaoParcela> situacoes,
-                         @Param("somenteVencidas") boolean somenteVencidas, @Param("hoje") LocalDate hoje, Pageable pageable);
+                         @Param("somenteVencidas") boolean somenteVencidas, @Param("incluirVencidas") boolean incluirVencidas,
+                         @Param("hoje") LocalDate hoje, Pageable pageable);
 
     /** Total Em aberto do período (RN-NOVA-4). */
     @Query("SELECT COALESCE(SUM(p.valor), 0) FROM Parcela p WHERE p.usuario.id = :usuarioId AND p.lancamento.tipo = :tipo " +
-            "AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND p.vencimento BETWEEN :de AND :ate")
+            "AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND (p.vencimento BETWEEN :de AND :ate OR (:incluirVencidas = true AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND p.vencimento < :hoje))")
     BigDecimal totalEmAberto(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoLancamento tipo,
-                             @Param("de") LocalDate de, @Param("ate") LocalDate ate);
+                             @Param("de") LocalDate de, @Param("ate") LocalDate ate,
+                             @Param("incluirVencidas") boolean incluirVencidas, @Param("hoje") LocalDate hoje);
 
     /** Total vencido do período: Em aberto com vencimento anterior a hoje. */
     @Query("SELECT COALESCE(SUM(p.valor), 0) FROM Parcela p WHERE p.usuario.id = :usuarioId AND p.lancamento.tipo = :tipo " +
-            "AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND p.vencimento BETWEEN :de AND :ate " +
+            "AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND (p.vencimento BETWEEN :de AND :ate OR (:incluirVencidas = true AND p.situacao = com.penseprecifique.api.financeiro.SituacaoParcela.EM_ABERTO AND p.vencimento < :hoje)) " +
             "AND p.vencimento < :hoje")
     BigDecimal totalVencido(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoLancamento tipo,
-                            @Param("de") LocalDate de, @Param("ate") LocalDate ate, @Param("hoje") LocalDate hoje);
+                            @Param("de") LocalDate de, @Param("ate") LocalDate ate,
+                            @Param("incluirVencidas") boolean incluirVencidas, @Param("hoje") LocalDate hoje);
 
     /** "n de N": N = parcelas não canceladas de cada lançamento (RN-NOVA-1). */
     @Query("SELECT p.lancamento.id, COUNT(p) FROM Parcela p WHERE p.lancamento.id IN :ids " +

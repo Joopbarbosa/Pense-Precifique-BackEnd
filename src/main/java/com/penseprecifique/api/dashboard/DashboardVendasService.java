@@ -1,5 +1,6 @@
 package com.penseprecifique.api.dashboard;
 
+import java.time.Clock;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.enums.TipoVendaCmv;
 import com.penseprecifique.api.shared.exception.BusinessException;
@@ -39,11 +40,12 @@ public class DashboardVendasService {
     private static final String NAO_INFORMADA = "Não informada";
 
     private final VendasService vendasService;
+    private final Clock clock;
     private final UsuarioRepository usuarioRepository;
 
     public DashboardVendasResponse dashboard(LocalDate de, LocalDate ate) {
         UUID usuarioId = usuarioId();
-        PeriodoDashboard p = PeriodoDashboard.de(de, ate);
+        PeriodoDashboard p = PeriodoDashboard.de(de, ate, clock);
         List<VendasService.Venda> todas = vendasService.vendas(usuarioId, p.inicioGeral(), p.fim());
         List<VendasService.Venda> doPeriodo = entre(todas, p.inicio(), p.fim());
         List<VendasService.Venda> doAnterior = entre(todas, p.inicioAnterior(), p.fimAnterior());
@@ -87,7 +89,7 @@ public class DashboardVendasService {
      */
     public ListaVendasResponse lista(LocalDate de, LocalDate ate, TipoVendaCmv origem, Collection<String> status, String busca,
                                      boolean somenteQueContam, String produtoId, String forma, Pageable pageable) {
-        PeriodoDashboard p = PeriodoDashboard.de(de, ate);
+        PeriodoDashboard p = PeriodoDashboard.de(de, ate, clock);
         if (pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
             throw new BusinessException("Use uma página de 1 a 100 vendas.");
         }

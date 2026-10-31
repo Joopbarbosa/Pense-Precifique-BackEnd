@@ -40,6 +40,7 @@ public class LancamentoFinanceiroService {
     private final CompraRepository compraRepository;
     private final OrcamentoRepository orcamentoRepository;
     private final MetodoPagamentoConfiguravelRepository metodoRepository;
+    private final CategoriaFinanceiraService categoriaService;
     private final Clock relogioBrasilia;
 
     // ------------------------------------------------------------------------------------------ criar
@@ -67,8 +68,10 @@ public class LancamentoFinanceiroService {
         if (total.compareTo(ValidacaoFinanceira.VALOR_MAXIMO) > 0) {
             throw BusinessException.noCampo("valor", ValidacaoFinanceira.MENSAGEM_VALOR);
         }
+        CategoriaFinanceira categoria = categoriaService.resolverParaLancamento(usuario.getId(), pedido.tipo(), pedido.origem(),
+                pedido.categoriaId());
         Lancamento lancamento = Lancamento.builder()
-                .usuario(usuario).tipo(pedido.tipo()).descricao(descricao).origem(pedido.origem()).valorTotal(total.setScale(2))
+                .usuario(usuario).categoria(categoria).tipo(pedido.tipo()).descricao(descricao).origem(pedido.origem()).valorTotal(total.setScale(2))
                 .compra(pedido.origem() == OrigemLancamento.COMPRA ? compraRepository
                         .findByIdAndUsuarioIdAndDeletedAtIsNull(exigirId(pedido.compraId(), "Compra"), usuario.getId())
                         .orElseThrow(() -> new ResourceNotFoundException("Compra não encontrada.")) : null)

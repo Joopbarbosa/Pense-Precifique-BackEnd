@@ -58,6 +58,11 @@ public class Lancamento {
     @JoinColumn(name = "orcamento_id", updatable = false)
     private Orcamento orcamento;
 
+    /** F6 (#1177) — só despesa (A_PAGAR) tem categoria; receita fica sem. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "categoria_id", updatable = false)
+    private CategoriaFinanceira categoria;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
