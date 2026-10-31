@@ -14,5 +14,6 @@ public record ParcelaFinanceiraResponse(
         OrigemLancamento origem, UUID compraId, UUID orcamentoId,
         int numero, int totalParcelas, BigDecimal valor, LocalDate vencimento,
         SituacaoParcela situacao, String situacaoExibida, Long diasEmAtraso, String rotulo,
-        LocalDate dataBaixa, UUID metodoPagamentoId, String metodoPagamentoNome, OrigemBaixa origemBaixa) {
+        LocalDate dataBaixa, UUID metodoPagamentoId, String metodoPagamentoNome, OrigemBaixa origemBaixa,
+        UUID categoriaId, String categoriaNome) {
 }

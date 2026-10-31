@@ -48,6 +48,8 @@ public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
 
     Optional<Cliente> findByUsuarioIdAndDocumento(UUID usuarioId, String documento);
 
+    List<Cliente> findByUsuarioIdAndWhatsappCanonico(UUID usuarioId, String whatsappCanonico);
+
     long countByUsuarioIdAndAtiva(UUID usuarioId, Boolean ativa);
 
     long countByUsuarioIdAndAtivaTrueAndEhClienteTrue(UUID usuarioId);
