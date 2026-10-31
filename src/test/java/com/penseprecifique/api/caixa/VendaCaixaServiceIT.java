@@ -1,10 +1,18 @@
 package com.penseprecifique.api.caixa;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelService;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.Produto;
+import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.Insumo;
+import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
+import com.penseprecifique.api.shared.domain.entity.VendaCaixaItem;
+import com.penseprecifique.api.shared.domain.entity.VendaCaixaItemCustomizacao;
 import com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa;
 import com.penseprecifique.api.shared.domain.enums.TipoMetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
@@ -34,6 +42,11 @@ class VendaCaixaServiceIT {
 
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired ProdutoRepository produtoRepository;
+    @Autowired InsumoRepository insumoRepository;
+    @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
+    @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
+    @Autowired VendaCaixaItemRepository vendaCaixaItemRepository;
+    @Autowired VendaCaixaItemCustomizacaoRepository vendaCaixaItemCustomizacaoRepository;
     @Autowired CaixaTurnoService caixaTurnoService;
     @Autowired VendaCaixaService vendaCaixaService;
     @Autowired MetodoPagamentoConfiguravelService metodoPagamentoService;
@@ -95,6 +108,42 @@ class VendaCaixaServiceIT {
 
         Produto produtoAtualizado = produtoRepository.findById(produto.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("8").compareTo(produtoAtualizado.getEstoqueAtual()));
+    }
+
+    /** PP-290 / CXA-012: custo unitário do produto e da customização fica gravado no snapshot da venda. */
+    @Test
+    void gravaCustoMaterialUnitarioNoItemECustomizacaoDaVenda() {
+        seedUsuario("custo-material-caixa");
+        abrirTurno(new BigDecimal("100.00"));
+        Produto produto = criarProduto("Produto com material", new BigDecimal("20.00"), new BigDecimal("10"), true);
+        Produto customizacao = produtoRepository.save(Produto.builder()
+                .usuario(usuario).numero(contadorProduto.getAndIncrement()).nome("Customização com material")
+                .tipo(TipoProduto.CUSTOMIZACAO).tempoProducao(1).rendimento(BigDecimal.ONE)
+                .precoVenda(new BigDecimal("5.00")).estoqueAtual(new BigDecimal("10"))
+                .permitirEstoqueNegativo(true).ativo(true).build());
+        UnidadeMedida unidade = unidadeMedidaRepository.save(UnidadeMedida.builder()
+                .usuario(usuario).nome("Unidade de teste").sigla("ut").padrao(false).build());
+        Insumo material = insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(1).nome("Material de teste").unidadeMedida(unidade)
+                .custoUnitario(new BigDecimal("2.00"))
+                .estoqueAtual(new BigDecimal("100")).permitirEstoqueNegativo(true).build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produto).insumo(material).quantidade(new BigDecimal("3")).build());
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(customizacao).insumo(material).quantidade(new BigDecimal("2.5")).build());
+        UUID dinheiroId = metodoIdPorTipo(TipoMetodoPagamento.DINHEIRO);
+
+        VendaCaixaResponseDTO venda = (VendaCaixaResponseDTO) vendaCaixaService.registrarVenda(new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(null, produto.getId(), new BigDecimal("1"),
+                        List.of(new VendaCaixaItemCustomizacaoRequestDTO(customizacao.getId(), 2)))),
+                null, null, List.of(new VendaCaixaPagamentoRequestDTO(dinheiroId, new BigDecimal("30.00"), null)), null));
+
+        VendaCaixaItem item = vendaCaixaItemRepository.findByVendaCaixaId(venda.id()).getFirst();
+        VendaCaixaItemCustomizacao customizacaoGravada = vendaCaixaItemCustomizacaoRepository
+                .findByVendaCaixaItemId(item.getId()).getFirst();
+        assertEquals(0, new BigDecimal("6.0000").compareTo(item.getCustoMaterialUnitario()));
+        assertEquals(0, new BigDecimal("5.0000").compareTo(customizacaoGravada.getCustoMaterialUnitario()));
     }
 
     @Test
