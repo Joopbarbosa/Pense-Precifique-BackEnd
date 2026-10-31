@@ -46,6 +46,10 @@ public class Lancamento {
     @Column(name = "valor_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal valorTotal;
 
+    @Column(name = "fora_projecao", nullable = false)
+    @Builder.Default
+    private boolean foraProjecao = false;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10, updatable = false)
     private OrigemLancamento origem;

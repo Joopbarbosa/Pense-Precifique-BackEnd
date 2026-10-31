@@ -19,7 +19,6 @@ import com.penseprecifique.api.shared.domain.entity.ReciboEstorno;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
@@ -37,6 +36,9 @@ import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoReque
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.PagamentoOrcamentoRequest;
+import com.penseprecifique.api.shared.dto.response.orcamento.PagamentoOrcamentoValidadoResponse;
+import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
@@ -157,6 +159,7 @@ public class OrcamentoService {
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
     private final CustoMaterialService custoMaterialService;
+    private final PagamentoOrcamentoValidador pagamentoValidador; // #1185
 
     /**
      * Frente 3/P-BE-CONSOLIDADO-001 — filtro opcional de intervalo de data de criação
@@ -299,8 +302,6 @@ public class OrcamentoService {
                 .cliente(cliente)
                 .numero(proximoNumero(usuarioId))
                 .status(StatusOrcamento.RASCUNHO)
-                .metodoPagamento(request.getMetodoPagamento())
-                .metodoPagamentoObs(request.getMetodoPagamentoObs())
                 .prazoProducaoDias(request.getPrazoProducaoDias())
                 .inicioAssimQueAprovado(request.isInicioAssimQueAprovado())
                 .dataInicioEstimada(request.getDataInicioEstimada())
@@ -410,8 +411,6 @@ public class OrcamentoService {
         BigDecimal total = calcularTotal(subtotalOrcamento, tipoDesconto, descontoValor);
 
         orcamento.setCliente(cliente);
-        orcamento.setMetodoPagamento(request.getMetodoPagamento());
-        orcamento.setMetodoPagamentoObs(request.getMetodoPagamentoObs());
         orcamento.setPrazoProducaoDias(request.getPrazoProducaoDias());
         orcamento.setInicioAssimQueAprovado(request.isInicioAssimQueAprovado());
         orcamento.setDataInicioEstimada(request.getDataInicioEstimada());
@@ -450,8 +449,8 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-NOVA-5 — campos copiados diretamente: cliente, pagamento (+obs), prazo, sinal
-     * (percentualSinal — quando presente, valorSinal é sempre recalculado por
+     * RN-NOVA-5 — campos copiados diretamente: cliente, prazo, desconto, observações. Pagamento e sinal NÃO
+     * são copiados (CEN-NOVO-43, #1185). Histórico do tratamento antigo do sinal (percentualSinal — quando presente, valorSinal é sempre recalculado por
      * {@link #calcularValorSinal} dentro de {@link #criar}, nunca copiado do original; quando o
      * original configura sinal só por valor direto, sem percentualSinal, o valor é copiado tal como
      * estava — {@link #calcularValorSinal} já trata esse modo como literal, sem recálculo, mesmo em
@@ -467,21 +466,13 @@ public class OrcamentoService {
     private OrcamentoRequest montarRequestDuplicacao(Orcamento original) {
         OrcamentoRequest request = new OrcamentoRequest();
         request.setClienteId(original.getCliente().getId());
-        request.setMetodoPagamento(original.getMetodoPagamento());
-        request.setMetodoPagamentoObs(original.getMetodoPagamentoObs());
         request.setTemPrazoProducao(original.getPrazoProducaoDias() != null);
         request.setPrazoProducaoDias(original.getPrazoProducaoDias());
         request.setInicioAssimQueAprovado(true);
         request.setDataInicioEstimada(null);
-        request.setSinalAtivo(Boolean.TRUE.equals(original.getSinalAtivo()));
-        request.setPercentualSinal(original.getPercentualSinal());
-        // P-B021 (#314) — sinal configurado só por valor direto (sem percentualSinal) precisa do
-        // valor copiado, senão calcularValorSinal() não tem de onde tirar o valor e validarRegras()
-        // rejeita a duplicação inteira. Só copiado quando não há percentual (modo percentual sempre
-        // recalcula, ignora valorSinal do request).
-        if (original.getPercentualSinal() == null) {
-            request.setValorSinal(original.getValorSinal());
-        }
+        // CEN-NOVO-43 / RN-NOVA-37 (V0.19.0, #1185): a duplicata é rascunho SEM pagamento, SEM sinal e SEM parcelas;
+        // forma de pagamento e sinal são definidos de novo no passo Pagamento da aprovação.
+        request.setSinalAtivo(false);
         request.setTipoDesconto(original.getDescontoTipo() != null ? original.getDescontoTipo().name() : null);
         request.setDescontoValor(original.getDescontoValor());
         request.setObservacoes(original.getObservacoes());
@@ -958,20 +949,14 @@ public class OrcamentoService {
                 break;
 
             case AGUARDANDO_SINAL:
-                if (request.getMetodoSinalRecebido() == null) {
-                    throw new BusinessException("O método de recebimento do sinal é obrigatório");
+                if (request.getMetodoSinalRecebidoId() == null) {
+                    throw BusinessException.noCampo("metodoSinalRecebidoId", "O método de recebimento do sinal é obrigatório");
                 }
-                if (request.getMetodoSinalRecebido() == MetodoPagamento.OUTRO) {
-                    String obs = request.getMetodoSinalRecebidoObs();
-                    if (obs == null || obs.trim().length() < MIN_OBS_OUTRO) {
-                        throw new BusinessException(
-                                "Para o método OUTRO, a observação é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
-                    }
-                }
+                // RN-NOVA-42 (#1185): método configurável ATIVO da própria empresa (id inexistente e de outra empresa: mesma resposta)
+                MetodoPagamentoConfiguravel metodoSinal = pagamentoValidador.validarMetodo(request.getMetodoSinalRecebidoId(), usuarioId);
                 orcamento.setStatus(StatusOrcamento.SINAL_PAGO);
                 orcamento.setDataSinalPago(LocalDateTime.now(clock));
-                orcamento.setMetodoSinalRecebido(request.getMetodoSinalRecebido());
-                orcamento.setMetodoSinalRecebidoObs(request.getMetodoSinalRecebidoObs());
+                orcamento.setMetodoSinalRecebido(metodoSinal);
                 break;
 
             case SINAL_PAGO:
@@ -1962,14 +1947,6 @@ public class OrcamentoService {
                     "O prazo de produção deve ficar vazio quando a resposta for 'Não terá prazo de produção'");
         }
 
-        if (request.getMetodoPagamento() == MetodoPagamento.OUTRO) {
-            String obs = request.getMetodoPagamentoObs();
-            if (obs == null || obs.trim().length() < MIN_OBS_OUTRO) {
-                throw new BusinessException(
-                        "Para o método de pagamento OUTRO, a observação é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
-            }
-        }
-
         if (!request.isInicioAssimQueAprovado() && request.getDataInicioEstimada() == null) {
             throw new BusinessException("A data de início estimada é obrigatória quando o início não é assim que aprovado");
         }
@@ -2150,6 +2127,21 @@ public class OrcamentoService {
         return orcamentoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId)
                 .map(o -> o.getNumero() != null ? o.getNumero() + 1 : 1)
                 .orElse(1);
+    }
+
+    /**
+     * V0.19.0 (#1185, RN-NOVA-38/39/42, UC-NOVO-4) — valida o passo Pagamento da aprovação de um orçamento ENVIADO da
+     * própria empresa SEM gravar nada nem mudar o status (a gravação, as parcelas e o status são da #1174).
+     */
+    @Transactional(readOnly = true)
+    public PagamentoOrcamentoValidadoResponse validarPagamento(UUID id, PagamentoOrcamentoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        if (orcamento.getStatus() != StatusOrcamento.ENVIADO) {
+            throw new BusinessException("O pagamento só é informado ao aprovar um orçamento enviado.");
+        }
+        return pagamentoValidador.validar(orcamento, request, usuarioId);
     }
 
     private UUID getUsuarioIdAutenticado() {

@@ -1,7 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.orcamento;
 
 import com.penseprecifique.api.shared.validation.LimitesTexto;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -17,9 +16,8 @@ import java.util.UUID;
 @Setter
 public class AvancaStatusRequest {
 
-    private MetodoPagamento metodoSinalRecebido;
-    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
-    private String metodoSinalRecebidoObs;
+    /** V0.19.0 (#1185, DT-NOVA-8) — método configurável (de Configurações) em que o sinal foi recebido. */
+    private UUID metodoSinalRecebidoId;
 
     @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String motivoCancelamento;

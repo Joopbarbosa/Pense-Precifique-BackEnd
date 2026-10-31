@@ -17,7 +17,6 @@ import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCompromisso;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -250,7 +249,6 @@ class CompromissosProducaoIT {
         item.setQuantidade(1);
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(dias);
         req.setItens(List.of(item));

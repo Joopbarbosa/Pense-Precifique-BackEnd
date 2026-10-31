@@ -1,7 +1,7 @@
 package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.domain.entity.*;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.dto.pdf.*;
@@ -395,19 +395,13 @@ public class PdfMapper {
         return "R$ " + MOEDA_FORMATTER.format(valor);
     }
 
-    private String formatarMetodoPagamento(MetodoPagamento metodo) {
+    /** V0.19.0 (#1185, DT-NOVA-8): o método vem de Configurações; sem método (orçamento ainda não aprovado) o PDF
+     *  atual mostra "—" (a página de condições de pagamento é da #445). */
+    private String formatarMetodoPagamento(MetodoPagamentoConfiguravel metodo) {
         if (metodo == null) {
             return "—";
         }
-        return switch (metodo) {
-            case PIX -> "Pix";
-            case DINHEIRO -> "Dinheiro";
-            case CREDITO -> "Crédito";
-            case DEBITO -> "Débito";
-            case TRANSFERENCIA -> "Transferência";
-            case BOLETO -> "Boleto Bancário";
-            case OUTRO -> "Outro";
-        };
+        return com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(metodo);
     }
 
     private String formatarDesconto(Orcamento orc) {

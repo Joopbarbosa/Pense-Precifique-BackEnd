@@ -1,6 +1,7 @@
 package com.penseprecifique.api.shared.dto.request.caixa;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
@@ -15,5 +16,6 @@ public record VendaCaixaItemCustomizacaoRequestDTO(
 
         @NotNull(message = "A quantidade é obrigatória")
         @Min(value = 1, message = "A quantidade deve ser pelo menos 1")
+        @Max(value = 999999, message = "A quantidade deve ser no máximo 999.999")
         Integer quantidade
 ) {}

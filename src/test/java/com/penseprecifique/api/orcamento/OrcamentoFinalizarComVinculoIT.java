@@ -15,7 +15,6 @@ import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -98,7 +97,6 @@ class OrcamentoFinalizarComVinculoIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         // temPrazoProducao=true + prazoProducaoDias preenchido — desabilita deliberadamente o
         // atalho de aprovação direta (RN-NOVA-2, elegivelParaAtalhoAprovacaoDireta() exige
         // prazoProducaoDias == null); sem isso, "ENVIADO -> APROVADO" abaixo pularia direto pra

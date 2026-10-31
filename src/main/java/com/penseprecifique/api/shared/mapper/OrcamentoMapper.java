@@ -1,7 +1,9 @@
 package com.penseprecifique.api.shared.mapper;
 
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
+import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
+import com.penseprecifique.api.shared.dto.response.compra.MetodoPagamentoRefResponse;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemComponente;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
@@ -53,8 +55,7 @@ public class OrcamentoMapper {
         response.setClienteId(orcamento.getCliente().getId());
         response.setNomeCliente(orcamento.getCliente().getNome());
         response.setStatus(orcamento.getStatus());
-        response.setMetodoPagamento(orcamento.getMetodoPagamento());
-        response.setMetodoPagamentoObs(orcamento.getMetodoPagamentoObs());
+        response.setMetodoPagamento(refMetodo(orcamento.getMetodoPagamento()));
         response.setPrazoProducaoDias(orcamento.getPrazoProducaoDias());
         response.setInicioAssimQueAprovado(orcamento.getInicioAssimQueAprovado());
         response.setDataInicioEstimada(orcamento.getDataInicioEstimada());
@@ -65,8 +66,7 @@ public class OrcamentoMapper {
         response.setDataSinalPago(orcamento.getDataSinalPago());
         response.setDataPagamento(orcamento.getDataPagamento()); // DT-NOVA-4/#466 — achado do teste manual
         response.setDataEntrega(orcamento.getDataEntrega()); // #560/RN-NOVA-22
-        response.setMetodoSinalRecebido(orcamento.getMetodoSinalRecebido());
-        response.setMetodoSinalRecebidoObs(orcamento.getMetodoSinalRecebidoObs());
+        response.setMetodoSinalRecebido(refMetodo(orcamento.getMetodoSinalRecebido()));
         response.setSubtotal(orcamento.getSubtotal());
         response.setTipoDesconto(orcamento.getDescontoTipo().toString());
         response.setDescontoValor(orcamento.getDescontoValor());
@@ -227,5 +227,13 @@ public class OrcamentoMapper {
     private boolean estouraPrazo(LocalDate dataEntregaEstimada, LocalDate dataTerminoPrevista) {
         return dataEntregaEstimada != null && dataTerminoPrevista != null
                 && dataTerminoPrevista.isAfter(dataEntregaEstimada);
+    }
+
+    private static MetodoPagamentoRefResponse refMetodo(MetodoPagamentoConfiguravel metodo) {
+        if (metodo == null) {
+            return null;
+        }
+        return new MetodoPagamentoRefResponse(metodo.getId(), metodo.getTipo(), CompraMapper.rotulo(metodo),
+                Boolean.TRUE.equals(metodo.getAtivo()));
     }
 }

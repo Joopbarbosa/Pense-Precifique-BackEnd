@@ -13,7 +13,6 @@ import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -95,7 +94,6 @@ class OrcamentoStatusPagoEntregueIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         // temPrazoProducao=true desabilita o atalho de aprovação direta (RN-NOVA-2) — precisa
         // passar literalmente por EM_PRODUCAO -> FINALIZADO -> PAGO -> ENTREGUE.
         req.setTemPrazoProducao(true);

@@ -12,7 +12,6 @@ import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
@@ -121,7 +120,6 @@ class ProducaoJuntarIT {
         item.setQuantidade(quantidade);
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(prazoDias != null);
         req.setDataInicioEstimada(inicio);
         req.setPrazoProducaoDias(prazoDias);
