@@ -2,6 +2,7 @@ package com.penseprecifique.api.cliente;
 
 import com.penseprecifique.api.shared.domain.enums.PapelCadastro;
 import com.penseprecifique.api.shared.dto.request.cliente.ClienteRequest;
+import com.penseprecifique.api.shared.dto.request.cliente.ConsentimentoClienteRequest;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteContagensResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteGraficosResponse;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteIndicadoresResponse;
@@ -10,6 +11,7 @@ import com.penseprecifique.api.shared.dto.response.cliente.PedidoClienteResponse
 import com.penseprecifique.api.shared.dto.response.cliente.RegistroCadastroResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import com.penseprecifique.api.shared.dto.response.cliente.ClienteResponse;
+import com.penseprecifique.api.shared.dto.response.cliente.EventoConsentimentoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,6 +31,7 @@ public class ClienteController {
 
     private final ClienteService clienteService;
     private final ClienteHistoricoService clienteHistoricoService;
+    private final ClienteConsentimentoService clienteConsentimentoService;
 
     // #356 — padronizado para 'busca' (mesmo nome usado por Produto/Insumo/Orçamento/Catálogo/Produção);
     // era 'nome' até V0.8.2, único endpoint divergente do padrão do resto do sistema.
@@ -134,5 +137,24 @@ public class ClienteController {
     public ResponseEntity<Void> reativar(@PathVariable UUID id) {
         clienteService.reativar(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/consentimento/aceite")
+    public ResponseEntity<Void> registrarAceite(@PathVariable UUID id,
+            @Valid @RequestBody ConsentimentoClienteRequest request) {
+        clienteConsentimentoService.registrarAceite(id, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/consentimento/recusa")
+    public ResponseEntity<Void> registrarRecusa(@PathVariable UUID id,
+            @Valid @RequestBody ConsentimentoClienteRequest request) {
+        clienteConsentimentoService.registrarRecusa(id, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/consentimento/historico")
+    public ResponseEntity<List<EventoConsentimentoResponse>> historicoConsentimento(@PathVariable UUID id) {
+        return ResponseEntity.ok(clienteConsentimentoService.historico(id));
     }
 }
