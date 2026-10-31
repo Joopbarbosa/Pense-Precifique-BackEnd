@@ -39,13 +39,11 @@ public class Orcamento {
     @Builder.Default
     private StatusOrcamento status = StatusOrcamento.RASCUNHO;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "metodo_pagamento", nullable = false, length = 20)
-    @Builder.Default
-    private MetodoPagamento metodoPagamento = MetodoPagamento.PIX;
-
-    @Column(name = "metodo_pagamento_obs", columnDefinition = "TEXT")
-    private String metodoPagamentoObs;
+    /** DT-NOVA-8 / RN-NOVA-37 (V0.19.0, #1185) — método configurável da forma de pagamento; nulo até o passo Pagamento
+     *  da aprovação (gravado na transação da #1174). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metodo_pagamento_id")
+    private MetodoPagamentoConfiguravel metodoPagamento;
 
     @Column(name = "prazo_producao_dias")
     private Integer prazoProducaoDias;
@@ -95,12 +93,9 @@ public class Orcamento {
     @Column(name = "data_entrega")
     private LocalDateTime dataEntrega;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "metodo_sinal_recebido", length = 20)
-    private MetodoPagamento metodoSinalRecebido;
-
-    @Column(name = "metodo_sinal_recebido_obs", columnDefinition = "TEXT")
-    private String metodoSinalRecebidoObs;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metodo_sinal_recebido_id")
+    private MetodoPagamentoConfiguravel metodoSinalRecebido;
 
     @Column(name = "cancelamento_motivo", columnDefinition = "TEXT")
     private String cancelamentoMotivo;

@@ -18,7 +18,6 @@ import com.penseprecifique.api.shared.domain.entity.ProducaoProduto;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -118,7 +117,6 @@ class ProducaoOrcamentosVinculadosIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(false);
         req.setItens(List.of(item));
         req.setSinalAtivo(false);

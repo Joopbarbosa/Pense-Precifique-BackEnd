@@ -1,5 +1,7 @@
 package com.penseprecifique.api.agenda;
 
+import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
+import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
@@ -9,7 +11,6 @@ import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCompromisso;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -49,6 +50,7 @@ class CompromissosOrcamentoIT {
     @Autowired OrcamentoService orcamentoService;
     @Autowired OrcamentoRepository orcamentoRepository;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired Clock clock;
@@ -78,7 +80,6 @@ class CompromissosOrcamentoIT {
         item.setQuantidade(1);
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(prazoDias != null);
         req.setPrazoProducaoDias(prazoDias);
         req.setItens(List.of(item));
@@ -91,7 +92,7 @@ class CompromissosOrcamentoIT {
 
     private void avancar(UUID id, int vezes) {
         AvancaStatusRequest sinal = new AvancaStatusRequest();
-        sinal.setMetodoSinalRecebido(MetodoPagamento.PIX);
+        sinal.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
         for (int i = 0; i < vezes; i++) {
             orcamentoService.avancarStatus(id, sinal);
         }

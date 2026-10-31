@@ -1,5 +1,7 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
+import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -7,7 +9,6 @@ import com.penseprecifique.api.infra.security.JwtTokenProvider;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
@@ -44,6 +45,7 @@ class OrcamentoCancelarEstornoDataIT {
     @Autowired MockMvc mockMvc;
     @Autowired OrcamentoService orcamentoService;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired JwtTokenProvider jwtTokenProvider;
@@ -80,7 +82,6 @@ class OrcamentoCancelarEstornoDataIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
@@ -92,7 +93,7 @@ class OrcamentoCancelarEstornoDataIT {
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
         orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
         AvancaStatusRequest sinalReq = new AvancaStatusRequest();
-        sinalReq.setMetodoSinalRecebido(MetodoPagamento.PIX);
+        sinalReq.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
         orcamentoService.avancarStatus(orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
         orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
 

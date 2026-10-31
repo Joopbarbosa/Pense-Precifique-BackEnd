@@ -2,7 +2,6 @@ package com.penseprecifique.api.shared.dto.request.orcamento;
 
 import com.penseprecifique.api.shared.validation.LimitesTexto;
 import jakarta.validation.constraints.Size;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
@@ -27,11 +26,8 @@ public class OrcamentoRequest {
     @Valid
     private List<OrcamentoItemRequest> itens;
 
-    @NotNull(message = "O método de pagamento é obrigatório")
-    private MetodoPagamento metodoPagamento;
-
-    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
-    private String metodoPagamentoObs;
+    // RN-NOVA-37 (V0.19.0, #1185): o orçamento NÃO recebe forma de pagamento ao ser salvo; ela é escolhida no passo
+    // Pagamento da aprovação (POST /orcamentos/{id}/pagamento/validar valida; a #1174 grava).
 
     @NotNull(message = "É obrigatório informar se o orçamento vai ter prazo de produção")
     private Boolean temPrazoProducao;

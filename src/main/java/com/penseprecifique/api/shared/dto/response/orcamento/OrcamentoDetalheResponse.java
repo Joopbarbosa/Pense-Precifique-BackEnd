@@ -1,6 +1,6 @@
 package com.penseprecifique.api.shared.dto.response.orcamento;
 
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.dto.response.compra.MetodoPagamentoRefResponse;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import lombok.Getter;
 import lombok.Setter;
@@ -21,8 +21,8 @@ public class OrcamentoDetalheResponse {
     private UUID clienteId;
     private String nomeCliente;
     private StatusOrcamento status;
-    private MetodoPagamento metodoPagamento;
-    private String metodoPagamentoObs;
+    /** DT-NOVA-8 (V0.19.0) — método configurável; nulo até o passo Pagamento da aprovação. */
+    private MetodoPagamentoRefResponse metodoPagamento;
     private Integer prazoProducaoDias;
     private boolean inicioAssimQueAprovado;
     private LocalDate dataInicioEstimada;
@@ -49,8 +49,7 @@ public class OrcamentoDetalheResponse {
      *  ele, a condição de exibir o Recibo de Pagamento no Frontend nunca era verdadeira. */
     private LocalDateTime dataPagamento;
     private LocalDateTime dataEntrega; // #560/RN-NOVA-22 (V0.15.0)
-    private MetodoPagamento metodoSinalRecebido;
-    private String metodoSinalRecebidoObs;
+    private MetodoPagamentoRefResponse metodoSinalRecebido;
     private BigDecimal subtotal;
     private String tipoDesconto;
     private BigDecimal descontoValor;

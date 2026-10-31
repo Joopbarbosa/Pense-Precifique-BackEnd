@@ -1,5 +1,7 @@
 package com.penseprecifique.api.pdf;
 
+import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
+import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
@@ -12,7 +14,6 @@ import com.penseprecifique.api.shared.domain.entity.Orcamento;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
@@ -78,6 +79,7 @@ class PdfServiceReciboMicroservicoIT {
     @Autowired OrcamentoService orcamentoService;
     @Autowired OrcamentoRepository orcamentoRepository;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired ReciboPagamentoRepository reciboPagamentoRepository;
@@ -115,7 +117,6 @@ class PdfServiceReciboMicroservicoIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(itemReq));
@@ -134,7 +135,7 @@ class PdfServiceReciboMicroservicoIT {
         UUID orcamentoId = criarOrcamentoSimples();
         Orcamento orcamento = buscarParaEditar(orcamentoId);
         orcamento.setStatus(StatusOrcamento.SINAL_PAGO);
-        orcamento.setMetodoSinalRecebido(MetodoPagamento.PIX);
+        orcamento.setMetodoSinalRecebido(MetodosPagamentoTeste.pix(metodoPagamentoRepository, orcamento.getUsuario()));
         orcamento.setValorSinal(new BigDecimal("25.00"));
         orcamento.setDataAprovacao(LocalDateTime.now());
         orcamentoRepository.save(orcamento);

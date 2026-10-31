@@ -42,6 +42,7 @@ class DashboardVendasIT {
     @Autowired VendaCaixaRepository vendas;
     @Autowired VendaCaixaItemRepository itensCaixa;
     @Autowired CaixaTurnoRepository turnos;
+    @Autowired com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository metodos;
 
     private Usuario usuario;
     private Cliente cliente;
@@ -68,6 +69,7 @@ class DashboardVendasIT {
 
     private Orcamento orcamento(LocalDate dia, StatusOrcamento status, String total, int numero) {
         Orcamento o = orcamentos.save(Orcamento.builder().usuario(usuario).cliente(cliente).numero(numero).status(status)
+                .metodoPagamento(com.penseprecifique.api.testsupport.MetodosPagamentoTeste.pix(metodos, usuario))
                 .dataEntrega(status == StatusOrcamento.ENTREGUE ? dia.atTime(12, 0) : null).createdAt(dia.atTime(9, 0))
                 .subtotal(bd(total)).total(bd(total)).build());
         itensOrcamento.save(OrcamentoItem.builder().orcamento(o).produto(produto).quantidade(1).precoUnitario(bd(total))
