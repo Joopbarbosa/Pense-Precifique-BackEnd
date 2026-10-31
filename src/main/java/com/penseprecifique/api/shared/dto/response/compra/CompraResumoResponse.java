@@ -18,7 +18,8 @@ public record CompraResumoResponse(
         StatusCompra status,
         LocalDate dataCompra,
         List<String> fornecedores,
-        boolean pago,
+        /** V0.19.0 (RN-NOVA-7) — derivado das parcelas; nulo na compra CANCELADA (aparece como "—"). */
+        Boolean pago,
         BigDecimal total,
         int quantidadeItens,
         /** DT-NOVA-19 (V0.15.0) — "Fita de cetim ×10 m, Cola ×3 un" para a modal de listagem (RN-NOVA-24). */

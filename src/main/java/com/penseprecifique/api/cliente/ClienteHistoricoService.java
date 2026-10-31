@@ -268,7 +268,7 @@ public class ClienteHistoricoService {
             return new Registro(new RegistroCadastroResponse(c.getId(), "COMPRA",
                     IdentificadorFormatter.formatar("COM", c.getNumero()), c.getDataCompra(), c.getStatus().name(),
                     CompraMapper.total(linhas), linhas.size(), resumo, c.getStatus() == StatusCompra.CONFIRMADA,
-                    Boolean.TRUE.equals(c.getPago())),
+                    CompraMapper.pagoExibido(c)),
                     c.getNumero(), linhas.stream().map(i -> i.getInsumo().getId()).toList(),
                     linhas.stream().map(i -> i.getInsumo().getNome()).toList(),
                     linhas.stream().anyMatch(i -> positivo(i.getDescontoLinha()) || positivo(i.getDescontoNota())));
@@ -511,7 +511,7 @@ public class ClienteHistoricoService {
                 .orElse(null);
 
         List<Map.Entry<Compra, List<CompraItem>>> naoPagas = porCompra.entrySet().stream()
-                .filter(e -> !Boolean.TRUE.equals(e.getKey().getPago())).toList();
+                .filter(e -> e.getKey().getStatus() != StatusCompra.CANCELADA && !Boolean.TRUE.equals(e.getKey().getPago())).toList();
 
         return new IndicadoresFornecedorResponse(
                 new IndicadoresFornecedorResponse.UltimaCompraFornecedor(ultima.getId(),
@@ -534,7 +534,7 @@ public class ClienteHistoricoService {
                         .thenComparing(e -> e.getKey().getNumero()).reversed())
                 .map(e -> new CompraFornecedorResponse(e.getKey().getId(),
                         IdentificadorFormatter.formatar("COM", e.getKey().getNumero()), e.getKey().getDataCompra(),
-                        e.getKey().getStatus(), CompraMapper.total(e.getValue()), Boolean.TRUE.equals(e.getKey().getPago())))
+                        e.getKey().getStatus(), CompraMapper.total(e.getValue()), CompraMapper.pagoExibido(e.getKey())))
                 .toList();
         return paginar(todas, pageable);
     }

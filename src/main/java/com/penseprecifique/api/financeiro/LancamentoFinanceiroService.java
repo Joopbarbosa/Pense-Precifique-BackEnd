@@ -4,7 +4,10 @@ import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.compra.CompraRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.orcamento.OrcamentoRepository;
+import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
+import com.penseprecifique.api.shared.domain.enums.StatusCompra;
+import com.penseprecifique.api.shared.domain.enums.TipoMetodoPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
@@ -19,6 +22,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -229,7 +233,9 @@ public class LancamentoFinanceiroService {
                     ? "Esta parcela já foi baixada." : "Esta parcela está cancelada e não pode ser baixada.");
         }
         aplicarBaixa(p, dataBaixa, metodoPagamentoId, usuario.getId(), hoje(), OrigemBaixa.USUARIA);
-        return parcelaRepository.save(p);
+        Parcela salva = parcelaRepository.save(p);
+        sincronizarPagoDaCompra(salva.getLancamento());
+        return salva;
     }
 
     /** RN-NOVA-3 — desfazer a baixa: volta a Em aberto e apaga data, método e origem da baixa. */
@@ -245,7 +251,9 @@ public class LancamentoFinanceiroService {
         p.setDataBaixa(null);
         p.setMetodoPagamento(null);
         p.setOrigemBaixa(null);
-        return parcelaRepository.save(p);
+        Parcela salva = parcelaRepository.save(p);
+        sincronizarPagoDaCompra(salva.getLancamento());
+        return salva;
     }
 
     // ---------------------------------------------------------------------------------------- cancelar
@@ -269,6 +277,142 @@ public class LancamentoFinanceiroService {
         l.setSituacao(SituacaoLancamento.CANCELADO);
         l.setValorTotal(somaAtivas(parcelas));
         return lancamentoRepository.save(l);
+    }
+
+    // ------------------------------------------------------------------------------- ganchos da compra (#1173)
+
+    /**
+     * RN-NOVA-7/8 — gera ou substitui, na transação da compra, as parcelas do lançamento A pagar dela. Sem lançamento
+     * (compra nova, ou antiga anterior à entrega, RN-NOVA-6) cria o primeiro. Com lançamento: uma parcela baixada pela usuária
+     * bloqueia; as Em aberto e as que nasceram Pagas (baixa automática) viram Canceladas (histórico, sem estorno) e as novas
+     * nascem numeradas de 1 a N. O teto de 60 conta só as parcelas ativas. Em seguida grava Pago/Não pago da compra.
+     */
+    @Transactional
+    public Lancamento substituirParcelasDaCompra(Compra compra, String descricao, List<NovaParcela> novas) {
+        Usuario usuario = usuarioAutenticado();
+        Optional<Lancamento> existente = lancamentoRepository.buscarDaCompraParaAlterar(compra.getId(), usuario.getId());
+        if (existente.isEmpty()) {
+            Lancamento criado = criar(new NovoLancamento(TipoLancamento.A_PAGAR, descricao, OrigemLancamento.COMPRA,
+                    compra.getId(), null, novas));
+            sincronizarPagoDaCompra(criado);
+            return criado;
+        }
+        Lancamento l = existente.get();
+        List<Parcela> antigas = parcelaRepository.findByLancamentoIdOrderByNumeroAsc(l.getId());
+        exigirSemBaixaDaUsuaria(antigas, "alterar a forma de pagar");
+        if (novas == null || novas.isEmpty() || novas.size() > DivisaoParcelas.MAXIMO_PARCELAS) {
+            throw BusinessException.noCampo("quantidadeParcelas",
+                    "O número de parcelas deve ser de 1 a " + DivisaoParcelas.MAXIMO_PARCELAS + ".");
+        }
+        LocalDate hoje = hoje();
+        BigDecimal total = BigDecimal.ZERO;
+        for (NovaParcela n : novas) {
+            ValidacaoFinanceira.exigirValor(n.valor(), "valor");
+            ValidacaoFinanceira.exigirVencimento(n.vencimento(), "vencimento");
+            total = total.add(n.valor());
+        }
+        if (total.compareTo(ValidacaoFinanceira.VALOR_MAXIMO) > 0) {
+            throw BusinessException.noCampo("valor", ValidacaoFinanceira.MENSAGEM_VALOR);
+        }
+        cancelarParcelasDaCompra(antigas);
+        List<Parcela> criadas = new ArrayList<>(novas.size());
+        int numero = 1;
+        for (NovaParcela n : novas) {
+            Parcela p = Parcela.builder().lancamento(l).usuario(usuario).numero(numero++)
+                    .valor(n.valor().setScale(2)).vencimento(n.vencimento()).build();
+            if (n.baixaInicial() != null) {
+                aplicarBaixa(p, n.baixaInicial().data(), n.baixaInicial().metodoPagamentoId(), usuario.getId(), hoje, OrigemBaixa.AUTOMATICA);
+            }
+            criadas.add(p);
+        }
+        parcelaRepository.saveAll(criadas);
+        l.setSituacao(SituacaoLancamento.ATIVO);
+        l.setDescricao(ValidacaoFinanceira.exigirDescricao(descricao));
+        l.setValorTotal(total.setScale(2));
+        lancamentoRepository.save(l);
+        sincronizarPagoDaCompra(l);
+        return l;
+    }
+
+    /**
+     * RN-NOVA-8 (b) — cancelar a compra: bloqueia se houver baixa da usuária; senão as parcelas Em aberto e as que nasceram
+     * Pagas viram Canceladas e o lançamento passa a Cancelado com total R$ 0,00. Compra sem lançamento (RN-NOVA-6): nada a fazer.
+     */
+    @Transactional
+    public void cancelarLancamentoDaCompra(Compra compra) {
+        Usuario usuario = usuarioAutenticado();
+        Optional<Lancamento> existente = lancamentoRepository.buscarDaCompraParaAlterar(compra.getId(), usuario.getId());
+        if (existente.isEmpty()) {
+            return;
+        }
+        Lancamento l = existente.get();
+        List<Parcela> parcelas = parcelaRepository.findByLancamentoIdOrderByNumeroAsc(l.getId());
+        exigirSemBaixaDaUsuaria(parcelas, "cancelar a compra");
+        cancelarParcelasDaCompra(parcelas);
+        l.setSituacao(SituacaoLancamento.CANCELADO);
+        l.setValorTotal(somaAtivas(parcelas));
+        lancamentoRepository.save(l);
+    }
+
+    /** RN-NOVA-6 — a compra já tem lançamento? (Compra anterior à entrega não tem.) */
+    @Transactional(readOnly = true)
+    public boolean compraTemLancamento(UUID compraId) {
+        return lancamentoRepository.existsByCompraIdAndUsuarioId(compraId, usuarioAutenticado().getId());
+    }
+
+    /** RN-NOVA-8 — critério único: só a baixa feita pela usuária bloqueia; basta uma parcela. */
+    private static void exigirSemBaixaDaUsuaria(List<Parcela> parcelas, String acao) {
+        boolean baixadaPelaUsuaria = parcelas.stream().anyMatch(p -> p.getSituacao() == SituacaoParcela.BAIXADA
+                && p.getOrigemBaixa() == OrigemBaixa.USUARIA);
+        if (baixadaPelaUsuaria) {
+            throw new BusinessException("Desfaça os pagamentos já marcados antes de " + acao + ".");
+        }
+    }
+
+    /** Em aberto e baixa automática viram Canceladas (a baixa some junto, sem estorno); as já canceladas ficam como estão. */
+    private void cancelarParcelasDaCompra(List<Parcela> parcelas) {
+        for (Parcela p : parcelas) {
+            if (p.getSituacao() != SituacaoParcela.CANCELADA) {
+                p.setSituacao(SituacaoParcela.CANCELADA);
+                p.setDataBaixa(null);
+                p.setMetodoPagamento(null);
+                p.setOrigemBaixa(null);
+            }
+        }
+        parcelaRepository.saveAllAndFlush(parcelas);
+    }
+
+    /**
+     * RN-NOVA-7/9 — Pago/Não pago da compra é derivado das parcelas: Paga quando não resta parcela Em aberto (e há alguma
+     * parcela baixada). Compra cancelada ou sem lançamento da compra não é alterada. Pago exige método (CHECK): se a compra
+     * não tinha, usa o da última parcela baixada; Não paga só guarda método de cartão de crédito parcelado.
+     */
+    private void sincronizarPagoDaCompra(Lancamento l) {
+        if (l.getOrigem() != OrigemLancamento.COMPRA || l.getCompra() == null || l.getSituacao() != SituacaoLancamento.ATIVO) {
+            return;
+        }
+        Compra compra = l.getCompra();
+        if (compra.getStatus() == StatusCompra.CANCELADA) {
+            return;
+        }
+        List<Parcela> parcelas = parcelaRepository.findByLancamentoIdOrderByNumeroAsc(l.getId()).stream()
+                .filter(p -> p.getSituacao() != SituacaoParcela.CANCELADA).toList();
+        boolean paga = !parcelas.isEmpty() && parcelas.stream().noneMatch(p -> p.getSituacao() == SituacaoParcela.EM_ABERTO);
+        if (paga) {
+            if (compra.getMetodoPagamento() == null) {
+                parcelas.stream().filter(p -> p.getMetodoPagamento() != null)
+                        .max(java.util.Comparator.comparing(Parcela::getDataBaixa)).map(Parcela::getMetodoPagamento)
+                        .ifPresent(compra::setMetodoPagamento);
+            }
+            compra.setPago(true);
+        } else {
+            compra.setPago(false);
+            if (compra.getMetodoPagamento() != null && compra.getMetodoPagamento().getTipo() != TipoMetodoPagamento.CARTAO_CREDITO) {
+                compra.setMetodoPagamento(null);
+                compra.setParcelas(null);
+            }
+        }
+        compraRepository.save(compra);
     }
 
     // ------------------------------------------------------------------------------------------ internos
