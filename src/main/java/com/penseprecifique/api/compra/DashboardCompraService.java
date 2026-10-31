@@ -17,6 +17,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import com.penseprecifique.api.shared.mapper.CompraMapper;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
@@ -72,14 +73,10 @@ public class DashboardCompraService {
      * Período anterior: começando no dia 1, os mesmos N meses de calendário imediatamente antes (mês
      * atual → mês passado inteiro); senão, a mesma quantidade de dias imediatamente antes.
      */
-    private static final LocalDate PRIMEIRO_DIA_VALIDO = LocalDate.of(2000, 1, 1);
-    private static final LocalDate ULTIMO_DIA_VALIDO = LocalDate.of(2100, 12, 31);
-
     /** #769 — datas fora de 2000–2100 estouravam o timestamp do banco (500); agora voltam como período inválido. */
     private static void validarFaixa(LocalDate inicio, LocalDate fim) {
-        if (inicio.isBefore(PRIMEIRO_DIA_VALIDO) || fim.isAfter(ULTIMO_DIA_VALIDO)
-                || inicio.isAfter(ULTIMO_DIA_VALIDO) || fim.isBefore(PRIMEIRO_DIA_VALIDO)) {
-            throw BusinessException.explicado("Período inválido", "As datas precisam estar entre 01/01/2000 e 31/12/2100.",
+        if (!FaixaDataPermitida.contem(inicio) || !FaixaDataPermitida.contem(fim)) {
+            throw BusinessException.explicado("Período inválido", FaixaDataPermitida.MENSAGEM,
                     "O painel só calcula períodos dentro desse intervalo.",
                     "Escolha datas entre os anos 2000 e 2100.");
         }

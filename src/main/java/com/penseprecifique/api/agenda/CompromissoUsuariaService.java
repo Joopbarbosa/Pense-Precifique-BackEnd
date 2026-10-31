@@ -18,6 +18,7 @@ import com.penseprecifique.api.shared.dto.request.agenda.EditarCompromissoReques
 import com.penseprecifique.api.shared.dto.response.agenda.CompromissoUsuariaDetalheResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,8 +43,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CompromissoUsuariaService {
 
-    static final LocalDate DATA_MINIMA = LocalDate.of(2000, 1, 1);
-    static final LocalDate DATA_MAXIMA = LocalDate.of(2100, 12, 31);
     static final int MINIMO_OBSERVACAO = 30;
     static final int MAXIMO_OBSERVACAO = 500;
 
@@ -246,7 +245,7 @@ public class CompromissoUsuariaService {
     /** A ocorrência existe se é uma data da série ou se já tem exceção; senão, não encontrada. */
     private OcorrenciaResolvida resolver(CompromissoUsuaria c, LocalDate dataOriginal) {
         // data fora de 2000–2100 não é ocorrência de nada, e nem chega ao banco (data extrema derrubaria a consulta)
-        if (dataOriginal == null || dataOriginal.isBefore(DATA_MINIMA) || dataOriginal.isAfter(DATA_MAXIMA)) {
+        if (!FaixaDataPermitida.contem(dataOriginal)) {
             throw new ResourceNotFoundException("Compromisso não encontrado");
         }
         CompromissoUsuariaExcecao e = excecaoRepository.findByCompromissoIdAndDataOriginal(c.getId(), dataOriginal).orElse(null);
@@ -286,8 +285,8 @@ public class CompromissoUsuariaService {
     }
 
     private void validarData(LocalDate data) {
-        if (data == null || data.isBefore(DATA_MINIMA) || data.isAfter(DATA_MAXIMA)) {
-            throw BusinessException.noCampo("data", "A data deve estar entre 01/01/2000 e 31/12/2100");
+        if (!FaixaDataPermitida.contem(data)) {
+            throw BusinessException.noCampo("data", FaixaDataPermitida.MENSAGEM);
         }
     }
 

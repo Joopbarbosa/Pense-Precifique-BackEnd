@@ -6,6 +6,7 @@ import com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso;
 import com.penseprecifique.api.shared.dto.response.agenda.AgendaResumoResponse;
 import com.penseprecifique.api.shared.dto.response.agenda.CompromissoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -34,8 +35,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AgendaService {
 
-    static final LocalDate DATA_MINIMA = LocalDate.of(2000, 1, 1);
-    static final LocalDate DATA_MAXIMA = LocalDate.of(2100, 12, 31);
     static final int MAXIMO_DIAS_PERIODO = 100;
     static final int TAMANHO_PAGINA_PADRAO = 20;
     static final int TAMANHO_PAGINA_MAXIMO = 100;
@@ -158,8 +157,8 @@ public class AgendaService {
         if (ate.isBefore(de)) {
             throw new BusinessException("A data final não pode ser anterior à data inicial.");
         }
-        if (de.isBefore(DATA_MINIMA) || ate.isAfter(DATA_MAXIMA)) {
-            throw new BusinessException("O período deve estar entre 01/01/2000 e 31/12/2100.");
+        if (!FaixaDataPermitida.contem(de) || !FaixaDataPermitida.contem(ate)) {
+            throw new BusinessException(FaixaDataPermitida.MENSAGEM);
         }
         if (ChronoUnit.DAYS.between(de, ate) + 1 > MAXIMO_DIAS_PERIODO) {
             throw new BusinessException("O período pode ter no máximo " + MAXIMO_DIAS_PERIODO + " dias.");
