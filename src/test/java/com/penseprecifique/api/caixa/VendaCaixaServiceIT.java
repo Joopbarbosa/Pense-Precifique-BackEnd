@@ -91,6 +91,8 @@ class VendaCaixaServiceIT {
 
         assertEquals(StatusVendaCaixa.CONCLUIDA, venda.status());
         assertEquals(0, new BigDecimal("40.00").compareTo(venda.total()));
+        assertNull(venda.pagamentos().get(0).taxaPercentualAplicada());
+        assertNull(venda.pagamentos().get(0).taxaValorAplicada());
         assertTrue(venda.identificador().startsWith("CX-"));
 
         Produto produtoAtualizado = produtoRepository.findById(produto.getId()).orElseThrow();
@@ -381,5 +383,6 @@ class VendaCaixaServiceIT {
 
         assertEquals(3, venda.pagamentos().get(0).parcelas());
         assertEquals(0, new BigDecimal("2.50").compareTo(venda.pagamentos().get(0).taxaPercentualAplicada()));
+        assertEquals(0, new BigDecimal("1.50").compareTo(venda.pagamentos().get(0).taxaValorAplicada()));
     }
 }

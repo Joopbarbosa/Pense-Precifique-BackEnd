@@ -135,9 +135,6 @@ public class DashboardCadastrosService {
         List<DashboardCadastrosResponse.LinhaEstoque> potencial = new ArrayList<>();
         for (Produto p : produtosAtivos(usuarioId)) {
             BigDecimal estoque = p.getEstoqueAtual() == null ? BigDecimal.ZERO : p.getEstoqueAtual();
-            if (estoque.signum() <= 0) {
-                continue;
-            }
             BigDecimal custoUnitario = produtoService.custoUnitarioAoVivo(p).setScale(4, RoundingMode.HALF_UP);
             String identificador = IdentificadorFormatter.formatar("PRO", p.getNumero());
             valorProdutos.add(new DashboardCadastrosResponse.LinhaEstoque(p.getId(), identificador, com.penseprecifique.api.util.NomeMarca.rotulo(p.getNome(), p.getMarca()), "PRODUTO", estoque,
