@@ -116,9 +116,13 @@ public class VendasService {
         Map<UUID, List<VendaCaixaItem>> itensCaixa = caixas.isEmpty() ? Map.of()
                 : vendaCaixaItemRepository.findByVendaCaixaIdIn(caixas.stream().map(VendaCaixa::getId).toList()).stream()
                         .collect(Collectors.groupingBy(i -> i.getVendaCaixa().getId()));
+        List<UUID> itemIds = itensCaixa.values().stream().flatMap(List::stream).map(VendaCaixaItem::getId).toList();
+        Map<UUID, List<VendaCaixaItemCustomizacao>> customizacoes = itemIds.isEmpty() ? Map.of()
+                : vendaCaixaItemCustomizacaoRepository.findByVendaCaixaItemIdIn(itemIds).stream()
+                        .collect(Collectors.groupingBy(c -> c.getVendaCaixaItem().getId()));
         for (VendaCaixa v : caixas) {
             String resumo = itensCaixa.getOrDefault(v.getId(), List.of()).stream()
-                    .map(i -> resumir(i.getQuantidade(), i.getProduto(), i.getItemCatalogo()))
+                    .flatMap(i -> resumoItem(i, customizacoes.getOrDefault(i.getId(), List.of())).stream())
                     .collect(Collectors.joining("; "));
             linhas.add(new LinhaLista(v.getId(), TipoVendaCmv.VENDA_CAIXA, IdentificadorFormatter.formatar("CX", v.getNumero()),
                     v.getDataVenda().toLocalDate(), v.getCliente() != null ? v.getCliente().getNome() : null, resumo,
@@ -247,6 +251,15 @@ public class VendasService {
     private static String resumir(BigDecimal quantidade, Produto produto, ItemCatalogo itemCatalogo) {
         String nome = itemCatalogo != null ? com.penseprecifique.api.util.NomeMarca.rotulo(itemCatalogo.getNome(), itemCatalogo.getMarca()) : produto != null ? com.penseprecifique.api.util.NomeMarca.rotulo(produto.getNome(), produto.getMarca()) : "Item sem referência";
         return quantidade.stripTrailingZeros().toPlainString().replace('.', ',') + " × " + nome;
+    }
+
+    private static List<String> resumoItem(VendaCaixaItem item, List<VendaCaixaItemCustomizacao> customizacoes) {
+        List<String> partes = new ArrayList<>();
+        partes.add(resumir(item.getQuantidade(), item.getProduto(), item.getItemCatalogo()));
+        customizacoes.stream().map(c -> c.getProduto() == null ? "Customização"
+                        : com.penseprecifique.api.util.NomeMarca.rotulo(c.getProduto().getNome(), c.getProduto().getMarca()))
+                .forEach(partes::add);
+        return partes;
     }
 
     /** Custo de hoje de uma linha sem custo gravado; nulo = sem como calcular. */
