@@ -129,7 +129,7 @@ public class ParcelaFinanceiraService {
                 p.getNumero(), totalParcelas, p.getValor(), p.getVencimento(), p.getSituacao(), exibida, atraso, rotulo,
                 p.getDataBaixa(), m == null ? null : m.getId(),
                 m == null ? null : (m.getNome() != null ? m.getNome() : m.getTipo().name()), p.getOrigemBaixa(),
-                l.getCategoria() == null ? null : l.getCategoria().getId(), l.getCategoria() == null ? null : l.getCategoria().getNome());
+                l.getCategoria() == null ? null : l.getCategoria().getId(), l.getCategoria() == null ? null : l.getCategoria().getNome(), l.isForaProjecao());
     }
 
     private UUID usuarioId() {
