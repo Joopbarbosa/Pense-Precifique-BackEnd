@@ -232,7 +232,7 @@ public class CompraService {
     public void excluirRascunho(UUID id) {
         Compra compra = buscarEntidade(id, getUsuarioAutenticado().getId());
         exigirEditavel(compra, "Só é possível excluir uma compra em Rascunho ou Pendente de recebimento.");
-        compra.setDeletedAt(LocalDateTime.now());
+        compra.setDeletedAt(LocalDateTime.now(clock));
         compraRepository.save(compra);
     }
 
@@ -315,7 +315,7 @@ public class CompraService {
 
         compra.setStatus(StatusCompra.CONFIRMADA);
         compra.setDataEntrada(dataEntrada); // #957/DT-NOVA-1 — entrega imediata: a data da compra
-        compra.setConfirmadaEm(LocalDateTime.now());
+        compra.setConfirmadaEm(LocalDateTime.now(clock));
         compraRepository.saveAndFlush(compra);
 
         statusListaCompraService.recalcular(compra.getListaCompra()); // #596/RN-NOVA-41
@@ -527,7 +527,7 @@ public class CompraService {
         if (compra.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO) {
             // #958/RN-NOVA-5 — pendente não deu entrada: cancela sem estorno de estoque, custo ou movimentação.
             compra.setStatus(StatusCompra.CANCELADA);
-            compra.setCanceladaEm(LocalDateTime.now());
+            compra.setCanceladaEm(LocalDateTime.now(clock));
             compra.setObservacaoCancelamento(request.observacao());
             compraRepository.saveAndFlush(compra);
             return new CompraConfirmacaoResponse(compraMapper.toResponse(compra, itens), ImpactoCompraResponse.semAlteracao());
@@ -590,7 +590,7 @@ public class CompraService {
                 });
 
         compra.setStatus(StatusCompra.CANCELADA);
-        compra.setCanceladaEm(LocalDateTime.now());
+        compra.setCanceladaEm(LocalDateTime.now(clock));
         compra.setObservacaoCancelamento(request.observacao());
         compraRepository.saveAndFlush(compra);
 

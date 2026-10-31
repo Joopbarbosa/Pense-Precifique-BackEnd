@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import java.time.Clock;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -134,7 +135,7 @@ public class OrcamentoService {
                     + "ELSE 9 END, 9)"
     );
 
-    private final java.time.Clock clock;
+    private final Clock clock;
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
@@ -908,7 +909,7 @@ public class OrcamentoService {
             case RASCUNHO:
                 orcamento.setStatus(StatusOrcamento.ENVIADO);
                 if (orcamento.getDataEnvio() == null) {
-                    orcamento.setDataEnvio(LocalDateTime.now());
+                    orcamento.setDataEnvio(LocalDateTime.now(clock));
                 }
                 break;
 
@@ -933,11 +934,11 @@ public class OrcamentoService {
                         // RN-033/ORC-019 — data de aprovação é registrada mesmo pulando o status
                         // APROVADO persistido: o orçamento passou pela aprovação conceitualmente, e
                         // essa data aparece nos PDFs de recibo/multa gerados depois de FINALIZADO.
-                        orcamento.setDataAprovacao(LocalDateTime.now());
+                        orcamento.setDataAprovacao(LocalDateTime.now(clock));
                         baixarEstoque(orcamento, itensAtalho);
                         orcamento.setStatus(StatusOrcamento.FINALIZADO);
                         if (orcamento.getDataFinalizacao() == null) {
-                            orcamento.setDataFinalizacao(LocalDateTime.now());
+                            orcamento.setDataFinalizacao(LocalDateTime.now(clock));
                         }
                         break;
                     }
@@ -945,7 +946,7 @@ public class OrcamentoService {
                     // se aplica, sem erro (RN-NOVA-2), segue para a transição normal abaixo.
                 }
                 orcamento.setStatus(StatusOrcamento.APROVADO);
-                orcamento.setDataAprovacao(LocalDateTime.now());
+                orcamento.setDataAprovacao(LocalDateTime.now(clock));
                 break;
 
             case APROVADO:
@@ -968,7 +969,7 @@ public class OrcamentoService {
                     }
                 }
                 orcamento.setStatus(StatusOrcamento.SINAL_PAGO);
-                orcamento.setDataSinalPago(LocalDateTime.now());
+                orcamento.setDataSinalPago(LocalDateTime.now(clock));
                 orcamento.setMetodoSinalRecebido(request.getMetodoSinalRecebido());
                 orcamento.setMetodoSinalRecebidoObs(request.getMetodoSinalRecebidoObs());
                 break;
@@ -1034,7 +1035,7 @@ public class OrcamentoService {
                 baixarEstoque(orcamento, itensParaBaixa);
                 orcamento.setStatus(StatusOrcamento.FINALIZADO);
                 if (orcamento.getDataFinalizacao() == null) {
-                    orcamento.setDataFinalizacao(LocalDateTime.now());
+                    orcamento.setDataFinalizacao(LocalDateTime.now(clock));
                 }
                 break;
 
@@ -1058,7 +1059,7 @@ public class OrcamentoService {
                 // DT-NOVA-4 (V0.10.0, #466) — setado uma única vez, nunca sobrescrito depois; o
                 // frontend passa a checar este campo (não o status atual) pra manter o Recibo de
                 // Pagamento visível mesmo depois do orçamento avançar pra ENTREGUE.
-                orcamento.setDataPagamento(LocalDateTime.now());
+                orcamento.setDataPagamento(LocalDateTime.now(clock));
                 orcamento.setStatus(StatusOrcamento.PAGO);
                 break;
 
@@ -1629,7 +1630,7 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
 
         StatusOrcamento atual = orcamento.getStatus();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         // Já cancelado cai no erro de negócio do switch; as decisões só são validadas quando há o que decidir.
         Map<UUID, Boolean> decisoes = atual == StatusOrcamento.CANCELADO
                 ? new LinkedHashMap<>() : validarDecisoesProducao(orcamento, request);
