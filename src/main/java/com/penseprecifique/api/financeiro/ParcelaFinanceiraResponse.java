@@ -15,5 +15,5 @@ public record ParcelaFinanceiraResponse(
         int numero, int totalParcelas, BigDecimal valor, LocalDate vencimento,
         SituacaoParcela situacao, String situacaoExibida, Long diasEmAtraso, String rotulo,
         LocalDate dataBaixa, UUID metodoPagamentoId, String metodoPagamentoNome, OrigemBaixa origemBaixa,
-        UUID categoriaId, String categoriaNome) {
+        UUID categoriaId, String categoriaNome, boolean foraProjecao) {
 }

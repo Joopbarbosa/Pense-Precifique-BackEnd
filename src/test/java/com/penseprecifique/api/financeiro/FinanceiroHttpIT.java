@@ -2,6 +2,7 @@ package com.penseprecifique.api.financeiro;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
@@ -193,5 +194,79 @@ class FinanceiroHttpIT {
         assertEquals(400, status(mvc.perform(get("/financeiro/parcelas?tipo=XYZ").header("Authorization", "Bearer " + c.token())).andReturn()));
         assertEquals(400, status(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&de=2030-05-10&ate=2030-05-01").header("Authorization", "Bearer " + c.token())).andReturn()));
         assertEquals(400, status(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&de=1800-01-01").header("Authorization", "Bearer " + c.token())).andReturn()));
+    }
+
+    @Test
+    void contaAvulsaHttpRecusaEntradaHostilEIsolaIds() throws Exception {
+        Conta a = conta();
+        Conta b = conta();
+        String base = "\"tipo\":\"A_PAGAR\",\"descricao\":\"Aluguel\",\"valor\":50.25,\"vencimento\":\"2027-01-31\"";
+        MvcResult criada = mvc.perform(post("/financeiro/lancamentos-avulsos").header("Authorization", "Bearer " + a.token())
+                .contentType(MediaType.APPLICATION_JSON).content("{" + base + ",\"meses\":3,\"foraProjecao\":true}" )).andReturn();
+        assertEquals(201, status(criada), criada.getResponse().getContentAsString());
+        JsonNode lista = json.readTree(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&de=2027-01-01&ate=2027-04-30")
+                .header("Authorization", "Bearer " + a.token())).andReturn().getResponse().getContentAsString());
+        assertEquals(3, lista.get("itens").size());
+        assertTrue(java.util.stream.StreamSupport.stream(lista.get("itens").spliterator(), false)
+                .allMatch(item -> item.get("foraProjecao").asBoolean()));
+        UUID id = UUID.fromString(lista.get("itens").get(0).get("id").asText());
+        UUID lancamentoId = UUID.fromString(lista.get("itens").get(0).get("lancamentoId").asText());
+        MvcResult previsaoPropria = mvc.perform(get("/financeiro/parcelas/" + id + "/avulso/impacto-exclusao")
+                .header("Authorization", "Bearer " + a.token())).andReturn();
+        assertEquals(200, status(previsaoPropria));
+        assertEquals(false, json.readTree(previsaoPropria.getResponse().getContentAsString()).get("excluiContaInteira").asBoolean());
+        for (String corpo : List.of("{" + base.replace("Aluguel", "x") + "}", "{" + base + ",\"meses\":0}",
+                "{" + base + ",\"meses\":1}", "{" + base + ",\"meses\":25}",
+                "{" + base.replace("50.25", "0") + "}", "{" + base.replace("50.25", "100000000") + "}",
+                "{" + base.replace("50.25", "12.345") + "}", "{" + base.replace("2027-01-31", "1999-01-01") + "}",
+                "{" + base.replace("2027-01-31", "2101-01-01") + "}",
+                "{" + base.replace("2027-01-31", "31/02/2027") + "}",
+                "{" + base.replace("50.25", "\"\\u0000\"") + "}",
+                "{" + base.replace("Aluguel", "a".repeat(81)) + "}", "{" + base.replace("Aluguel", "a".repeat(100000)) + "}",
+                "{" + base.replace("Aluguel", "\\u0000") + "}", "{", "[]", "null", "\"texto\"", "")) {
+            int s = status(mvc.perform(post("/financeiro/lancamentos-avulsos").header("Authorization", "Bearer " + a.token())
+                    .contentType(MediaType.APPLICATION_JSON).content(corpo)).andReturn());
+            assertTrue(s == 400 || s == 404, "corpo inválido respondeu " + s);
+        }
+        int errado = status(mvc.perform(post("/financeiro/lancamentos-avulsos").header("Authorization", "Bearer " + a.token())
+                .contentType(MediaType.TEXT_PLAIN).content("x")).andReturn());
+        assertEquals(415, errado);
+        String authA = "Bearer " + a.token();
+        for (String corpo : List.of("{", "{\"descricao\":\"" + "x".repeat(81) + "\"}",
+                "{\"descricao\":\"" + "x".repeat(501) + "\"}", "{\"descricao\":\"" + "x".repeat(100000) + "\"}",
+                "{\"descricao\":\"\\u0000\"}", "{\"valor\":1e1000}")) {
+            int s = status(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/financeiro/parcelas/" + id + "/avulso")
+                    .header("Authorization", authA).contentType(MediaType.APPLICATION_JSON).content(corpo)).andReturn());
+            assertEquals(400, s, "edição inválida não pode gerar erro interno");
+        }
+        assertEquals(400, status(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/financeiro/parcelas/" + id + "/avulso")
+                .header("Authorization", authA).contentType(MediaType.APPLICATION_JSON).content("{}" )).andReturn()));
+        assertEquals(400, status(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/financeiro/lancamentos/" + lancamentoId + "/fora-projecao")
+                .header("Authorization", authA).contentType(MediaType.APPLICATION_JSON).content("{}" )).andReturn()));
+        assertTrue(status(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/financeiro/parcelas/" + id + "/avulso?seguintes=abc")
+                .header("Authorization", authA)).andReturn()) < 500);
+        int getAlheio = status(mvc.perform(get("/financeiro/parcelas/" + id).header("Authorization", "Bearer " + b.token())).andReturn());
+        int getInexistente = status(mvc.perform(get("/financeiro/parcelas/" + UUID.randomUUID()).header("Authorization", "Bearer " + b.token())).andReturn());
+        assertEquals(404, getAlheio); assertEquals(getInexistente, getAlheio);
+        JsonNode respostaAlheia = json.readTree(mvc.perform(get("/financeiro/parcelas/" + id).header("Authorization", "Bearer " + b.token())).andReturn().getResponse().getContentAsString());
+        JsonNode respostaInexistente = json.readTree(mvc.perform(get("/financeiro/parcelas/" + UUID.randomUUID()).header("Authorization", "Bearer " + b.token())).andReturn().getResponse().getContentAsString());
+        ((ObjectNode) respostaAlheia).remove("timestamp");
+        ((ObjectNode) respostaInexistente).remove("timestamp");
+        assertEquals(respostaInexistente, respostaAlheia);
+        String authB = "Bearer " + b.token();
+        String edicao = "{\"descricao\":\"Conta editada\",\"valor\":51.00}";
+        assertEquals(404, status(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/financeiro/parcelas/" + id + "/avulso")
+                .header("Authorization", authB).contentType(MediaType.APPLICATION_JSON).content(edicao)).andReturn()));
+        assertEquals(404, status(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/financeiro/parcelas/" + id + "/avulso")
+                .header("Authorization", authB)).andReturn()));
+        assertEquals(404, status(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/financeiro/lancamentos/" + lancamentoId + "/fora-projecao")
+                .header("Authorization", authB).contentType(MediaType.APPLICATION_JSON).content("{\"foraProjecao\":false}")).andReturn()));
+        assertEquals(404, status(mvc.perform(get("/financeiro/parcelas/" + id + "/avulso/impacto-exclusao")
+                .header("Authorization", authB)).andReturn()));
+        for (String idRuim : List.of("nao-uuid", "123", "%00", "a".repeat(5000))) {
+            int s = status(mvc.perform(get("/financeiro/parcelas/" + idRuim + "/avulso/impacto-exclusao")
+                    .header("Authorization", authA)).andReturn());
+            assertTrue(s == 400 || s == 404, "prévia de exclusão com id inválido: " + s);
+        }
     }
 }
