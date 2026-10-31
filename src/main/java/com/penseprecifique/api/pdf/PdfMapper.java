@@ -564,8 +564,9 @@ public class PdfMapper {
             .fornecedor(fornecedor)
             .multiplosFornecedores(multiplos)
             // #597/RN-NOVA-42 (adendo 2) — crédito parcelado: "Pago — Cartão Crédito · 3x"
-            .pagamento(Boolean.TRUE.equals(compra.getPago()) && compra.getMetodoPagamento() != null
-                ? "Pago — " + com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(compra.getMetodoPagamento())
+            .pagamento(compra.getMetodoPagamento() != null && compra.getStatus() != com.penseprecifique.api.shared.domain.enums.StatusCompra.CANCELADA
+                ? (Boolean.TRUE.equals(compra.getPago()) ? "Pago — " : "Não pago — ")
+                    + com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(compra.getMetodoPagamento())
                     + (compra.getParcelas() != null ? " · " + compra.getParcelas() + "x" : "")
                 : "Não pago")
             .total(formatarMoeda(total))

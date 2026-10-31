@@ -20,7 +20,8 @@ public record CompraResponse(
         LocalDate dataCompra,
         boolean multiplosFornecedores,
         CadastroRefResponse fornecedor,
-        boolean pago,
+        /** V0.19.0 (RN-NOVA-7) — derivado das parcelas; nulo na compra CANCELADA (aparece como "—"). */
+        Boolean pago,
         MetodoPagamentoRefResponse metodoPagamento,
         String observacoes,
         OrigemCompra origem,

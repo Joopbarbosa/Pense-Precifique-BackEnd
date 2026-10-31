@@ -56,12 +56,18 @@ public record CompraRequest(
         Boolean entregaImediata,
 
         /** #957/RN-NOVA-4 — só vale com entregaImediata = false; exigida ao confirmar. */
-        LocalDate previsaoEntrega
+        LocalDate previsaoEntrega,
+
+        /**
+         * V0.19.0 (#1173, RN-NOVA-7) — vencimento da parcela a pagar: da única parcela da compra Não paga (obrigatório) ou da
+         * 1ª parcela do cartão de crédito (padrão: 1 mês após a data da compra). Não é gravado no rascunho; vale ao confirmar.
+         */
+        LocalDate vencimento
 ) {
     /** Forma anterior ao #576 (sem desconto na nota). */
     public CompraRequest(LocalDate dataCompra, Boolean multiplosFornecedores, UUID fornecedorId, Boolean pago,
                          UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens) {
-        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens, null, null, null, null, null);
+        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens, null, null, null, null, null, dataCompra);
     }
 
     /** Forma anterior ao #597 (sem parcelas). */
@@ -69,7 +75,7 @@ public record CompraRequest(
                          UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens,
                          TipoDesconto descontoNotaTipo, BigDecimal descontoNotaValor) {
         this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens,
-                descontoNotaTipo, descontoNotaValor, null, null, null);
+                descontoNotaTipo, descontoNotaValor, null, null, null, dataCompra);
     }
 
     /** Forma anterior ao #957 (sem entrega imediata nem previsão). */
@@ -77,7 +83,16 @@ public record CompraRequest(
                          UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens,
                          TipoDesconto descontoNotaTipo, BigDecimal descontoNotaValor, Integer parcelas) {
         this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens,
-                descontoNotaTipo, descontoNotaValor, parcelas, null, null);
+                descontoNotaTipo, descontoNotaValor, parcelas, null, null, dataCompra);
+    }
+
+    /** Forma anterior ao V0.19.0 (sem vencimento): o vencimento fica na data da compra, como no padrão da tela. */
+    public CompraRequest(LocalDate dataCompra, Boolean multiplosFornecedores, UUID fornecedorId, Boolean pago,
+                         UUID metodoPagamentoId, String observacoes, List<CompraItemRequest> itens,
+                         TipoDesconto descontoNotaTipo, BigDecimal descontoNotaValor, Integer parcelas,
+                         Boolean entregaImediata, LocalDate previsaoEntrega) {
+        this(dataCompra, multiplosFornecedores, fornecedorId, pago, metodoPagamentoId, observacoes, itens,
+                descontoNotaTipo, descontoNotaValor, parcelas, entregaImediata, previsaoEntrega, dataCompra);
     }
 
     public List<CompraItemRequest> itensOuVazio() {

@@ -37,6 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Transactional
 class DashboardCadastrosIT {
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean com.penseprecifique.api.financeiro.SementeCategoriasService sementeCategorias;
+    @Autowired com.penseprecifique.api.financeiro.CategoriaFinanceiraRepository categoriasFin;
+
     @Autowired DashboardCadastrosService service;
     @Autowired CompraService compraService;
     @Autowired UsuarioRepository usuarios;
@@ -63,6 +66,15 @@ class DashboardCadastrosIT {
 
     @BeforeEach
     void preparar() {
+
+        // A semente real roda em transação própria e não enxerga a usuária ainda não gravada deste teste transacional.
+        org.mockito.Mockito.doAnswer(inv -> {
+            java.util.UUID id = inv.getArgument(0);
+            for (String n : java.util.List.of("Insumos e materiais", "Outros")) {
+                categoriasFin.semear(java.util.UUID.randomUUID(), id, n, n.toLowerCase());
+            }
+            return null;
+        }).when(sementeCategorias).garantir(org.mockito.ArgumentMatchers.any());
         usuario = usuarios.save(Usuario.builder().email("dash-cad-" + UUID.randomUUID() + "@test.com").senhaHash("x").ativo(true).build());
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(usuario.getEmail(), null, List.of()));
         cliente = clientes.save(Cliente.builder().usuario(usuario).numero(1).nome("Ana").ehCliente(true).ativa(true).build());

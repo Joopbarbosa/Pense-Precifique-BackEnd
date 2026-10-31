@@ -37,6 +37,9 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import com.penseprecifique.api.shared.mapper.CompraMapper;
+import com.penseprecifique.api.financeiro.DivisaoParcelas;
+import com.penseprecifique.api.financeiro.LancamentoFinanceiroService;
+import com.penseprecifique.api.financeiro.NovaParcela;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
@@ -99,6 +102,7 @@ public class CompraService {
     private final InsumoRepository insumoRepository;
     private final MovimentacaoInsumoRepository movimentacaoInsumoRepository;
     private final MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
+    private final LancamentoFinanceiroService lancamentoFinanceiroService; // V0.19.0 (#1173, DT-NOVA-3)
     private final UsuarioRepository usuarioRepository;
     private final ClienteService clienteService;
     private final FornecedorInsumoService fornecedorInsumoService;
@@ -225,6 +229,10 @@ public class CompraService {
         Compra compra = buscarEntidade(id, usuario.getId());
         exigirEditavel(compra, "Só é possível editar uma compra em Rascunho ou Pendente de recebimento.");
         aplicarRequest(compra, request, usuario.getId(), compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
+        if (compra.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO) {
+            // RN-NOVA-7/8: a pendente já tem lançamento; valor e forma de pagar mudaram, as parcelas são substituídas.
+            sincronizarParcelas(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()), request.vencimento(), false);
+        }
         return compraMapper.toResponse(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
     }
 
@@ -243,7 +251,7 @@ public class CompraService {
         Usuario usuario = getUsuarioAutenticado();
         Compra compra = novaCompra(usuario);
         aplicarRequest(compra, request, usuario.getId(), List.of());
-        return confirmarEntidade(compra, usuario);
+        return confirmarEntidade(compra, usuario, request.vencimento());
     }
 
     /** Confirma um rascunho, gravando antes as alterações do request (se enviado). Tudo ou nada. */
@@ -254,16 +262,19 @@ public class CompraService {
         if (request != null) {
             aplicarRequest(compra, request, usuario.getId(), compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
         }
-        return confirmarEntidade(compra, usuario);
+        // Sem corpo (confirmar um rascunho já salvo, que não guarda o vencimento): vale a data da compra.
+        return confirmarEntidade(compra, usuario, request != null ? request.vencimento() : compra.getDataCompra());
     }
 
     /**
      * #958/DT-NOVA-2 — duas etapas: (1) valida e decide o estado; (2) {@link #aplicarEntrada}. Entrega imediata
      * "não" deixa a compra PENDENTE_RECEBIMENTO sem tocar estoque, custo, vínculo, lista nem impacto.
      */
-    private CompraConfirmacaoResponse confirmarEntidade(Compra compra, Usuario usuario) {
+    private CompraConfirmacaoResponse confirmarEntidade(Compra compra, Usuario usuario, LocalDate vencimento) {
         List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
         validarParaConfirmar(compra, itens);
+        // V0.19.0 (#1173, DT-NOVA-3, RN-NOVA-7) — o lançamento nasce na mesma transação da confirmação (tudo ou nada).
+        sincronizarParcelas(compra, itens, vencimento, true);
         if (Boolean.FALSE.equals(compra.getEntregaImediata())) {
             compra.setStatus(StatusCompra.PENDENTE_RECEBIMENTO);
             compraRepository.saveAndFlush(compra);
@@ -523,6 +534,8 @@ public class CompraService {
         Usuario usuario = getUsuarioAutenticado();
         Compra compra = buscarEntidade(id, usuario.getId());
         exigirCancelavel(compra);
+        // V0.19.0 (#1173, RN-NOVA-8): baixa da usuária bloqueia antes de qualquer estorno; senão as parcelas são canceladas.
+        lancamentoFinanceiroService.cancelarLancamentoDaCompra(compra);
         List<CompraItem> itens = compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId());
         if (compra.getStatus() == StatusCompra.PENDENTE_RECEBIMENTO) {
             // #958/RN-NOVA-5 — pendente não deu entrada: cancela sem estorno de estoque, custo ou movimentação.
@@ -752,6 +765,7 @@ public class CompraService {
         }
         aplicarPagamento(compra, request.pago(), request.metodoPagamentoId(), request.parcelas(), usuarioId);
         compraRepository.save(compra);
+        sincronizarParcelas(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()), request.vencimento(), false);
         return compraMapper.toResponse(compra, compraItemRepository.findByCompraIdOrderByOrdemAsc(compra.getId()));
     }
 
@@ -851,6 +865,37 @@ public class CompraService {
         }
         return clienteService.resolverParaVinculo(fornecedorId, usuarioId, PapelCadastro.FORNECEDOR,
                 fornecedoresSalvos.contains(fornecedorId) ? fornecedorId : null);
+    }
+
+    /**
+     * V0.19.0 (#1173, RN-NOVA-7/8/6) — gera ou substitui as parcelas do lançamento A pagar conforme a forma de pagar da compra:
+     * Não paga = 1 parcela Em aberto (vencimento obrigatório); cartão de crédito em N vezes = N parcelas Em aberto (1ª no
+     * vencimento informado, padrão 1 mês após a data base); outro método = 1 parcela já Paga na data base. Data base = data da
+     * compra; na compra anterior à entrega (sem lançamento), a data da alteração (RN-NOVA-6). {@code Compra.pago} é gravado
+     * pelo serviço do financeiro a partir das parcelas.
+     */
+    private void sincronizarParcelas(Compra compra, List<CompraItem> itens, LocalDate vencimento, boolean confirmando) {
+        BigDecimal total = CompraMapper.total(itens).setScale(2, java.math.RoundingMode.HALF_UP);
+        if (total.signum() <= 0) {
+            lancamentoFinanceiroService.cancelarLancamentoDaCompra(compra); // compra de R$ 0,00 não gera obrigação
+            return;
+        }
+        LocalDate dataBase = confirmando || lancamentoFinanceiroService.compraTemLancamento(compra.getId())
+                ? compra.getDataCompra() : LocalDate.now(clock);
+        MetodoPagamentoConfiguravel metodo = compra.getMetodoPagamento();
+        List<NovaParcela> parcelas;
+        if (!Boolean.TRUE.equals(compra.getPago()) || metodo == null) {
+            if (vencimento == null) {
+                throw BusinessException.noCampo("vencimento", "Informe quando esta compra vence.");
+            }
+            parcelas = List.of(new NovaParcela(total, vencimento, null));
+        } else if (metodo.getTipo() == TipoMetodoPagamento.CARTAO_CREDITO) {
+            int n = compra.getParcelas() == null ? 1 : compra.getParcelas();
+            parcelas = DivisaoParcelas.dividir(total, n, vencimento != null ? vencimento : dataBase.plusMonths(1));
+        } else {
+            parcelas = List.of(new NovaParcela(total, dataBase, new NovaParcela.BaixaInicial(dataBase, metodo.getId())));
+        }
+        lancamentoFinanceiroService.substituirParcelasDaCompra(compra, "Compra " + identificador(compra), parcelas);
     }
 
     /**
