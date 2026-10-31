@@ -4,6 +4,7 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.whatsapp.WhatsappDtos.QrResponse;
 import com.penseprecifique.api.whatsapp.WhatsappDtos.StatusResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +13,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /** Conexão da usuária (DT-NOVA-13). Só usa a interface {@link WhatsappCanal}. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WhatsappConexaoService {
@@ -67,6 +69,7 @@ public class WhatsappConexaoService {
                     canal.criarInstancia(c.getInstancia());
                 } catch (WhatsappCanalException ex) {
                     // instância já existente no servidor não impede reconectar; indisponibilidade volta no QR
+                    log.debug("Instância não criada (tipo {}); segue para o QR", ex.getTipo());
                 }
             }
             if (c.getEstado() == EstadoWhatsapp.CONECTADO && canal.consultarEstado(c.getInstancia()) == WhatsappCanal.EstadoCanal.ABERTO) {
@@ -125,6 +128,7 @@ public class WhatsappConexaoService {
             }
         } catch (WhatsappCanalException ex) {
             // mantém o estado salvo
+            log.debug("Estado do canal não consultado (tipo {}); mantém o salvo", ex.getTipo());
         }
     }
 
