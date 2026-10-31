@@ -52,6 +52,7 @@ import com.penseprecifique.api.shared.dto.response.producao.InsumoConsumidoRespo
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoDetalheResponse;
 import com.penseprecifique.api.shared.dto.response.producao.ProducaoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.shared.mapper.ProducaoMapper;
 import com.penseprecifique.api.util.IdentificadorFormatter;
@@ -1377,13 +1378,10 @@ public class ProducaoService {
         return data != null && !data.isBefore(inicio) && !data.isAfter(fim);
     }
 
-    private static final LocalDate LOTE_DATA_MINIMA = LocalDate.of(2000, 1, 1);
-    private static final LocalDate LOTE_DATA_MAXIMA = LocalDate.of(2100, 12, 31);
-
     /** Data extrema derrubaria a consulta da Agenda: fora de 2000–2100 é 400 (e nunca chega ao banco). */
     private static void validarFaixaDataLote(String campo, LocalDate data) {
-        if (data != null && (data.isBefore(LOTE_DATA_MINIMA) || data.isAfter(LOTE_DATA_MAXIMA))) {
-            throw BusinessException.noCampo(campo, "A data deve estar entre 01/01/2000 e 31/12/2100");
+        if (data != null && !FaixaDataPermitida.contem(data)) {
+            throw BusinessException.noCampo(campo, FaixaDataPermitida.MENSAGEM);
         }
     }
 

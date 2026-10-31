@@ -18,6 +18,7 @@ import com.penseprecifique.api.shared.dto.request.agenda.MoverCompromissoRequest
 import com.penseprecifique.api.shared.dto.response.agenda.MovimentoCompromissoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -41,8 +42,6 @@ import java.util.UUID;
 public class AgendaMovimentoService {
 
     private static final DateTimeFormatter DIA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    private static final LocalDate DATA_MINIMA = LocalDate.of(2000, 1, 1);
-    private static final LocalDate DATA_MAXIMA = LocalDate.of(2100, 12, 31);
 
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoRepository orcamentoRepository;
@@ -227,8 +226,8 @@ public class AgendaMovimentoService {
     }
 
     private static void validarData(LocalDate data) {
-        if (data.isBefore(DATA_MINIMA) || data.isAfter(DATA_MAXIMA)) {
-            throw new BusinessException("Escolha uma data entre 01/01/2000 e 31/12/2100.");
+        if (!FaixaDataPermitida.contem(data)) {
+            throw new BusinessException(FaixaDataPermitida.MENSAGEM);
         }
     }
 

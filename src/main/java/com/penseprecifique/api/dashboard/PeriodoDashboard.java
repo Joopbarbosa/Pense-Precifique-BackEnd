@@ -1,6 +1,7 @@
 package com.penseprecifique.api.dashboard;
 
 import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -14,15 +15,11 @@ import java.time.temporal.ChronoUnit;
 public record PeriodoDashboard(LocalDate inicio, LocalDate fim, LocalDate inicioAnterior, LocalDate fimAnterior,
                                YearMonth primeiroMes, LocalDate inicioGeral) {
 
-    private static final LocalDate PRIMEIRO_DIA_VALIDO = LocalDate.of(2000, 1, 1);
-    private static final LocalDate ULTIMO_DIA_VALIDO = LocalDate.of(2100, 12, 31);
-
     public static PeriodoDashboard de(LocalDate de, LocalDate ate) {
         LocalDate fim = ate != null ? ate : LocalDate.now();
         LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
-        if (inicio.isBefore(PRIMEIRO_DIA_VALIDO) || fim.isAfter(ULTIMO_DIA_VALIDO)
-                || inicio.isAfter(ULTIMO_DIA_VALIDO) || fim.isBefore(PRIMEIRO_DIA_VALIDO)) {
-            throw BusinessException.explicado("Período inválido", "As datas precisam estar entre 01/01/2000 e 31/12/2100.",
+        if (!FaixaDataPermitida.contem(inicio) || !FaixaDataPermitida.contem(fim)) {
+            throw BusinessException.explicado("Período inválido", FaixaDataPermitida.MENSAGEM,
                     "O painel só calcula períodos dentro desse intervalo.",
                     "Escolha datas entre os anos 2000 e 2100.");
         }

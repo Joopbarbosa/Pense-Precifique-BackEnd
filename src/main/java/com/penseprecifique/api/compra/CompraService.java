@@ -35,6 +35,7 @@ import com.penseprecifique.api.shared.dto.response.compra.SimulacaoCancelamentoR
 import com.penseprecifique.api.shared.dto.response.compra.CompraResumoResponse;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import com.penseprecifique.api.shared.mapper.CompraMapper;
 import com.penseprecifique.api.util.IdentificadorFormatter;
 import com.penseprecifique.api.util.NumeroSequencialUtil;
@@ -924,8 +925,6 @@ public class CompraService {
         }
     }
 
-    private static final LocalDate PREVISAO_MAXIMA = LocalDate.of(2100, 12, 31);
-
     /** #957/RN-NOVA-4 — previsão informada não pode ser anterior à data da compra nem a hoje. */
     private void validarPrevisaoInformada(LocalDate previsao, LocalDate dataCompra) {
         validarPrevisaoInformada(previsao, dataCompra, null);
@@ -935,10 +934,10 @@ public class CompraService {
         if (previsao == null) {
             return;
         }
-        if (previsao.isAfter(PREVISAO_MAXIMA)) {
-            throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega deve ser até 31/12/2100",
-                    "Uma data tão distante não é uma previsão real e quebraria a consulta da Agenda.",
-                    "Escolha uma data até 31/12/2100.");
+        if (!FaixaDataPermitida.contem(previsao)) {
+            throw BusinessException.explicado("Previsão de entrega", FaixaDataPermitida.MENSAGEM,
+                    "A previsão precisa estar dentro do intervalo de datas aceito pelo sistema.",
+                    "Escolha uma data entre 01/01/2000 e 31/12/2100.");
         }
         if (dataCompra != null && previsao.isBefore(dataCompra)) {
             throw BusinessException.explicado("Previsão de entrega", "A previsão de entrega não pode ser anterior à data da compra",
