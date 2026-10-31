@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoCompraPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoListaComprasPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoPdfMultaPayload;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboCaixaPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboEstornoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboPagamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboSinalPayload;
@@ -21,6 +22,7 @@ public class PdfService {
     private final OrcamentoPdfPayloadService orcamentoPdfPayloadService;
     private final ReciboPdfPayloadService reciboPdfPayloadService;
     private final ReciboPagamentoPdfPayloadService reciboPagamentoPdfPayloadService;
+    private final ReciboCaixaPdfPayloadService reciboCaixaPdfPayloadService;
     private final CatalogoPdfPayloadService catalogoPdfPayloadService;
     private final ComprasPdfPayloadService comprasPdfPayloadService;
 
@@ -77,6 +79,12 @@ public class PdfService {
         PdfMicroservicoReciboPagamentoPayload payload =
                 reciboPagamentoPdfPayloadService.montarPayloadReciboPagamento(orcamentoId);
         return pdfMicroservicoClient.gerarPdf("recibo-pagamento", orcamentoId, payload);
+    }
+
+    /** V0.19.0 #1170 (RN-NOVA-33) — recibo da venda do Caixa; só vendas CONCLUIDA, nunca altera a venda. */
+    public byte[] gerarReciboCaixa(UUID vendaId) {
+        PdfMicroservicoReciboCaixaPayload payload = reciboCaixaPdfPayloadService.montarPayload(vendaId);
+        return pdfMicroservicoClient.gerarPdf("recibo-caixa", vendaId, payload);
     }
 
     /** Preview (Fluxo E do PRD) do recibo-pagamento — mesmo padrão de {@link #gerarPreviewHtmlOrcamento}. */
