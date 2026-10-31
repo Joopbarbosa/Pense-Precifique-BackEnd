@@ -1,5 +1,6 @@
 package com.penseprecifique.api.cliente;
 
+import java.time.Clock;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.caixa.VendaCaixaItemRepository;
@@ -77,6 +78,7 @@ public class ClienteHistoricoService {
     private static final int MAX_ITENS_GRAFICO = 10;
 
     private final ClienteRepository clienteRepository;
+    private final Clock clock;
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
@@ -301,7 +303,7 @@ public class ClienteHistoricoService {
      */
     public ClienteGraficosResponse graficos(UUID clienteId, PapelCadastro papel, LocalDate de, LocalDate ate) {
         UUID usuarioId = validarCadastro(clienteId);
-        LocalDate fim = ate != null ? ate : LocalDate.now();
+        LocalDate fim = ate != null ? ate : LocalDate.now(clock);
         LocalDate inicio = de != null ? de : YearMonth.from(fim).minusMonths(11).atDay(1);
         if (inicio.isAfter(fim)) {
             throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
