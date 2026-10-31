@@ -4,6 +4,8 @@ import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.CriarProducaoVinculadaRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.PagamentoOrcamentoRequest;
+import com.penseprecifique.api.shared.dto.response.orcamento.PagamentoOrcamentoValidadoResponse;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.response.catalogo.ItemCatalogoBuscaResponse;
@@ -167,6 +169,14 @@ public class OrcamentoController {
             @PathVariable UUID id,
             @RequestParam(required = false) List<UUID> produtoIds) {
         return ResponseEntity.ok(orcamentoService.sugerirQuantidadesProducao(id, produtoIds));
+    }
+
+    /** V0.19.0 (#1185, UC-NOVO-4) — valida o passo Pagamento da aprovação sem gravar (a gravação é da #1174). */
+    @PostMapping("/{id}/pagamento/validar")
+    public ResponseEntity<PagamentoOrcamentoValidadoResponse> validarPagamento(
+            @PathVariable UUID id,
+            @Valid @RequestBody PagamentoOrcamentoRequest request) {
+        return ResponseEntity.ok(orcamentoService.validarPagamento(id, request));
     }
 
     @PostMapping("/{id}/avancar-status")

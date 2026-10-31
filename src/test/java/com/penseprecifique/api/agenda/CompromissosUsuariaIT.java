@@ -10,7 +10,6 @@ import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EscopoEdicaoCompromisso;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.RecorrenciaCompromisso;
 import com.penseprecifique.api.shared.domain.enums.SituacaoCompromisso;
 import com.penseprecifique.api.shared.domain.enums.TipoCompromisso;
@@ -386,7 +385,6 @@ class CompromissosUsuariaIT {
         item.setQuantidade(1);
         OrcamentoRequest o = new OrcamentoRequest();
         o.setClienteId(cliente.getId());
-        o.setMetodoPagamento(MetodoPagamento.PIX);
         o.setTemPrazoProducao(false);
         o.setItens(List.of(item));
         UUID orcamentoId = orcamentoService.criar(o).getId();

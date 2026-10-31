@@ -167,7 +167,7 @@ public class VendasService {
                     .map(i -> resumir(BigDecimal.valueOf(i.getQuantidade()), i.getProduto(), i.getItemCatalogo()))
                     .collect(Collectors.joining("; "));
             List<Pagamento> pagamentos = o.getMetodoPagamento() == null ? List.of()
-                    : List.of(new Pagamento(rotulo(o.getMetodoPagamento()), o.getTotal() != null ? o.getTotal() : BigDecimal.ZERO));
+                    : List.of(new Pagamento(CompraMapper.rotulo(o.getMetodoPagamento()), o.getTotal() != null ? o.getTotal() : BigDecimal.ZERO));
             vendas.add(a.venda(o.getId(), TipoVendaCmv.ORCAMENTO, IdentificadorFormatter.formatar("ORC", o.getNumero()),
                     o.getCliente().getNome(), resumo, o.getDataEntrega().toLocalDate(), o.getTotal(), linhas, pagamentos));
         }
@@ -230,18 +230,6 @@ public class VendasService {
         }
         return new LinhaProduto(produto != null ? produto.getId() : null, "PRODUTO",
                 produto != null ? produto.getNome() : "Item sem referência", produto != null ? produto.getMarca() : null, quantidade, faturamento, custo);
-    }
-
-    private static String rotulo(com.penseprecifique.api.shared.domain.enums.MetodoPagamento metodo) {
-        return switch (metodo) {
-            case PIX -> "Pix";
-            case DINHEIRO -> "Dinheiro";
-            case CREDITO -> "Cartão Crédito";
-            case DEBITO -> "Cartão Débito";
-            case TRANSFERENCIA -> "Transferência";
-            case BOLETO -> "Boleto";
-            case OUTRO -> "Outro";
-        };
     }
 
     private static String resumir(BigDecimal quantidade, Produto produto, ItemCatalogo itemCatalogo) {

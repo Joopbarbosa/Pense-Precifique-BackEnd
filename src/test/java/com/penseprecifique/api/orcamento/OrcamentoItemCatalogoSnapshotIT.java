@@ -13,7 +13,6 @@ import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoComponenteRequest;
 import com.penseprecifique.api.shared.dto.request.catalogo.ItemCatalogoRequest;
@@ -81,7 +80,6 @@ class OrcamentoItemCatalogoSnapshotIT {
         itemReq.setQuantidade(1);
         OrcamentoRequest orcamentoReq = new OrcamentoRequest();
         orcamentoReq.setClienteId(cliente.getId());
-        orcamentoReq.setMetodoPagamento(MetodoPagamento.PIX);
         orcamentoReq.setTemPrazoProducao(true);
         orcamentoReq.setPrazoProducaoDias(5);
         orcamentoReq.setItens(List.of(itemReq));
