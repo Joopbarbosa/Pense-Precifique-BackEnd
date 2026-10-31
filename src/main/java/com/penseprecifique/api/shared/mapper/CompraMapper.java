@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.CompraItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
+import com.penseprecifique.api.shared.domain.enums.StatusCompra;
 import com.penseprecifique.api.shared.domain.enums.TipoMetodoPagamento;
 import com.penseprecifique.api.shared.dto.response.compra.CadastroRefResponse;
 import com.penseprecifique.api.shared.dto.response.compra.CompraItemResponse;
@@ -34,7 +35,7 @@ public class CompraMapper {
                 compra.getDataCompra(),
                 Boolean.TRUE.equals(compra.getMultiplosFornecedores()),
                 toRef(compra.getFornecedor()),
-                Boolean.TRUE.equals(compra.getPago()),
+                pagoExibido(compra),
                 toRef(compra.getMetodoPagamento()),
                 compra.getObservacoes(),
                 compra.getOrigem(),
@@ -106,7 +107,7 @@ public class CompraMapper {
                 compra.getStatus(),
                 compra.getDataCompra(),
                 List.copyOf(fornecedores),
-                Boolean.TRUE.equals(compra.getPago()),
+                pagoExibido(compra),
                 total(itens),
                 itens.size(),
                 resumoItens(itens),
@@ -150,6 +151,11 @@ public class CompraMapper {
             return null;
         }
         return precoTotal.divide(quantidade, 4, RoundingMode.HALF_UP);
+    }
+
+    /** V0.19.0 (RN-NOVA-7) — Pago/Não pago só existe fora da compra CANCELADA; nela é nulo ("—"). */
+    public static Boolean pagoExibido(Compra compra) {
+        return compra.getStatus() == StatusCompra.CANCELADA ? null : Boolean.TRUE.equals(compra.getPago());
     }
 
     public static BigDecimal total(List<CompraItem> itens) {

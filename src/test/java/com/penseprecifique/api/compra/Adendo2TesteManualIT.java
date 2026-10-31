@@ -266,7 +266,7 @@ class Adendo2TesteManualIT {
                 new PagamentoCompraRequest(true, credito.getId(), 7)));
         assertNull(compraService.atualizarPagamento(c.id(), new PagamentoCompraRequest(true, pix.getId(), 3)).parcelas());
         assertEquals(1, compraService.atualizarPagamento(c.id(), new PagamentoCompraRequest(true, credito.getId(), null)).parcelas());
-        assertNull(compraService.atualizarPagamento(c.id(), new PagamentoCompraRequest(false, null, 2)).parcelas());
+        assertNull(compraService.atualizarPagamento(c.id(), new PagamentoCompraRequest(false, null, 2, LocalDate.now().plusDays(5))).parcelas());
     }
 
     @Test
