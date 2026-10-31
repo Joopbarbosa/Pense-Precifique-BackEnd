@@ -18,5 +18,12 @@ public interface LancamentoRepository extends JpaRepository<Lancamento, UUID> {
     @Query("SELECT l FROM Lancamento l WHERE l.id = :id AND l.usuario.id = :usuarioId")
     Optional<Lancamento> buscarParaAlterar(@Param("id") UUID id, @Param("usuarioId") UUID usuarioId);
 
+    /** V0.19.0 (#1173) — lançamento da compra (um por compra), com lock, para substituir/cancelar parcelas na transação da compra. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT l FROM Lancamento l WHERE l.compra.id = :compraId AND l.usuario.id = :usuarioId")
+    Optional<Lancamento> buscarDaCompraParaAlterar(@Param("compraId") UUID compraId, @Param("usuarioId") UUID usuarioId);
+
+    boolean existsByCompraIdAndUsuarioId(UUID compraId, UUID usuarioId);
+
     boolean existsByUsuarioId(UUID usuarioId);
 }

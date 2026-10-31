@@ -33,6 +33,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /** #688 CEN22/23/24: memória futura, tenant, fatores e filtros, banco test_* isolado. */
 @Transactional
 class HistoricoVinculoNotaIT extends NotaServicosSimulados {
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean com.penseprecifique.api.financeiro.SementeCategoriasService sementeCategorias;
+    @Autowired com.penseprecifique.api.financeiro.CategoriaFinanceiraRepository categoriasFin;
     @Autowired HistoricoVinculoNotaService historico;
     @Autowired VinculoItemNotaRepository vinculos;
     @Autowired UsuarioRepository usuarios;
@@ -53,6 +56,15 @@ class HistoricoVinculoNotaIT extends NotaServicosSimulados {
 
     @BeforeEach
     void preparar() {
+
+        // A semente real roda em transação própria e não enxerga a usuária ainda não gravada deste teste transacional.
+        org.mockito.Mockito.doAnswer(inv -> {
+            java.util.UUID id = inv.getArgument(0);
+            for (String n : java.util.List.of("Insumos e materiais", "Outros")) {
+                categoriasFin.semear(java.util.UUID.randomUUID(), id, n, n.toLowerCase());
+            }
+            return null;
+        }).when(sementeCategorias).garantir(org.mockito.ArgumentMatchers.any());
         LEITOR.resetAll(); IA.resetAll(); numero = 1;
         usuario = usuarios.save(Usuario.builder().email("historico688-" + UUID.randomUUID() + "@test.com").senhaHash("x").ativo(true).build());
         autenticar(usuario);
