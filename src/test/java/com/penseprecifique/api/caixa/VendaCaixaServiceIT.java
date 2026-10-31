@@ -372,17 +372,17 @@ class VendaCaixaServiceIT {
     void parcelamentoDentroDoMaximoCongelaATaxaVigente() {
         seedUsuario("parcela-ok");
         abrirTurno(new BigDecimal("100.00"));
-        Produto produto = criarProduto("Kit Presente", new BigDecimal("60.00"), new BigDecimal("10"), true);
+        Produto produto = criarProduto("Kit Presente", new BigDecimal("100.00"), new BigDecimal("10"), true);
         UUID creditoId = metodoIdPorTipo(TipoMetodoPagamento.CARTAO_CREDITO);
         metodoPagamentoService.atualizar(creditoId, new MetodoPagamentoConfiguravelUpdateRequestDTO(
-                null, new BigDecimal("2.50"), null, 3, true, null));
+                null, new BigDecimal("3.00"), null, 3, true, null));
 
         VendaCaixaResponseDTO venda = (VendaCaixaResponseDTO) vendaCaixaService.registrarVenda(new VendaCaixaRequestDTO(
                 null, List.of(new VendaCaixaItemRequestDTO(null, produto.getId(), BigDecimal.ONE, null)),
-                null, null, List.of(new VendaCaixaPagamentoRequestDTO(creditoId, new BigDecimal("60.00"), 3)), null));
+                null, null, List.of(new VendaCaixaPagamentoRequestDTO(creditoId, new BigDecimal("100.00"), 3)), null));
 
         assertEquals(3, venda.pagamentos().get(0).parcelas());
-        assertEquals(0, new BigDecimal("2.50").compareTo(venda.pagamentos().get(0).taxaPercentualAplicada()));
-        assertEquals(0, new BigDecimal("1.50").compareTo(venda.pagamentos().get(0).taxaValorAplicada()));
+        assertEquals(0, new BigDecimal("3.00").compareTo(venda.pagamentos().get(0).taxaPercentualAplicada()));
+        assertEquals(0, new BigDecimal("3.00").compareTo(venda.pagamentos().get(0).taxaValorAplicada()));
     }
 }
