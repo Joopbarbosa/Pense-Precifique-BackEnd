@@ -548,6 +548,32 @@ public class LancamentoFinanceiroService {
         }
     }
 
+    /** RN-NOVA-51 — resumo do que já foi efetivamente recebido do orçamento (parcelas Baixadas, exceto Multa). */
+    public record RecebidoDoOrcamento(BigDecimal valor, UUID metodoId) {}
+
+    @Transactional(readOnly = true)
+    public RecebidoDoOrcamento recebidoDoOrcamento(Orcamento orcamento) {
+        Usuario usuario = usuarioAutenticado();
+        Optional<Lancamento> lancamento = lancamentoRepository.buscarDoOrcamentoParaAlterar(orcamento.getId(), usuario.getId());
+        if (lancamento.isEmpty()) {
+            return new RecebidoDoOrcamento(BigDecimal.ZERO.setScale(2), null);
+        }
+        BigDecimal soma = BigDecimal.ZERO;
+        UUID metodoId = null;
+        LocalDate ultima = null;
+        for (Parcela p : parcelaRepository.findByLancamentoIdOrderByNumeroAsc(lancamento.get().getId())) {
+            if (p.getSituacao() != SituacaoParcela.BAIXADA || p.getPapel() == PapelParcela.MULTA) {
+                continue;
+            }
+            soma = soma.add(p.getValor());
+            if (p.getMetodoPagamento() != null && (ultima == null || p.getDataBaixa() == null || !p.getDataBaixa().isBefore(ultima))) {
+                metodoId = p.getMetodoPagamento().getId();
+                ultima = p.getDataBaixa();
+            }
+        }
+        return new RecebidoDoOrcamento(soma.setScale(2, java.math.RoundingMode.HALF_UP), metodoId);
+    }
+
     private static String descricaoDoOrcamento(Orcamento orcamento) {
         return "Orçamento " + com.penseprecifique.api.util.IdentificadorFormatter.formatar("ORC", orcamento.getNumero());
     }
