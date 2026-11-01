@@ -34,4 +34,6 @@ public class OrcamentoPdfData {
     private String total;
     private String observacoes;
     private List<ItemPdfData> itens;
+    // V0.19.0 #445: página 2 de condições de pagamento; nulo = sem página 2
+    private PdfMicroservicoCondicoesPayload condicoes;
 }
