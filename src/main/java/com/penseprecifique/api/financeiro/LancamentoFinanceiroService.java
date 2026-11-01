@@ -195,8 +195,9 @@ public class LancamentoFinanceiroService {
         if (total.compareTo(ValidacaoFinanceira.VALOR_MAXIMO) > 0) {
             throw BusinessException.noCampo("valor", ValidacaoFinanceira.MENSAGEM_VALOR);
         }
-        CategoriaFinanceira categoria = categoriaService.resolverParaLancamento(usuario.getId(), pedido.tipo(), pedido.origem(),
-                pedido.categoriaId());
+        // RN-NOVA-12: a saída do estorno do sinal nasce sem categoria; as demais despesas seguem a RN-NOVA-23
+        CategoriaFinanceira categoria = pedido.subtipo() == SubtipoLancamento.ESTORNO_SINAL && pedido.categoriaId() == null ? null
+                : categoriaService.resolverParaLancamento(usuario.getId(), pedido.tipo(), pedido.origem(), pedido.categoriaId());
         Lancamento lancamento = Lancamento.builder()
                 .usuario(usuario).categoria(categoria).tipo(pedido.tipo()).descricao(descricao).origem(pedido.origem()).valorTotal(total.setScale(2)).subtipo(pedido.subtipo())
                 .compra(pedido.origem() == OrigemLancamento.COMPRA ? compraRepository
