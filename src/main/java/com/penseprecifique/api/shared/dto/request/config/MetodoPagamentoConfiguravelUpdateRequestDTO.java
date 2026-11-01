@@ -10,6 +10,9 @@ import java.util.List;
 
 public record MetodoPagamentoConfiguravelUpdateRequestDTO(
         Boolean ativo,
+        @jakarta.validation.constraints.DecimalMin(value = "0", message = "A taxa deve estar entre 0% e 100%.")
+        @jakarta.validation.constraints.DecimalMax(value = "100", message = "A taxa deve estar entre 0% e 100%.")
+        @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "A taxa deve estar entre 0% e 100%.")
         BigDecimal taxaMaquininha,
         @Size(max = 100, message = "O nome do método de pagamento pode ter no máximo 100 caracteres")
         String nome,

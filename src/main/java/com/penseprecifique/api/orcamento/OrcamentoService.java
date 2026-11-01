@@ -1658,6 +1658,7 @@ public class OrcamentoService {
         boolean tocaFinanceiro = true;
         BigDecimal estornoValor = null;
         LocalDate estornoData = null;
+        UUID estornoMetodoId = null;
         BigDecimal multaAReceber = null;
         // Já cancelado cai no erro de negócio do switch; as decisões só são validadas quando há o que decidir.
         Map<UUID, Boolean> decisoes = atual == StatusOrcamento.CANCELADO
@@ -1714,9 +1715,21 @@ public class OrcamentoService {
                     throw new BusinessException(
                             "A justificativa é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
                 }
+                // V0.19.0 (#692, RN-NOVA-51) — duas decisões separadas, ambas obrigatórias
+                if (request.getEstornarValorRecebido() == null || request.getDevolverEstoque() == null) {
+                    throw new BusinessException("Responda se o valor recebido será estornado e se os insumos voltam ao estoque.");
+                }
                 orcamento.setCancelamentoTipo(TipoCancelamento.JUSTIFICATIVA);
                 orcamento.setCancelamentoMotivo(justificativa);
-                tocaFinanceiro = false; // dinheiro já recebido: tratado na tarefa PP-692
+                if (Boolean.TRUE.equals(request.getEstornarValorRecebido())) {
+                    LancamentoFinanceiroService.RecebidoDoOrcamento recebido = lancamentoFinanceiroService.recebidoDoOrcamento(orcamento);
+                    estornoValor = recebido.valor();
+                    estornoData = LocalDate.now(clock);
+                    estornoMetodoId = recebido.metodoId();
+                }
+                if (Boolean.TRUE.equals(request.getDevolverEstoque())) {
+                    reverterEstoque(orcamento, justificativa);
+                }
                 break;
 
             case CANCELADO:
@@ -1732,8 +1745,9 @@ public class OrcamentoService {
         if (tocaFinanceiro) {
             MetodoPagamentoConfiguravel metodoEstorno = orcamento.getMetodoSinalRecebido() != null
                     ? orcamento.getMetodoSinalRecebido() : orcamento.getMetodoPagamento();
+            UUID metodoId = estornoMetodoId != null ? estornoMetodoId : (metodoEstorno == null ? null : metodoEstorno.getId());
             lancamentoFinanceiroService.cancelarDoOrcamento(orcamento, estornoValor, estornoData,
-                    metodoEstorno == null ? null : metodoEstorno.getId(), multaAReceber, LocalDate.now(clock));
+                    metodoId, multaAReceber, LocalDate.now(clock));
         }
         aplicarDecisoesProducaoNoCancelamento(orcamento, decisoes);
         return montarDetalhe(orcamento);
@@ -2076,11 +2090,14 @@ public class OrcamentoService {
     }
 
     private BigDecimal calcularValorSinal(BigDecimal total, OrcamentoRequest request) {
-        if (request.getPercentualSinal() != null) {
-            return total.multiply(request.getPercentualSinal())
-                    .divide(CEM, 2, RoundingMode.HALF_UP);
+        BigDecimal valor = request.getPercentualSinal() != null
+                ? total.multiply(request.getPercentualSinal()).divide(CEM, 2, RoundingMode.HALF_UP)
+                : request.getValorSinal();
+        // V0.19.0 (#696, RN-NOVA-39) — sinal de até 100% do total é aceito; acima é recusado
+        if (valor != null && total != null && valor.compareTo(total) > 0) {
+            throw new BusinessException("O sinal não pode ser maior que o total do orçamento.");
         }
-        return request.getValorSinal();
+        return valor;
     }
 
     /** RN-NOVA-1 (V0.8.2) — resultado do cálculo de multa: valor final cobrado + valor devolvido (mini-estorno). */

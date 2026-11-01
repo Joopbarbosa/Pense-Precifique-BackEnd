@@ -88,7 +88,7 @@ class OrcamentoPagamentoFinanceiroIT {
         pix = MetodosPagamentoTeste.pix(metodos, usuario);
         dinheiro = MetodosPagamentoTeste.criar(metodos, usuario, TipoMetodoPagamento.DINHEIRO, true);
         UnidadeMedida un = unidadeMedidaRepository.findAll().stream().findFirst().orElseGet(() ->
-                unidadeMedidaRepository.save(UnidadeMedida.builder().sigla("g").nome("grama").build()));
+                unidadeMedidaRepository.save(UnidadeMedida.builder().usuario(usuario).sigla("g").nome("grama").build()));
         produto = produtoRepository.save(Produto.builder().usuario(usuario).numero(1).nome("Produto").tipo(TipoProduto.PRODUTO)
                 .tempoProducao(30).estoqueAtual(new BigDecimal("100")).permitirEstoqueNegativo(true).rendimento(new BigDecimal("10"))
                 .precoVenda(new BigDecimal("300.00")).build());
@@ -509,5 +509,132 @@ class OrcamentoPagamentoFinanceiroIT {
         orcamentoService.cancelar(id, cancelamento());
         assertEquals(StatusOrcamento.CANCELADO, status(id));
         assertTrue(lancamentos.findByOrcamentoIdAndUsuarioIdAndSubtipoIsNull(id, usuario.getId()).isEmpty());
+    }
+
+    // --------------------------------------------------------------------------------------------- PP-692 (RN-NOVA-51; CEN-NOVO-77, 78)
+
+    /** Orçamento sem sinal, atalho -> FINALIZADO -> PAGO (estoque já baixado). */
+    private UUID pagoComEstoqueBaixado() {
+        UUID id = enviado(false);
+        aprovar(id, pagamento(false, null));
+        avancar(id); // FINALIZADO -> PAGO
+        assertEquals(StatusOrcamento.PAGO, status(id));
+        return id;
+    }
+
+    private AvancaStatusRequest cancelarPago(Boolean estornar, Boolean devolver) {
+        AvancaStatusRequest r = new AvancaStatusRequest();
+        r.setMotivoCancelamento("Cliente devolveu o pedido");
+        r.setJustificativa("Cliente devolveu o pedido por defeito de fabricacao");
+        r.setEstornarValorRecebido(estornar);
+        r.setDevolverEstoque(devolver);
+        return r;
+    }
+
+    private BigDecimal estoqueDoProduto() {
+        return produtoRepository.findById(produto.getId()).orElseThrow().getEstoqueAtual();
+    }
+
+    @Test
+    void cancelarPagoEstornandoEDevolvendoAoEstoqueRegistraSaidaPagaESaldoLiquidoZero() {
+        UUID id = pagoComEstoqueBaixado();
+        BigDecimal antes = estoqueDoProduto();
+        orcamentoService.cancelar(id, cancelarPago(true, true));
+        assertEquals(StatusOrcamento.CANCELADO, status(id));
+        assertEquals(SituacaoParcela.BAIXADA, parcela(id, PapelParcela.TOTAL).situacao());
+        List<Lancamento> estornos = lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL);
+        assertEquals(1, estornos.size());
+        assertValor("300.00", estornos.get(0).getValorTotal());
+        assertEquals(1, parcelaRepository.findByLancamentoIdOrderByNumeroAsc(estornos.get(0).getId()).stream()
+                .filter(x -> x.getSituacao() == SituacaoParcela.BAIXADA).count());
+        assertTrue(estoqueDoProduto().compareTo(antes) > 0, "estoque deveria voltar");
+    }
+
+    @Test
+    void cancelarEntregueEstornandoSemDevolverNaoMexeNoEstoque() {
+        UUID id = pagoComEstoqueBaixado();
+        avancar(id); // PAGO -> ENTREGUE
+        assertEquals(StatusOrcamento.ENTREGUE, status(id));
+        BigDecimal antes = estoqueDoProduto();
+        orcamentoService.cancelar(id, cancelarPago(true, false));
+        assertEquals(StatusOrcamento.CANCELADO, status(id));
+        assertEquals(1, lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL).size());
+        assertEquals(0, antes.compareTo(estoqueDoProduto()));
+    }
+
+    @Test
+    void cancelarPagoSemEstornarMantemRecebidoESemSaidaMasDevolveEstoque() {
+        UUID id = pagoComEstoqueBaixado();
+        BigDecimal antes = estoqueDoProduto();
+        orcamentoService.cancelar(id, cancelarPago(false, true));
+        assertEquals(StatusOrcamento.CANCELADO, status(id));
+        assertEquals(SituacaoParcela.BAIXADA, parcela(id, PapelParcela.TOTAL).situacao());
+        assertTrue(lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL).isEmpty());
+        assertTrue(estoqueDoProduto().compareTo(antes) > 0);
+    }
+
+    @Test
+    void cancelarPagoComSinalEstornaSinalMaisSaldo() {
+        UUID id = enviado(true);
+        aprovarComSinalAteEmProducao(id, "90.00");
+        finalizarProducoes();
+        avancar(id); // FINALIZADO
+        AvancaStatusRequest recebi = new AvancaStatusRequest();
+        recebi.setMetodoRecebidoId(dinheiro.getId());
+        orcamentoService.avancarStatus(id, recebi); // PAGO
+        orcamentoService.cancelar(id, cancelarPago(true, false));
+        List<Lancamento> estornos = lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL);
+        assertEquals(1, estornos.size());
+        assertValor("300.00", estornos.get(0).getValorTotal());
+    }
+
+    @Test
+    void cancelarPagoSemResponderAsDuasPerguntasEBloqueioENadaMuda() {
+        UUID id = pagoComEstoqueBaixado();
+        BigDecimal antes = estoqueDoProduto();
+        assertThrows(BusinessException.class, () -> orcamentoService.cancelar(id, cancelarPago(null, null)));
+        assertThrows(BusinessException.class, () -> orcamentoService.cancelar(id, cancelarPago(true, null)));
+        assertThrows(BusinessException.class, () -> orcamentoService.cancelar(id, cancelarPago(null, false)));
+        assertEquals(StatusOrcamento.PAGO, status(id));
+        assertTrue(lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL).isEmpty());
+        assertEquals(0, antes.compareTo(estoqueDoProduto()));
+    }
+
+    // --------------------------------------------------------------------------------------------- PP-692 CEN-NOVO-88 / PP-696 CEN-NOVO-45
+
+    @Test
+    void multaDeCemPorCentoComSinalMantemORecebidoEViraMultaAReceber() {
+        UUID id = enviado(true);
+        aprovarComSinalAteEmProducao(id, "100.00");
+        AvancaStatusRequest r = cancelamento();
+        r.setPercentualMulta(new BigDecimal("100"));
+        orcamentoService.cancelar(id, r);
+        assertValor("200.00", parcela(id, PapelParcela.MULTA).valor());
+        assertEquals(SituacaoParcela.EM_ABERTO, parcela(id, PapelParcela.MULTA).situacao());
+        assertEquals(SituacaoParcela.BAIXADA, parcela(id, PapelParcela.SINAL).situacao());
+        assertTrue(lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL).isEmpty());
+    }
+
+    @Test
+    void sinalDeCemPorCentoPorPercentualNaoGeraSaldoEVaiAPago() {
+        OrcamentoItemRequest item = new OrcamentoItemRequest();
+        item.setProdutoId(produto.getId());
+        item.setMargemAplicada(BigDecimal.ZERO);
+        item.setPrecoUnitario(new BigDecimal("300.00"));
+        item.setQuantidade(1);
+        OrcamentoRequest req = new OrcamentoRequest();
+        req.setClienteId(cliente.getId());
+        req.setTemPrazoProducao(true);
+        req.setPrazoProducaoDias(5);
+        req.setItens(List.of(item));
+        req.setSinalAtivo(true);
+        req.setPercentualSinal(new BigDecimal("100"));
+        UUID id = orcamentoService.criar(req).getId();
+        assertValor("300.00", orcamentoService.buscarPorId(id).getValorSinal());
+        req.setPercentualSinal(new BigDecimal("100.01"));
+        assertThrows(BusinessException.class, () -> orcamentoService.criar(req));
+        req.setPercentualSinal(null);
+        req.setValorSinal(new BigDecimal("300.01"));
+        assertThrows(BusinessException.class, () -> orcamentoService.criar(req));
     }
 }

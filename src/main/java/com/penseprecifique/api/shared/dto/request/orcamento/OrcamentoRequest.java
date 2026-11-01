@@ -41,7 +41,10 @@ public class OrcamentoRequest {
     private boolean sinalAtivo = false;
     /** RN-NOVA-12 (V0.18.0) — "Sinal até"; só com sinal ativo e não anterior a hoje (salvo o valor já gravado). */
     private LocalDate sinalAte;
+    @jakarta.validation.constraints.DecimalMax(value = "100", message = "O sinal não pode ser maior que 100% do total.")
+    @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "O percentual do sinal deve ter no máximo duas casas decimais.")
     private BigDecimal percentualSinal;
+    @jakarta.validation.constraints.Digits(integer = 10, fraction = 2, message = "O valor do sinal deve ter no máximo duas casas decimais.")
     private BigDecimal valorSinal;
 
     private String tipoDesconto = "PERCENTUAL";

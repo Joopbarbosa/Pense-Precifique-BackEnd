@@ -22,8 +22,18 @@ public class AvancaStatusRequest {
     @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String motivoCancelamento;
     private TipoCancelamento tipoCancelamento;
+    /** V0.19.0 (#692, RN-NOVA-50) — ausente = cancelar sem multa; informado, precisa ser maior que 0 e até 100 (do total). */
+    @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "Informe uma multa maior que zero ou escolha cancelar sem multa.")
+    @jakarta.validation.constraints.DecimalMax(value = "100", message = "A multa não pode ser maior que o total do orçamento.")
+    @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "A multa deve ter no máximo duas casas decimais.")
     private BigDecimal percentualMulta;
     private boolean estornarSinal;
+
+    /** V0.19.0 (#692, RN-NOVA-51) — cancelar PAGO/ENTREGUE: estornar o valor recebido? Obrigatório nesses status. */
+    private Boolean estornarValorRecebido;
+
+    /** V0.19.0 (#692, RN-NOVA-51) — cancelar PAGO/ENTREGUE: devolver os insumos ao estoque? Obrigatório nesses status. */
+    private Boolean devolverEstoque;
     private LocalDateTime dataEstornoSinal;
 
     @io.swagger.v3.oas.annotations.media.Schema(minLength = 30, maxLength = LimitesTexto.DESCRICAO_MAX) // #788: mínimo no contrato
