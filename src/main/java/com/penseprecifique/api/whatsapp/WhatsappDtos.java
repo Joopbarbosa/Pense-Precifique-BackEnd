@@ -16,7 +16,12 @@ public final class WhatsappDtos {
 
     public record EnvioRequest(TipoDocumentoWhatsapp tipoDocumento, UUID documentoId, UUID clienteId,
                                String numero, Boolean confirmoAceite, String legenda,
-                               Boolean confirmaPrecosFornecedor) { }
+                               Boolean confirmaPrecosFornecedor, Boolean reenviarSegundaParte) {
+        public EnvioRequest(TipoDocumentoWhatsapp tipoDocumento, UUID documentoId, UUID clienteId,
+                            String numero, Boolean confirmoAceite, String legenda, Boolean confirmaPrecosFornecedor) {
+            this(tipoDocumento, documentoId, clienteId, numero, confirmoAceite, legenda, confirmaPrecosFornecedor, false);
+        }
+    }
 
     public record EnvioResponse(ResultadoEnvio resultado, Instant enviadoEm, int enviadosHoje, int limiteDiario) { }
 

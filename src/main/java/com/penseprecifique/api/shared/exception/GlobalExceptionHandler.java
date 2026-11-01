@@ -34,6 +34,22 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.penseprecifique.api.pdf.PdfMicroservicoClient.PdfControleException.class)
+    public ResponseEntity<Map<String, Object>> handleControlePdf(
+            com.penseprecifique.api.pdf.PdfMicroservicoClient.PdfControleException ex) {
+        int status = "AVISO".equals(ex.getTipo()) ? 409 : 413;
+        return ResponseEntity.status(status).body(Map.of(
+                "tipo", ex.getTipo(), "message", ex.getMessage(),
+                "totalPaginas", ex.getTotalPaginas(), "dividirDisponivel", ex.isDividirDisponivel()));
+    }
+
+    @ExceptionHandler(com.penseprecifique.api.whatsapp.WhatsappEnvioService.SegundaParteWhatsappException.class)
+    public ResponseEntity<Map<String, Object>> handleFalhaSegundaParteWhatsapp(
+            com.penseprecifique.api.whatsapp.WhatsappEnvioService.SegundaParteWhatsappException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
+                "message", ex.getMessage(), "primeiraParteEnviada", true, "reenviarSegundaParteDisponivel", true));
+    }
+
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponseDTO> handleBusinessException(BusinessException ex) {
         return ResponseEntity.badRequest().body(new ErrorResponseDTO(

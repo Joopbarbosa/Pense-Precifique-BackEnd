@@ -18,6 +18,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PdfService {
 
+    private record PayloadWhatsapp(String tipoPdf, Object payload) { }
+
     private final PdfMicroservicoClient pdfMicroservicoClient;
     private final OrcamentoPdfPayloadService orcamentoPdfPayloadService;
     private final ReciboPdfPayloadService reciboPdfPayloadService;
@@ -39,6 +41,27 @@ public class PdfService {
     public byte[] gerarPdfOrcamento(UUID orcamentoId) {
         PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
         return pdfMicroservicoClient.gerarPdf("orcamento", orcamentoId, payload);
+    }
+
+    public PdfMicroservicoClient.PdfGeracaoResultado gerarPdfOrcamentoControlado(UUID orcamentoId, boolean dividir) {
+        PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
+        return pdfMicroservicoClient.gerarPdfControlado("orcamento", orcamentoId, payload, dividir);
+    }
+
+    public PdfMicroservicoClient.PdfGeracaoResultado gerarPdfWhatsapp(String tipo, UUID id, boolean dividir) {
+        PayloadWhatsapp documento = switch (tipo) {
+            case "ORCAMENTO" -> new PayloadWhatsapp("orcamento", orcamentoPdfPayloadService.montarPayloadOrcamento(id));
+            case "RECIBO_SINAL" -> new PayloadWhatsapp("recibo-sinal", reciboPdfPayloadService.montarPayloadReciboSinal(id));
+            case "RECIBO_PAGAMENTO" -> new PayloadWhatsapp("recibo-pagamento", reciboPagamentoPdfPayloadService.montarPayloadReciboPagamento(id));
+            case "MULTA" -> new PayloadWhatsapp("pdf-multa", reciboPdfPayloadService.montarPayloadPdfMulta(id));
+            case "ESTORNO_SINAL" -> new PayloadWhatsapp("recibo-estorno", reciboPdfPayloadService.montarPayloadReciboEstorno(id));
+            case "RECIBO_CAIXA" -> new PayloadWhatsapp("recibo-caixa", reciboCaixaPdfPayloadService.montarPayload(id));
+            case "COMPRA" -> new PayloadWhatsapp("compra", comprasPdfPayloadService.montarPayloadCompra(id));
+            case "LISTA_COMPRAS" -> new PayloadWhatsapp("lista-compras", comprasPdfPayloadService.montarPayloadListaCompras(id));
+            case "CATALOGO" -> new PayloadWhatsapp("catalogo", catalogoPdfPayloadService.montarPayloadCatalogo(id));
+            default -> throw new IllegalArgumentException("Tipo de documento WhatsApp inválido.");
+        };
+        return pdfMicroservicoClient.gerarPdfControlado(documento.tipoPdf(), id, documento.payload(), dividir);
     }
 
     /**

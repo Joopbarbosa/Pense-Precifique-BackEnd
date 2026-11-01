@@ -204,13 +204,22 @@ public class OrcamentoController {
     }
 
     @GetMapping("/{id}/pdf")
-    public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
-        byte[] pdf = pdfService.gerarPdfOrcamento(id);
+    public ResponseEntity<?> downloadPdf(@PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean dividir) {
+        var resultado = pdfService.gerarPdfOrcamentoControlado(id, dividir);
+        if (!resultado.partes().isEmpty()) {
+            return ResponseEntity.ok(new DivisaoPdfResponse(resultado.totalPaginas(), resultado.partes().stream()
+                    .map(parte -> new PartePdfResponse(parte.numeroParte(), parte.totalPaginas(), parte.bytes()))
+                    .toList()));
+        }
         return ResponseEntity.ok()
                 .header("Content-Type", "application/pdf")
                 .header("Content-Disposition", "attachment; filename=orcamento.pdf")
-                .body(pdf);
+                .body(resultado.pdf());
     }
+
+    public record DivisaoPdfResponse(int totalPaginas, java.util.List<PartePdfResponse> partes) { }
+    public record PartePdfResponse(int numeroParte, int totalPaginas, byte[] pdf) { }
 
     @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> previewHtml(@PathVariable UUID id) {

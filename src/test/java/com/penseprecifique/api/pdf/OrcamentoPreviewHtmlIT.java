@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
@@ -140,5 +141,57 @@ class OrcamentoPreviewHtmlIT {
                 .andExpect(content().contentTypeCompatibleWith("application/json"))
                 .andExpect(jsonPath("$.message").value(
                         "Geração de documento temporariamente indisponível. Tente novamente em instantes."));
+    }
+
+    @Test
+    @Transactional
+    void avisoDeOnzePaginasERepeticaoConfirmadaEntregamDuasPartes() throws Exception {
+        ContextoOrcamento ctx = criarOrcamentoSimples();
+        String base64 = java.util.Base64.getEncoder().encodeToString("%PDF-parte".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        wireMockServer.stubFor(post(urlPathMatching("/render/orcamento/.*"))
+                .withQueryParam("dividir", equalTo("false"))
+                .willReturn(aResponse().withStatus(409).withHeader("Content-Type", "application/json")
+                        .withHeader("X-Pdf-Page-Count", "11")
+                        .withBody("{\"tipo\":\"AVISO\",\"message\":\"Este documento tem mais de 10 páginas.\",\"totalPaginas\":11,\"dividirDisponivel\":true}")));
+        wireMockServer.stubFor(post(urlPathMatching("/render/orcamento/.*"))
+                .withQueryParam("dividir", equalTo("true"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withHeader("X-Pdf-Page-Count", "11")
+                        .withBody("{\"totalPaginas\":11,\"partes\":[{\"numeroParte\":1,\"totalPaginas\":6,\"pdfBase64\":\"" + base64
+                                + "\"},{\"numeroParte\":2,\"totalPaginas\":5,\"pdfBase64\":\"" + base64 + "\"}]}")));
+
+        mockMvc.perform(get("/orcamentos/{id}/pdf", ctx.orcamentoId()).header("Authorization", "Bearer " + ctx.token()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.tipo").value("AVISO"))
+                .andExpect(jsonPath("$.totalPaginas").value(11)).andExpect(jsonPath("$.dividirDisponivel").value(true));
+        mockMvc.perform(get("/orcamentos/{id}/pdf", ctx.orcamentoId()).param("dividir", "true")
+                        .header("Authorization", "Bearer " + ctx.token()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalPaginas").value(11))
+                .andExpect(jsonPath("$.partes[0].numeroParte").value(1)).andExpect(jsonPath("$.partes[0].totalPaginas").value(6))
+                .andExpect(jsonPath("$.partes[1].numeroParte").value(2)).andExpect(jsonPath("$.partes[1].totalPaginas").value(5));
+    }
+
+    @Test
+    @Transactional
+    void entradaHostilDoDownloadERespostaIdorNaoRevelamDados() throws Exception {
+        ContextoOrcamento ctx = criarOrcamentoSimples();
+        mockMvc.perform(get("/orcamentos/not-a-uuid/pdf").header("Authorization", "Bearer " + ctx.token()))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/orcamentos/{id}/pdf", ctx.orcamentoId()).param("dividir", "5e999")
+                        .header("Authorization", "Bearer " + ctx.token()))
+                .andExpect(status().isBadRequest());
+
+        Usuario outra = usuarioRepository.save(Usuario.builder().email("pdf-outro-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String tokenOutraConta = jwtTokenProvider.generateToken(outra);
+        String idInexistente = UUID.randomUUID().toString();
+        var idor = mockMvc.perform(get("/orcamentos/{id}/pdf", ctx.orcamentoId())
+                        .header("Authorization", "Bearer " + tokenOutraConta)).andReturn().getResponse();
+        var inexistente = mockMvc.perform(get("/orcamentos/{id}/pdf", idInexistente)
+                        .header("Authorization", "Bearer " + tokenOutraConta)).andReturn().getResponse();
+        org.junit.jupiter.api.Assertions.assertEquals(404, idor.getStatus());
+        var jackson = new com.fasterxml.jackson.databind.ObjectMapper();
+        org.junit.jupiter.api.Assertions.assertEquals(
+                jackson.readTree(idor.getContentAsString()).get("message").asText(),
+                jackson.readTree(inexistente.getContentAsString()).get("message").asText());
     }
 }
