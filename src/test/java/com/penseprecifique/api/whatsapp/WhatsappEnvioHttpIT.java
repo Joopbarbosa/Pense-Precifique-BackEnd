@@ -1,5 +1,6 @@
 package com.penseprecifique.api.whatsapp;
 
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.dto.response.caixa.VendaCaixaResponseDTO;
 import org.junit.jupiter.api.AfterAll;
@@ -99,6 +100,80 @@ class WhatsappEnvioHttpIT extends WhatsappTestBase {
         assertEquals("5511912345678", hist.get(0).getNumero());
         assertTrue(hist.get(0).isConsentimentoConfirmado());
         assertEquals(ResultadoEnvio.ENVIADO, hist.get(0).getResultado());
+    }
+
+    @Test
+    void documentoDeOnzePaginasEnviaAsDuasPartesEmSequenciaComUmaConfirmacao() throws Exception {
+        Conta c = contaConectada("wa-pdf-partes");
+        VendaCaixaResponseDTO venda = vender(c);
+        String base64 = java.util.Base64.getEncoder().encodeToString("%PDF-parte".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        FALSO.stubFor(post(urlPathMatching("/render/recibo-caixa/.*"))
+                .withQueryParam("dividir", equalTo("false"))
+                .willReturn(aResponse().withStatus(409).withHeader("Content-Type", "application/json")
+                        .withBody("{\"tipo\":\"AVISO\",\"message\":\"Aviso de páginas\",\"totalPaginas\":11,\"dividirDisponivel\":true}")));
+        FALSO.stubFor(post(urlPathMatching("/render/recibo-caixa/.*"))
+                .withQueryParam("dividir", equalTo("true"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"totalPaginas\":11,\"partes\":[{\"numeroParte\":1,\"totalPaginas\":6,\"pdfBase64\":\"" + base64
+                                + "\"},{\"numeroParte\":2,\"totalPaginas\":5,\"pdfBase64\":\"" + base64 + "\"}]}")));
+
+        enviar(c, corpoEnvio(venda.id(), "\"numero\":\"11912345678\",\"confirmoAceite\":true"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.resultado").value("ENVIADO"));
+
+        FALSO.verify(2, postRequestedFor(urlPathMatching("/message/sendMedia/.*")));
+        var envios = FALSO.findAll(postRequestedFor(urlPathMatching("/message/sendMedia/.*")));
+        assertTrue(envios.get(0).getBodyAsString().contains("parte 1 de 2"));
+        assertTrue(envios.get(1).getBodyAsString().contains("parte 2 de 2"));
+    }
+
+    @Test
+    void seSegundaParteFalhaPermiteReenviarSomenteEla() throws Exception {
+        Conta c = contaConectada("wa-pdf-retry-parte2");
+        VendaCaixaResponseDTO venda = vender(c);
+        String base64 = java.util.Base64.getEncoder().encodeToString("%PDF-parte".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        FALSO.stubFor(post(urlPathMatching("/render/recibo-caixa/.*"))
+                .withQueryParam("dividir", equalTo("false"))
+                .willReturn(aResponse().withStatus(409).withHeader("Content-Type", "application/json")
+                        .withBody("{\"tipo\":\"AVISO\",\"message\":\"Aviso de páginas\",\"totalPaginas\":11,\"dividirDisponivel\":true}")));
+        FALSO.stubFor(post(urlPathMatching("/render/recibo-caixa/.*"))
+                .withQueryParam("dividir", equalTo("true"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"totalPaginas\":11,\"partes\":[{\"numeroParte\":1,\"totalPaginas\":6,\"pdfBase64\":\"" + base64
+                                + "\"},{\"numeroParte\":2,\"totalPaginas\":5,\"pdfBase64\":\"" + base64 + "\"}]}")));
+        FALSO.stubFor(post(urlPathMatching("/message/sendMedia/.*")).atPriority(1)
+                .inScenario("falha-na-segunda-parte").whenScenarioStateIs(Scenario.STARTED)
+                .willReturn(aResponse().withStatus(201).withBody("{}"))
+                .willSetStateTo("parte-um-enviada"));
+        FALSO.stubFor(post(urlPathMatching("/message/sendMedia/.*")).atPriority(1)
+                .inScenario("falha-na-segunda-parte").whenScenarioStateIs("parte-um-enviada")
+                .willReturn(aResponse().withStatus(500).withBody("falha simulada"))
+                .willSetStateTo("segunda-parte-falhou"));
+        FALSO.stubFor(post(urlPathMatching("/message/sendMedia/.*")).atPriority(1)
+                .inScenario("falha-na-segunda-parte").whenScenarioStateIs("segunda-parte-falhou")
+                .willReturn(aResponse().withStatus(201).withBody("{}")));
+
+        enviar(c, corpoEnvio(venda.id(), "\"numero\":\"11912345678\",\"confirmoAceite\":true"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.primeiraParteEnviada").value(true))
+                .andExpect(jsonPath("$.reenviarSegundaParteDisponivel").value(true));
+        enviar(c, corpoEnvio(venda.id(), "\"numero\":\"11912345678\",\"confirmoAceite\":true,\"reenviarSegundaParte\":true"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.resultado").value("ENVIADO"));
+
+        var mensagens = FALSO.findAll(postRequestedFor(urlPathMatching("/message/sendMedia/.*")));
+        assertEquals(3, mensagens.size());
+        assertTrue(mensagens.get(0).getBodyAsString().contains("parte 1 de 2"));
+        assertTrue(mensagens.get(1).getBodyAsString().contains("parte 2 de 2"));
+        assertTrue(mensagens.get(2).getBodyAsString().contains("parte 2 de 2"));
+    }
+
+    @Test
+    void pedidoHostilDeReenvioDaSegundaParteSemDivisaoRetorna400() throws Exception {
+        Conta c = contaConectada("wa-pdf-parte2-hostil");
+        VendaCaixaResponseDTO venda = vender(c);
+        enviar(c, corpoEnvio(venda.id(), "\"numero\":\"11912345678\",\"confirmoAceite\":true,\"reenviarSegundaParte\":true"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Este envio não tem uma segunda parte para reenviar."));
+        FALSO.verify(0, postRequestedFor(urlPathMatching("/message/sendMedia/.*")));
     }
 
     @Test
