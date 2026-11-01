@@ -149,7 +149,7 @@ public class PdfMapper {
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
             .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
-            .metodoPagamento(formatarMetodoPagamento(orc.getMetodoPagamento()))
+            .metodoPagamento(formatarMetodoPagamento(recibo.getMetodoPagamento() != null ? recibo.getMetodoPagamento() : orc.getMetodoPagamento()))
             .valorTotal(formatarMoeda(recibo.getValorTotal()))
             .valorSinalPago(formatarMoeda(recibo.getValorSinalPago()))
             .valorRestantePago(formatarMoeda(recibo.getValorRestantePago()))

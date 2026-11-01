@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.catalogo.CatalogoRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
@@ -167,7 +168,7 @@ class OrcamentoEditarRascunhoIT {
         OrcamentoRequest criacao = requestBase(List.of(itemAvulso(produto, new BigDecimal("100.00"), 1)));
         OrcamentoDetalheResponse criado = orcamentoService.criar(criacao);
 
-        orcamentoService.avancarStatus(criado.getId(), new com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, criado.getId(), new com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest()); // RASCUNHO -> ENVIADO
 
         OrcamentoRequest edicao = requestBase(List.of(itemAvulso(produto, new BigDecimal("100.00"), 1)));
         BusinessException ex = assertThrows(BusinessException.class,

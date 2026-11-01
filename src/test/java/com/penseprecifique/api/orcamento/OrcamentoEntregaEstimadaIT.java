@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -76,7 +77,7 @@ class OrcamentoEntregaEstimadaIT {
     }
 
     private void avancar(UUID id, AvancaStatusRequest req) {
-        orcamentoService.avancarStatus(id, req);
+        AprovacaoTeste.avancar(orcamentoService, id, req);
     }
 
     /** CEN-NOVO-17 e CEN-NOVO-13 — com sinal ativo, sem entrega estimada até o sinal ser pago; depois conta dele. */

@@ -171,7 +171,15 @@ public class OrcamentoController {
         return ResponseEntity.ok(orcamentoService.sugerirQuantidadesProducao(id, produtoIds));
     }
 
-    /** V0.19.0 (#1185, UC-NOVO-4) — valida o passo Pagamento da aprovação sem gravar (a gravação é da #1174). */
+    /** V0.19.0 (#1174, RN-NOVA-41, UC-NOVO-5) — "Alterar pagamento" depois de aprovado (só sem parcela recebida). */
+    @PutMapping("/{id}/pagamento")
+    public ResponseEntity<OrcamentoDetalheResponse> alterarPagamento(
+            @PathVariable UUID id,
+            @Valid @RequestBody PagamentoOrcamentoRequest request) {
+        return ResponseEntity.ok(orcamentoService.alterarPagamento(id, request));
+    }
+
+    /** V0.19.0 (#1185, UC-NOVO-4) — valida o passo Pagamento da aprovação sem gravar (a gravação é feita na transação de aprovação, #1174). */
     @PostMapping("/{id}/pagamento/validar")
     public ResponseEntity<PagamentoOrcamentoValidadoResponse> validarPagamento(
             @PathVariable UUID id,

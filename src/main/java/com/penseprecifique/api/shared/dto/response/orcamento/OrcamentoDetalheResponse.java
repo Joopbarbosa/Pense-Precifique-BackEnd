@@ -17,6 +17,8 @@ import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 public class OrcamentoDetalheResponse {
 
     private UUID id;
+    /** V0.19.0 (#1174, RN-NOVA-10/11) — parcelas a receber do orçamento (Sinal, Saldo/Total, Multa); vazio nos anteriores à versão. */
+    private List<com.penseprecifique.api.financeiro.ParcelaOrcamentoResponse> parcelas;
     private Integer numero;
     private UUID clienteId;
     private String nomeCliente;

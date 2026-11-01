@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -156,10 +157,10 @@ class OrcamentoEstoqueCustomizacaoIT {
         Produto customizacao = novoProduto(TipoProduto.CUSTOMIZACAO, new BigDecimal("50"), true);
         UUID orcamentoId = orcamentoService.criar(requestComCustomizacao(produtoPrincipal, customizacao, 4)).getId();
 
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // APROVADO -> EM_PRODUCAO
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // -> FINALIZADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // APROVADO -> EM_PRODUCAO
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // -> FINALIZADO
         assertInstanceOf(OrcamentoDetalheResponse.class, resultado, "estoque folgado não deveria gerar aviso/bloqueio");
 
         Produto customizacaoAposFinalizar = produtoRepository.findById(customizacao.getId()).orElseThrow();

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -86,7 +87,7 @@ class OrcamentoSimularAvancoStatusIT {
 
     private UUID criarEEnviar(OrcamentoRequest req) {
         UUID id = orcamentoService.criar(req).getId();
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
         return id;
     }
 
@@ -172,7 +173,7 @@ class OrcamentoSimularAvancoStatusIT {
 
         AvancaStatusRequest requestIgnorar = new AvancaStatusRequest();
         requestIgnorar.setIgnorarAtalhoAprovacaoDireta(true);
-        Object resultado = orcamentoService.avancarStatus(id, requestIgnorar);
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, requestIgnorar);
 
         OrcamentoDetalheResponse detalhe = (OrcamentoDetalheResponse) resultado;
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus(), "usuário recusou o atalho — deve seguir fluxo normal");

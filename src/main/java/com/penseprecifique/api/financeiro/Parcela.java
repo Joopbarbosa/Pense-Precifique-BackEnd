@@ -57,6 +57,11 @@ public class Parcela {
     @Column(name = "origem_baixa", length = 10)
     private OrigemBaixa origemBaixa;
 
+    /** V0.19.0 (#1174, RN-NOVA-10) — Sinal, Saldo, Total ou Multa; só nas parcelas de orçamento. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10, updatable = false)
+    private PapelParcela papel;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
