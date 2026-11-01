@@ -27,9 +27,20 @@ public class Orcamento {
     @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "cliente_id", nullable = false)
+    /** Obrigatório para a Venda (RN-NOVA-37, validado no serviço); opcional só no Descritivo (#382, DT-NOVA-10). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cliente_id")
     private Cliente cliente;
+
+    /** #382 (RN-NOVA-44) — Venda (padrão) ou Descritivo. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo", nullable = false, length = 20)
+    @Builder.Default
+    private TipoOrcamento tipo = TipoOrcamento.VENDA;
+
+    /** #382 — título do Descritivo; vazio na Venda. */
+    @Column(name = "titulo", length = 200)
+    private String titulo;
 
     @Column(name = "numero", updatable = false)
     private Integer numero;
