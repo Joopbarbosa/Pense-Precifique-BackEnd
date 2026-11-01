@@ -75,7 +75,6 @@ import com.penseprecifique.api.financeiro.LancamentoFinanceiroService;
 import com.penseprecifique.api.financeiro.OrcamentoDaParcela;
 import com.penseprecifique.api.financeiro.PagamentoDoOrcamento;
 import com.penseprecifique.api.financeiro.PapelParcela;
-import com.penseprecifique.api.shared.dto.response.orcamento.PagamentoOrcamentoValidadoResponse;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
