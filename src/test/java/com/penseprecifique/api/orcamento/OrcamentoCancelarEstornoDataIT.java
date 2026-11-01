@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
@@ -90,12 +91,12 @@ class OrcamentoCancelarEstornoDataIT {
 
         UUID orcamentoId = orcamentoService.criar(req).getId();
 
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
         AvancaStatusRequest sinalReq = new AvancaStatusRequest();
         sinalReq.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
 
         return orcamentoId;
     }

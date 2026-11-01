@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
@@ -113,16 +114,16 @@ class OrcamentoCancelarMultaDescontoSinalIT {
 
     /** RASCUNHO -> ... -> EM_PRODUCAO, passando por SINAL_PAGO quando sinalAtivo=true. */
     private void avancarAteEmProducao(UUID orcamentoId, boolean sinalAtivo) {
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
         if (sinalAtivo) {
             AvancaStatusRequest sinalReq = new AvancaStatusRequest();
             sinalReq.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
-            orcamentoService.avancarStatus(orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
-            orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
+            AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
+            AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
         }
         vincularNovaProducao(orcamentoId); // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // (SINAL_PAGO|APROVADO) -> EM_PRODUCAO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // (SINAL_PAGO|APROVADO) -> EM_PRODUCAO
     }
 
     private OrcamentoDetalheResponse cancelarComMulta(UUID orcamentoId, String percentual) {
@@ -148,10 +149,10 @@ class OrcamentoCancelarMultaDescontoSinalIT {
     void sinalIgualMultaResultaZero() {
         seedUsuarioECliente();
         Produto produto = novoProduto(2);
-        UUID orcamentoId = criarOrcamento(produto, true, new BigDecimal("300.00"));
+        UUID orcamentoId = criarOrcamento(produto, true, new BigDecimal("150.00"));
         avancarAteEmProducao(orcamentoId, true);
 
-        OrcamentoDetalheResponse resultado = cancelarComMulta(orcamentoId, "100");
+        OrcamentoDetalheResponse resultado = cancelarComMulta(orcamentoId, "50"); // multa 150,00 = sinal
 
         assertEquals(0, BigDecimal.ZERO.compareTo(resultado.getValorMulta()));
     }
@@ -160,10 +161,10 @@ class OrcamentoCancelarMultaDescontoSinalIT {
     void sinalMaiorQueMultaNuncaCobraNegativoPisoZero() {
         seedUsuarioECliente();
         Produto produto = novoProduto(3);
-        UUID orcamentoId = criarOrcamento(produto, true, new BigDecimal("450.00"));
+        UUID orcamentoId = criarOrcamento(produto, true, new BigDecimal("200.00"));
         avancarAteEmProducao(orcamentoId, true);
 
-        OrcamentoDetalheResponse resultado = cancelarComMulta(orcamentoId, "100");
+        OrcamentoDetalheResponse resultado = cancelarComMulta(orcamentoId, "50"); // multa 150,00 < sinal 200,00
 
         assertEquals(0, BigDecimal.ZERO.compareTo(resultado.getValorMulta()));
     }

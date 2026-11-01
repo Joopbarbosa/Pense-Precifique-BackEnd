@@ -1,5 +1,6 @@
 package com.penseprecifique.api.agenda;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
@@ -94,7 +95,7 @@ class CompromissosOrcamentoIT {
         AvancaStatusRequest sinal = new AvancaStatusRequest();
         sinal.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
         for (int i = 0; i < vezes; i++) {
-            orcamentoService.avancarStatus(id, sinal);
+            AprovacaoTeste.avancar(orcamentoService, id, sinal);
         }
     }
 
@@ -163,6 +164,7 @@ class CompromissosOrcamentoIT {
         seed();
         UUID id = orcamentoService.criar(pedido(true, 10, null, null)).getId();
         avancar(id, 3);
+        semSinalAte(id); // desde a V0.19.0 a aprovação exige "Sinal até"; o caso sem data vem de orçamento anterior
         List<CompromissoResponse> sinais = doTipo(agenda(hoje, hoje), TipoCompromisso.SINAL_A_RECEBER);
         assertEquals(1, sinais.size());
         assertFalse(sinais.get(0).atrasado());
@@ -206,6 +208,7 @@ class CompromissosOrcamentoIT {
         seed();
         UUID id = orcamentoService.criar(pedido(true, 10, null, null)).getId();
         avancar(id, 3);
+        semSinalAte(id); // desde a V0.19.0 a aprovação exige "Sinal até"; o caso sem data vem de orçamento anterior
         assertEquals(1, doTipo(agenda(hoje, hoje), TipoCompromisso.SINAL_A_RECEBER).size());
         avancar(id, 1); // SINAL_PAGO
         assertTrue(doTipo(agenda(hoje, hoje), TipoCompromisso.SINAL_A_RECEBER).isEmpty());
@@ -286,5 +289,11 @@ class CompromissosOrcamentoIT {
         orcamentoRepository.save(antigo);
         assertNull(orcamentoService.buscarPorId(id).getDataEnvio());
         assertNull(orcamentoService.buscarPorId(id).getDataFinalizacao());
+    }
+
+    private void semSinalAte(UUID id) {
+        Orcamento o = orcamentoRepository.findById(id).orElseThrow();
+        o.setSinalAte(null);
+        orcamentoRepository.save(o);
     }
 }

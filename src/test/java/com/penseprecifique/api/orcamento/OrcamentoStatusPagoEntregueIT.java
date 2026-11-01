@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -101,10 +102,10 @@ class OrcamentoStatusPagoEntregueIT {
         req.setItens(List.of(item));
 
         UUID orcamentoId = orcamentoService.criar(req).getId();
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // APROVADO -> EM_PRODUCAO
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // EM_PRODUCAO -> FINALIZADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // APROVADO -> EM_PRODUCAO
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // EM_PRODUCAO -> FINALIZADO
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado,
                 "estoque folgado não deveria gerar aviso/bloqueio");
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -117,7 +118,7 @@ class OrcamentoStatusPagoEntregueIT {
         Produto produto = novoProduto();
         UUID orcamentoId = criarOrcamentoAteFinalizado(produto);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.PAGO, detalhe.getStatus(), "RN-NOVA-10 — PAGO vem logo após FINALIZADO");
 
@@ -134,13 +135,13 @@ class OrcamentoStatusPagoEntregueIT {
         seedUsuarioECliente();
         Produto produto = novoProduto();
         UUID orcamentoId = criarOrcamentoAteFinalizado(produto);
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // FINALIZADO -> PAGO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // FINALIZADO -> PAGO
 
         Orcamento apoisPago = orcamentoRepository.findById(orcamentoId).orElseThrow();
         LocalDateTime dataPagamentoOriginal = apoisPago.getDataPagamento();
         assertNotNull(dataPagamentoOriginal);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // PAGO -> ENTREGUE
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // PAGO -> ENTREGUE
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.ENTREGUE, detalhe.getStatus(), "RN-NOVA-10 — ENTREGUE vem depois de PAGO");
 

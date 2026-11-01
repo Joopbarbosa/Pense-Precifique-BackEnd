@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +30,8 @@ public interface LancamentoRepository extends JpaRepository<Lancamento, UUID> {
     Optional<Lancamento> buscarDoOrcamentoParaAlterar(@Param("orcamentoId") UUID orcamentoId, @Param("usuarioId") UUID usuarioId);
 
     Optional<Lancamento> findByOrcamentoIdAndUsuarioIdAndSubtipoIsNull(UUID orcamentoId, UUID usuarioId);
+
+    List<Lancamento> findByOrcamentoIdAndSubtipo(UUID orcamentoId, SubtipoLancamento subtipo);
 
     boolean existsByOrcamentoIdAndSubtipo(UUID orcamentoId, SubtipoLancamento subtipo);
 

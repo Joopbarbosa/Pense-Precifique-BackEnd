@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -107,9 +108,9 @@ class OrcamentoFinalizarComVinculoIT {
         req.setItens(List.of(item));
 
         UUID orcamentoId = orcamentoService.criar(req).getId();
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // APROVADO -> EM_PRODUCAO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // APROVADO -> EM_PRODUCAO
         return orcamentoId;
     }
 
@@ -139,7 +140,7 @@ class OrcamentoFinalizarComVinculoIT {
         Producao producao = criarProducaoVinculada(orcamentoId, EstadoProducao.EM_ANDAMENTO);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
+                () -> AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()));
         String identificador = IdentificadorFormatter.formatar("PRD", producao.getNumero());
         assertTrue(ex.getMessage().contains(identificador), "mensagem deve citar o identificador PRD-N");
         assertTrue(ex.getMessage().contains("EM_ANDAMENTO"), "mensagem deve citar o estado atual");
@@ -160,7 +161,7 @@ class OrcamentoFinalizarComVinculoIT {
         Producao travada = criarProducaoVinculada(orcamentoId, EstadoProducao.TRAVADA);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
+                () -> AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()));
         assertTrue(ex.getMessage().contains(IdentificadorFormatter.formatar("PRD", emAndamento.getNumero())));
         assertTrue(ex.getMessage().contains(IdentificadorFormatter.formatar("PRD", travada.getNumero())));
         assertTrue(ex.getMessage().contains("EM_ANDAMENTO"));
@@ -185,7 +186,7 @@ class OrcamentoFinalizarComVinculoIT {
         producaoRepository.save(menor);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
+                () -> AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()));
         assertEquals("Produções PRD-13 (EM_ANDAMENTO), PRD-14 (TRAVADA) ainda não foram finalizadas.", ex.getMessage());
     }
 
@@ -200,7 +201,7 @@ class OrcamentoFinalizarComVinculoIT {
         Producao travada = criarProducaoVinculada(orcamentoId, EstadoProducao.TRAVADA);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
+                () -> AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()));
         assertTrue(ex.getMessage().contains(IdentificadorFormatter.formatar("PRD", travada.getNumero())));
         assertTrue(ex.getMessage().contains("TRAVADA"));
     }
@@ -213,7 +214,7 @@ class OrcamentoFinalizarComVinculoIT {
         UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 5);
         criarProducaoVinculada(orcamentoId, EstadoProducao.FINALIZADA);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -228,7 +229,7 @@ class OrcamentoFinalizarComVinculoIT {
         UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 5);
         Producao cancelada = criarProducaoVinculada(orcamentoId, EstadoProducao.CANCELADA);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         ConfirmacaoEstoqueNegativoResponse aviso = assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, resultado);
         assertTrue(aviso.getAvisos() == null || aviso.getAvisos().isEmpty(), "sem aviso de estoque neste cenário");
@@ -249,11 +250,11 @@ class OrcamentoFinalizarComVinculoIT {
         UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 5);
         criarProducaoVinculada(orcamentoId, EstadoProducao.NAO_REALIZADA);
 
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // 1ª chamada, só aviso
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // 1ª chamada, só aviso
 
         AvancaStatusRequest confirmar = new AvancaStatusRequest();
         confirmar.setConfirmarVinculosOrfaos(true);
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, confirmar);
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, confirmar);
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -268,7 +269,7 @@ class OrcamentoFinalizarComVinculoIT {
         UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 10);
         criarProducaoVinculada(orcamentoId, EstadoProducao.CANCELADA);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         ConfirmacaoEstoqueNegativoResponse aviso = assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, resultado);
         assertEquals(1, aviso.getAvisos().size(), "aviso de estoque presente");
@@ -277,7 +278,7 @@ class OrcamentoFinalizarComVinculoIT {
         // confirma só o estoque, sem confirmar o vínculo órfão — ainda deve devolver aviso (não finaliza)
         AvancaStatusRequest confirmaSoEstoque = new AvancaStatusRequest();
         confirmaSoEstoque.setConfirmarEstoqueNegativoProdutoIds(List.of(produto.getId()));
-        Object resultado2 = orcamentoService.avancarStatus(orcamentoId, confirmaSoEstoque);
+        Object resultado2 = AprovacaoTeste.avancar(orcamentoService, orcamentoId, confirmaSoEstoque);
         ConfirmacaoEstoqueNegativoResponse aviso2 = assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, resultado2);
         assertTrue(aviso2.getAvisos() == null || aviso2.getAvisos().isEmpty(), "estoque já confirmado, sem novo aviso");
         assertEquals(1, aviso2.getVinculosOrfaos().size(), "vínculo órfão ainda pendente, não suprimido pela confirmação de estoque");
@@ -286,7 +287,7 @@ class OrcamentoFinalizarComVinculoIT {
         AvancaStatusRequest confirmaTudo = new AvancaStatusRequest();
         confirmaTudo.setConfirmarEstoqueNegativoProdutoIds(List.of(produto.getId()));
         confirmaTudo.setConfirmarVinculosOrfaos(true);
-        Object resultado3 = orcamentoService.avancarStatus(orcamentoId, confirmaTudo);
+        Object resultado3 = AprovacaoTeste.avancar(orcamentoService, orcamentoId, confirmaTudo);
         assertInstanceOf(OrcamentoDetalheResponse.class, resultado3);
     }
 
@@ -300,14 +301,14 @@ class OrcamentoFinalizarComVinculoIT {
         criarProducaoVinculada(orcamentoId, EstadoProducao.FINALIZADA);
         Producao producaoB = criarProducaoVinculada(orcamentoId, EstadoProducao.CANCELADA);
 
-        Object primeira = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object primeira = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
         ConfirmacaoEstoqueNegativoResponse aviso = assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, primeira);
         assertEquals(1, aviso.getVinculosOrfaos().size());
         assertEquals(producaoB.getId(), aviso.getVinculosOrfaos().get(0).getId());
 
         AvancaStatusRequest confirmar = new AvancaStatusRequest();
         confirmar.setConfirmarVinculosOrfaos(true);
-        Object segunda = orcamentoService.avancarStatus(orcamentoId, confirmar);
+        Object segunda = AprovacaoTeste.avancar(orcamentoService, orcamentoId, confirmar);
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, segunda);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
     }
@@ -323,7 +324,7 @@ class OrcamentoFinalizarComVinculoIT {
         Producao producaoB = criarProducaoVinculada(orcamentoId, EstadoProducao.EM_ANDAMENTO);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()));
+                () -> AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()));
         assertTrue(ex.getMessage().contains(IdentificadorFormatter.formatar("PRD", producaoB.getNumero())));
         assertTrue(ex.getMessage().contains("EM_ANDAMENTO"));
     }

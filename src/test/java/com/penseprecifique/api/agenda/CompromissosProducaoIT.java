@@ -1,5 +1,6 @@
 package com.penseprecifique.api.agenda;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.orcamento.OrcamentoProducaoRepository;
@@ -253,8 +254,8 @@ class CompromissosProducaoIT {
         req.setPrazoProducaoDias(dias);
         req.setItens(List.of(item));
         UUID id = orcamentoService.criar(req).getId();
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest());
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
         return id;
     }
 }

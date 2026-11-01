@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.empresa.ConfiguracaoService;
@@ -121,7 +122,7 @@ class CustoMaterialVendaIT {
                 .orcamentoItem(item).produto(nome).quantidade(3).precoUnitario(new BigDecimal("6.00"))
                 .subtotal(new BigDecimal("18.00")).build());
 
-        orcamentoService.avancarStatus(orc.getId(), new AvancaStatusRequest()); // PAGO -> ENTREGUE
+        AprovacaoTeste.avancar(orcamentoService, orc.getId(), new AvancaStatusRequest()); // PAGO -> ENTREGUE
 
         assertEquals(StatusOrcamento.ENTREGUE, orcamentoRepository.findById(orc.getId()).orElseThrow().getStatus());
         assertEquals(new BigDecimal("9.2500"), orcamentoItemRepository.findById(item.getId()).orElseThrow().getCustoMaterialUnitario());

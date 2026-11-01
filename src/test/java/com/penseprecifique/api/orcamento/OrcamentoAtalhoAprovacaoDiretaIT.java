@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -105,7 +106,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
 
     private UUID criarEEnviar(OrcamentoRequest req) {
         UUID id = orcamentoService.criar(req).getId();
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
         return id;
     }
 
@@ -134,7 +135,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Produto produto = novoProduto("Produto Atalho", 3, new BigDecimal("100"), true);
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -150,7 +151,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Produto produto = novoProduto("Produto Sinal", 4, new BigDecimal("100"), true);
         UUID id = criarEEnviar(montarRequest(produto, 10, true, false, null));
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus());
@@ -165,7 +166,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Produto produto = novoProduto("Produto Prazo", 5, new BigDecimal("100"), true);
         UUID id = criarEEnviar(montarRequest(produto, 10, false, true, 5));
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus());
@@ -177,7 +178,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Produto produto = novoProduto("Produto Sem Estoque", 6, new BigDecimal("2"), false);
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus());
@@ -192,7 +193,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Produto produto = novoProduto("Produto Negativo Permitido", 7, new BigDecimal("3"), true);
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         ConfirmacaoEstoqueNegativoResponse aviso = assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, resultado);
         assertEquals(1, aviso.getAvisos().size());
@@ -203,7 +204,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
 
         AvancaStatusRequest confirmar = new AvancaStatusRequest();
         confirmar.setConfirmarEstoqueNegativoProdutoIds(List.of(produto.getId()));
-        Object resultadoConfirmado = orcamentoService.avancarStatus(id, confirmar);
+        Object resultadoConfirmado = AprovacaoTeste.avancar(orcamentoService, id, confirmar);
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultadoConfirmado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -261,9 +262,9 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Produto produto = produtoComFichaTecnica("Produto Vinculado", 8, new BigDecimal("100"), true);
         UUID id = orcamentoService.criar(montarRequest(produto, 10, false, false, null)).getId();
         criarProducaoVinculada(id, EstadoProducao.AGUARDANDO_INICIO);
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus(),
@@ -281,7 +282,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
         criarProducaoVinculada(id, EstadoProducao.EM_ANDAMENTO);
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus());
@@ -295,7 +296,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
         criarProducaoVinculada(id, EstadoProducao.TRAVADA);
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus());
@@ -310,7 +311,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
         criarProducaoVinculada(id, EstadoProducao.FINALIZADA);
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus(), "vínculo terminal-feliz não desqualifica o atalho");
@@ -326,7 +327,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
         criarProducaoVinculada(id, EstadoProducao.CANCELADA);
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus(), "vínculo órfão não desqualifica o atalho, deliberadamente");
@@ -340,7 +341,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
         criarProducaoVinculada(id, EstadoProducao.NAO_REALIZADA);
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -355,7 +356,7 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Produto produto = novoProduto("Produto Sem Vinculo Nenhum", 14, new BigDecimal("100"), true);
         UUID id = criarEEnviar(montarRequest(produto, 10, false, false, null));
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -372,19 +373,19 @@ class OrcamentoAtalhoAprovacaoDiretaIT {
         Producao producaoX = criarProducaoVinculada(id, EstadoProducao.EM_ANDAMENTO);
 
         // ENVIADO -> APROVADO (atalho desqualificado)
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
         // APROVADO -> EM_PRODUCAO (sinal inativo)
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
 
         // EM_PRODUCAO -> FINALIZADO deve ser bloqueado por RN-NOVA-19 (produção ainda EM_ANDAMENTO)
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> orcamentoService.avancarStatus(id, new AvancaStatusRequest()));
+                () -> AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest()));
         assertTrue(ex.getMessage().contains("ainda não foi finalizada"));
 
         producaoX.setEstado(EstadoProducao.FINALIZADA);
         producaoRepository.save(producaoX);
 
-        Object resultado = orcamentoService.avancarStatus(id, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest());
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
     }

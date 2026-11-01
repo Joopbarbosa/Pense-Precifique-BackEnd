@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -151,14 +152,14 @@ class OrcamentoCancelamentoTipoMultaZeroIT {
 
     /** RASCUNHO -> ... -> SINAL_PAGO -> EM_PRODUCAO (sinal pago, pré-requisito do mini-estorno de RN-NOVA-1). */
     private void avancarAteEmProducao(UUID orcamentoId) {
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
         AvancaStatusRequest sinalReq = new AvancaStatusRequest();
         sinalReq.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
         vincularNovaProducao(orcamentoId); // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.catalogo.CatalogoRepository;
@@ -189,12 +190,12 @@ class OrcamentoDuplicarIT {
         OrcamentoDetalheResponse original = orcamentoService.criar(criacao);
         Integer numeroOriginal = original.getNumero();
 
-        orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, original.getId(), new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, original.getId(), new AvancaStatusRequest()); // ENVIADO -> APROVADO
         AvancaStatusRequest sinalReq = new AvancaStatusRequest();
         sinalReq.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
-        orcamentoService.avancarStatus(original.getId(), sinalReq); // APROVADO -> AGUARDANDO_SINAL
-        orcamentoService.avancarStatus(original.getId(), sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
+        AprovacaoTeste.avancar(orcamentoService, original.getId(), sinalReq); // APROVADO -> AGUARDANDO_SINAL
+        AprovacaoTeste.avancar(orcamentoService, original.getId(), sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
         // Vínculo com produção que termina FINALIZADA — RN-NOVA-6 (vínculo obrigatório) foi
         // removida em P-B017, este vínculo não é mais pré-requisito. vincularProducao() só aceita
         // produção AGUARDANDO_INICIO (adicionarProdutosDeOrcamento), então o vínculo precisa
@@ -206,8 +207,8 @@ class OrcamentoDuplicarIT {
         orcamentoService.vincularProducao(original.getId(), vincularReq);
         producao.setEstado(EstadoProducao.FINALIZADA);
         producaoRepository.save(producao);
-        orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
-        orcamentoService.avancarStatus(original.getId(), new AvancaStatusRequest()); // EM_PRODUCAO -> FINALIZADO
+        AprovacaoTeste.avancar(orcamentoService, original.getId(), new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
+        AprovacaoTeste.avancar(orcamentoService, original.getId(), new AvancaStatusRequest()); // EM_PRODUCAO -> FINALIZADO
 
         OrcamentoDetalheResponse duplicado = orcamentoService.duplicar(original.getId());
 
