@@ -23,6 +23,7 @@ public class PdfService {
     private final ReciboPdfPayloadService reciboPdfPayloadService;
     private final ReciboPagamentoPdfPayloadService reciboPagamentoPdfPayloadService;
     private final ReciboCaixaPdfPayloadService reciboCaixaPdfPayloadService;
+    private final OrcamentoDescritivoPdfPayloadService orcamentoDescritivoPdfPayloadService; // #382
     private final CatalogoPdfPayloadService catalogoPdfPayloadService;
     private final ComprasPdfPayloadService comprasPdfPayloadService;
 
@@ -37,6 +38,10 @@ public class PdfService {
      * 30s — a conexão do pool não fica presa durante a espera do microsserviço.
      */
     public byte[] gerarPdfOrcamento(UUID orcamentoId) {
+        if (orcamentoDescritivoPdfPayloadService.ehDescritivo(orcamentoId)) { // #382: o endpoint escolhe o payload pelo tipo
+            return pdfMicroservicoClient.gerarPdf("orcamento-descritivo", orcamentoId,
+                    orcamentoDescritivoPdfPayloadService.montarPayload(orcamentoId));
+        }
         PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
         return pdfMicroservicoClient.gerarPdf("orcamento", orcamentoId, payload);
     }
@@ -48,6 +53,10 @@ public class PdfService {
      * motivo documentado em {@link #gerarPdfOrcamento}.
      */
     public String gerarPreviewHtmlOrcamento(UUID orcamentoId) {
+        if (orcamentoDescritivoPdfPayloadService.ehDescritivo(orcamentoId)) { // #382
+            return pdfMicroservicoClient.gerarHtml("orcamento-descritivo", orcamentoId,
+                    orcamentoDescritivoPdfPayloadService.montarPayload(orcamentoId));
+        }
         PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
         return pdfMicroservicoClient.gerarHtml("orcamento", orcamentoId, payload);
     }
