@@ -124,7 +124,7 @@ public class ItemCatalogoService {
         BigDecimal valorHora = buscarValorHora(usuarioId);
         BigDecimal custoMaoDeObra = calcularCustoMaoDeObra(request.getTempoProducao(), valorHora);
         BigDecimal custoTotal = custoComponentes.add(custoMaoDeObra);
-        BigDecimal precoSugerido = calcularPrecoSugerido(custoTotal, request.getMargemLucro());
+        BigDecimal precoSugerido = calcularPrecoSugerido(custoTotal, request.getMargemLucro() != null ? request.getMargemLucro() : buscarMargemPadrao(usuarioId));
 
         return new ItemCatalogoPrecoSugeridoResponse(custoComponentes, custoMaoDeObra, custoTotal, precoSugerido);
     }
@@ -188,7 +188,7 @@ public class ItemCatalogoService {
         item.setNome(request.getNome());
         item.setMarca(marcaNova);
         item.setTempoProducao(request.getTempoProducao());
-        item.setMargemLucro(request.getMargemLucro() != null ? request.getMargemLucro() : margemLucroAntigo);
+        item.setMargemLucro(request.getMargemLucro() != null ? request.getMargemLucro() : buscarMargemPadrao(usuarioId)); // CAT-003: vazia usa a margem padrão
         item.setDescricao(request.getDescricao());
 
         // componentes são recriados do zero (não têm soft delete próprio, mesmo padrão já usado

@@ -37,6 +37,9 @@ public class ItemCatalogoRequest {
     /** RN-NOVA-3 — margem própria do item. Mesmo campo opcional a nível de DTO que
      * {@code ProdutoRequest.margemLucro} — pré-preenchimento com a margem padrão de Configurações é
      * responsabilidade do Frontend, não do Backend (mesmo padrão já usado em Produto). */
+    @jakarta.validation.constraints.DecimalMin(value = "0", message = "A margem de lucro não pode ser negativa")
+    @jakarta.validation.constraints.DecimalMax(value = "999.99", message = "A margem de lucro pode ser no máximo 999,99")
+    @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "A margem de lucro aceita até 3 inteiros e 2 casas decimais")
     private BigDecimal margemLucro;
 
     /** Se nulo, o Service usa o precoSugerido calculado; se preenchido e diferente, aciona override
