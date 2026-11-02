@@ -9,6 +9,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
@@ -69,6 +70,27 @@ public class R2StorageClient {
             s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(key).build());
         } catch (Exception e) {
             log.warn("Falha ao remover objeto antigo do R2 (key={}): {}", key, e.getMessage());
+        }
+    }
+
+    /**
+     * Copia o objeto de {@code urlOrigem} para {@code keyDestino} dentro do mesmo bucket e devolve a URL pública
+     * da cópia, ou {@code null} se a origem não é deste bucket ou a cópia falhar (melhor esforço — a duplicação
+     * de um cadastro nunca deve cair por causa da foto). Cópia própria evita que apagar a foto de um lado
+     * quebre o outro.
+     */
+    public String copiarPorUrl(String urlOrigem, String keyDestino) {
+        if (urlOrigem == null || !urlOrigem.startsWith(publicUrlBase + "/")) return null;
+        String keyOrigem = urlOrigem.substring(publicUrlBase.length() + 1);
+        try {
+            s3Client.copyObject(CopyObjectRequest.builder()
+                    .sourceBucket(bucketName).sourceKey(keyOrigem)
+                    .destinationBucket(bucketName).destinationKey(keyDestino)
+                    .build());
+            return publicUrlBase + "/" + keyDestino;
+        } catch (Exception e) {
+            log.warn("Falha ao copiar objeto no R2 (origem={}): {}", keyOrigem, e.getMessage());
+            return null;
         }
     }
 }
