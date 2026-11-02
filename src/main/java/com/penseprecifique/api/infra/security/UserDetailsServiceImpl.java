@@ -1,6 +1,7 @@
 package com.penseprecifique.api.infra.security;
 
 import com.penseprecifique.api.auth.UsuarioRepository;
+import com.penseprecifique.api.shared.texto.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -18,7 +19,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        var usuario = usuarioRepository.findByEmailAndDeletedAtIsNull(email)
+        var usuario = usuarioRepository.findByEmailAndDeletedAtIsNull(EmailNormalizer.normalizar(email))
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
 
         return User.builder()
