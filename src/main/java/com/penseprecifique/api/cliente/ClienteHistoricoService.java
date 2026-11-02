@@ -150,7 +150,7 @@ public class ClienteHistoricoService {
             "data", Comparator.comparing((Registro r) -> r.resposta().data()),
             "identificador", Comparator.comparing((Registro r) -> r.resposta().tipo()).thenComparingInt(Registro::numero),
             "valor", Comparator.comparing((Registro r) -> r.resposta().valor()),
-            "status", Comparator.comparing((Registro r) -> r.resposta().status()));
+            "status", Comparator.comparing((Registro r) -> rotuloStatus(r.resposta())));
 
     /** Desempate estável: mais recente primeiro, depois o maior número. */
     private static final Comparator<Registro> DESEMPATE = ORDENACAO_REGISTROS.get("data").reversed()
@@ -229,6 +229,38 @@ public class ClienteHistoricoService {
             ordem = ordem == null ? campo : ordem.thenComparing(campo);
         }
         return ordem == null ? DESEMPATE : ordem.thenComparing(DESEMPATE);
+    }
+
+    /** CLI-008 / PP-318: ordena pelo texto apresentado na coluna Status, não pelo código interno. */
+    private static String rotuloStatus(RegistroCadastroResponse registro) {
+        String status = registro.status();
+        String rotulo = switch (registro.tipo()) {
+            case TIPO_ORCAMENTO -> switch (StatusOrcamento.valueOf(status)) {
+                case RASCUNHO -> "Rascunho";
+                case ENVIADO -> "Enviado";
+                case APROVADO -> "Aprovado";
+                case AGUARDANDO_SINAL -> "Aguardando Sinal";
+                case SINAL_PAGO -> "Sinal Pago";
+                case EM_PRODUCAO -> "Em Produção";
+                case FINALIZADO -> "Finalizado";
+                case PAGO -> "Pago";
+                case ENTREGUE -> "Entregue";
+                case CANCELADO -> "Cancelado";
+            };
+            case TIPO_VENDA_CAIXA -> status.equals(StatusVendaCaixa.CONCLUIDA.name())
+                    ? "Concluída" : "Cancelada";
+            default -> switch (StatusCompra.valueOf(status)) {
+                case RASCUNHO -> "Rascunho";
+                case PENDENTE_RECEBIMENTO -> "Pendente de recebimento";
+                case CONFIRMADA -> "Confirmada";
+                case CANCELADA -> "Cancelada";
+            };
+        };
+        if ("COMPRA".equals(registro.tipo()) && StatusCompra.CONFIRMADA.name().equals(status)
+                && Boolean.FALSE.equals(registro.pago())) {
+            return rotulo + " Não paga";
+        }
+        return rotulo;
     }
 
     private List<Registro> registrosCliente(UUID clienteId, UUID usuarioId) {
