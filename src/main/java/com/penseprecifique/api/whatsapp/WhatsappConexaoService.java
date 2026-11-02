@@ -18,7 +18,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WhatsappConexaoService {
 
-    public static final String VERSAO_TEXTO_AVISO = "1";
+    public static final String VERSAO_TEXTO_AVISO = "2";
     static final String MSG_DESLIGADO = "O envio por WhatsApp ainda não está disponível neste ambiente.";
     static final String MSG_SEM_ACEITE = "Confirme que entendeu os riscos para conectar.";
 
