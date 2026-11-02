@@ -11,6 +11,7 @@ import com.penseprecifique.api.shared.exception.ResourceNotFoundException;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.infra.storage.R2StorageClient;
 import com.penseprecifique.api.shared.validation.ValidadorArquivoImagem;
+import com.penseprecifique.api.shared.validation.ValidadorTelefone;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -48,6 +50,13 @@ public class EmpresaServiceImpl implements EmpresaService {
         UUID usuarioId = getUsuarioIdAutenticado();
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId)
                 .orElse(Empresa.builder().usuarioId(usuarioId).build());
+
+        // Telefone antigo inválido pode ser reenviado sem alteração ao salvar outros dados do Perfil.
+        // Uma alteração do campo continua sujeita à mesma regra aplicada aos cadastros novos.
+        if (!Objects.equals(empresa.getWhatsapp(), request.whatsapp())
+                && !ValidadorTelefone.valido(request.whatsapp())) {
+            throw BusinessException.noCampo("whatsapp", ValidadorTelefone.MENSAGEM);
+        }
 
         empresa.setNome(request.nome());
         empresa.setEmail(request.email());

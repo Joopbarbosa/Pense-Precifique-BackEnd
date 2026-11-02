@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Empresa;
+import com.penseprecifique.api.pdf.PdfMicroservicoClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -11,6 +12,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.UUID;
 
@@ -34,10 +36,15 @@ class EmpresaLogoSalvarPerfilIT {
     @Autowired MockMvc mvc;
     @Autowired UsuarioRepository usuarioRepository;
     @Autowired EmpresaRepository empresaRepository;
+    @MockitoBean PdfMicroservicoClient pdfMicroservicoClient;
     private final ObjectMapper json = new ObjectMapper();
 
     /** Conta nova com empresa e o logo já gravado (como se o envio da imagem tivesse acontecido). */
     private String contaComLogo() throws Exception {
+        return contaComLogo(null);
+    }
+
+    private String contaComLogo(String telefoneInicial) throws Exception {
         String email = "logo-" + UUID.randomUUID() + "@studio.com";
         MvcResult r = mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + email + "\",\"senha\":\"" + SENHA + "\",\"confirmarSenha\":\"" + SENHA + "\",\"nomeEmpresa\":\"Ateliê\"}"))
@@ -47,6 +54,7 @@ class EmpresaLogoSalvarPerfilIT {
         UUID usuarioId = usuarioRepository.findByEmail(email).orElseThrow().getId();
         Empresa empresa = empresaRepository.findByUsuarioIdAndDeletedAtIsNull(usuarioId).orElseThrow();
         empresa.setLogoUrl(LOGO);
+        if (telefoneInicial != null) empresa.setWhatsapp(telefoneInicial);
         empresaRepository.saveAndFlush(empresa);
         return token;
     }
@@ -102,5 +110,19 @@ class EmpresaLogoSalvarPerfilIT {
     void semCredencialDa401() throws Exception {
         assertEquals(401, mvc.perform(put("/empresa").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"nome\":\"Ateliê\"}")).andReturn().getResponse().getStatus());
+    }
+
+    @Test
+    void telefoneLegadoInvalidoPodeSerMantidoAoSalvarPerfilMasNaoPodeSerAlteradoParaOutroInvalido() throws Exception {
+        String token = contaComLogo("123");
+
+        MvcResult mantendo = salvar(token, "{\"nome\":\"Perfil atualizado\",\"whatsapp\":\"123\"}");
+        assertEquals(200, mantendo.getResponse().getStatus());
+        mvc.perform(get("/empresa").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.nome").value("Perfil atualizado"))
+                .andExpect(jsonPath("$.whatsapp").value("123"));
+
+        assertEquals(400, salvar(token, "{\"nome\":\"Perfil atualizado\",\"whatsapp\":\"abc\"}")
+                .getResponse().getStatus());
     }
 }
