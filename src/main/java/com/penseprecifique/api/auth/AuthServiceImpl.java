@@ -11,6 +11,7 @@ import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.infra.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,7 +46,12 @@ public class AuthServiceImpl implements AuthService {
                 .ativo(true)
                 .build();
 
-        usuarioRepository.save(usuario);
+        try {
+            usuarioRepository.saveAndFlush(usuario);
+        } catch (DataIntegrityViolationException e) {
+            // corrida entre dois cadastros do mesmo e-mail (inclusive só com maiúsculas diferentes): o índice único decide
+            throw new BusinessException("E-mail já cadastrado");
+        }
         // DT-NOVA-6 — seed eager (não lazy como Empresa/ConfiguracaoPrecificacao, ver AUT-004):
         // Caixa exige pelo menos 1 método existente na primeira venda.
         metodoPagamentoService.seedMetodosPadrao(usuario);
