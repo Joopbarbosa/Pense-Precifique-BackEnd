@@ -23,5 +23,8 @@ public class ItemCatalogoPreviewRequest {
     @Min(value = 0, message = "O tempo de produção não pode ser negativo")
     private Integer tempoProducao;
 
+    @jakarta.validation.constraints.DecimalMin(value = "0", message = "A margem de lucro não pode ser negativa")
+    @jakarta.validation.constraints.DecimalMax(value = "999.99", message = "A margem de lucro pode ser no máximo 999,99")
+    @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "A margem de lucro aceita até 3 inteiros e 2 casas decimais")
     private BigDecimal margemLucro;
 }
