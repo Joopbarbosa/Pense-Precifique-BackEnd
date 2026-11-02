@@ -8,6 +8,7 @@ import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
 import com.penseprecifique.api.insumo.InsumoService;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
+import com.penseprecifique.api.shared.domain.entity.Compra;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.domain.entity.UnidadeMedida;
@@ -77,6 +78,7 @@ class Adendo2TesteManualIT {
     @Autowired InsumoRepository insumoRepository;
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired ClienteRepository clienteRepository;
+    @Autowired CompraRepository compraRepository;
     @Autowired MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
 
     private Usuario usuario;
@@ -369,6 +371,31 @@ class Adendo2TesteManualIT {
         assertValor("143.45", g.itensMaisComprados().get(0).valor());
         assertEquals("INSUMO", g.itensMaisComprados().get(0).tipo());
         assertValor("44.00", g.itensMaisComprados().get(1).valor());
+    }
+
+    @Test
+    void graficoFornecedorAgrupaPelaEntradaEUsaDataDaCompraQuandoEntradaAusente() {
+        Cliente papelaria = cadastro("Papelaria Central", false, true, true);
+        Insumo fita = insumo("Fita de cetim");
+        CompraResponse recebidaDepois = confirmar(papelaria, LocalDate.of(2026, 8, 18),
+                linha(fita, "1", "23.75"));
+        Compra compraRecebidaDepois = compraRepository.findById(recebidaDepois.id()).orElseThrow();
+        compraRecebidaDepois.setDataEntrada(LocalDate.of(2026, 9, 2));
+        compraRepository.save(compraRecebidaDepois);
+
+        CompraResponse semDataEntrada = confirmar(papelaria, LocalDate.of(2026, 8, 19),
+                linha(fita, "1", "41.90"));
+        Compra compraLegada = compraRepository.findById(semDataEntrada.id()).orElseThrow();
+        compraLegada.setDataEntrada(null);
+        compraRepository.save(compraLegada);
+
+        ClienteGraficosResponse g = clienteHistoricoService.graficos(papelaria.getId(), PapelCadastro.FORNECEDOR,
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 30));
+
+        assertEquals(List.of(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 1)),
+                g.gastoMensal().stream().map(ClienteGraficosResponse.GastoMensal::mes).toList());
+        assertValor("41.90", g.gastoMensal().get(0).total());
+        assertValor("23.75", g.gastoMensal().get(1).total());
     }
 
     // ------------------------------------------------------------------ #583/#616 — inativos nos seletores

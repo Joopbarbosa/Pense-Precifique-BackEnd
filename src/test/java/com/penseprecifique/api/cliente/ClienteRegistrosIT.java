@@ -220,6 +220,39 @@ class ClienteRegistrosIT {
     }
 
     @Test
+    void ordenaStatusPeloRotuloExibidoNaColuna() {
+        List<RegistroCadastroResponse> ordenados = historicoService.registros(cliente.getId(), PapelCadastro.CLIENTE,
+                null, null, false, false, null, null, null,
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "status"))).getContent();
+
+        assertEquals(List.of("ORC-3", "CX-2", "ORC-4", "CX-1", "ORC-2", "ORC-1"), ids(ordenados));
+    }
+
+    @Test
+    void ordenaStatusPeloTextoCompletoDaCompraIncluindoSeloNaoPaga() {
+        UnidadeMedida un = unidadeMedidaRepository.save(UnidadeMedida.builder().usuario(usuario).nome("Metro").sigla("m").build());
+        Insumo fita = insumoRepository.save(Insumo.builder().usuario(usuario).numero(1).nome("Fita de cetim")
+                .unidadeMedida(un).estoqueAtual(BigDecimal.ZERO).custoUnitario(BigDecimal.ONE).build());
+        LocalDate data = LocalDate.of(2026, 4, 7);
+        CompraResponse paga = compraService.confirmarNova(new CompraRequest(data, false, cliente.getId(), false,
+                null, null, List.of(new CompraItemRequest(fita.getId(), null, BigDecimal.ONE, new BigDecimal("23.75"))))).compra();
+        CompraResponse naoPaga = compraService.confirmarNova(new CompraRequest(data.plusDays(1), false, cliente.getId(), false,
+                null, null, List.of(new CompraItemRequest(fita.getId(), null, BigDecimal.ONE, new BigDecimal("41.90"))))).compra();
+        CompraResponse cancelada = compraService.confirmarNova(new CompraRequest(data.plusDays(2), false, cliente.getId(), false,
+                null, null, List.of(new CompraItemRequest(fita.getId(), null, BigDecimal.ONE, new BigDecimal("18.35"))))).compra();
+        compraService.cancelar(cancelada.id(), new CancelarCompraRequest("Compra duplicada para o teste.", true));
+        MetodoPagamentoConfiguravel pix = metodoPagamentoRepository.save(MetodoPagamentoConfiguravel.builder()
+                .usuario(usuario).tipo(TipoMetodoPagamento.PIX).ativo(true).ordem(1).build());
+        compraService.atualizarPagamento(paga.id(), new PagamentoCompraRequest(true, pix.getId()));
+
+        List<RegistroCadastroResponse> ordenados = historicoService.registros(cliente.getId(), PapelCadastro.FORNECEDOR,
+                null, null, false, false, null, null, null,
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "status"))).getContent();
+
+        assertEquals(List.of(cancelada.identificador(), paga.identificador(), naoPaga.identificador()), ids(ordenados));
+    }
+
+    @Test
     void campoDeOrdenacaoInvalidoEPeriodoInvertidoSao400() {
         assertThrows(BusinessException.class, () -> cliente(null, null, false, null, null, null,
                 PageRequest.of(0, 20, Sort.by("senha"))));
