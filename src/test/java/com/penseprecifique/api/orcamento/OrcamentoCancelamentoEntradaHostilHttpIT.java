@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * PP-692 (RN-NOVA-50, RN-NOVA-52; CEN-NOVO-76, 80, 81, 87) — multa do cancelamento e taxa da maquininha pela API,
+ * PP-692 (RN-NOVA-50, RN-NOVA-52, RN-NOVA-58; CEN-NOVO-76, 80, 81, 87, 93-96, 103, 104) — multa do cancelamento e taxa da maquininha pela API,
  * com entrada hostil: valor fora do limite, texto, notação científica, vazio, corpo malformado, content-type errado
  * e id de outra conta. Nunca 500.
  */
@@ -124,7 +124,7 @@ class OrcamentoCancelamentoEntradaHostilHttpIT {
         cancelar("{\"percentualMulta\":100.01}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.percentualMulta").value("A multa não pode ser maior que o total do orçamento."));
         cancelar("{\"percentualMulta\":101}").andExpect(status().isBadRequest());
-        // SINAL_PAGO não cobra multa por percentual; com 100 a validação passa e o cancelamento segue (CEN-88 completo no IT de serviço)
+        // RN-NOVA-58: em SINAL_PAGO a multa também vale; 100% = R$ 1000,00, o sinal de R$ 100,00 abate e sobram R$ 900,00 a receber
         cancelar("{\"percentualMulta\":100,\"motivoCancelamento\":\"Desistencia\"}").andExpect(status().isOk());
     }
 
@@ -154,6 +154,57 @@ class OrcamentoCancelamentoEntradaHostilHttpIT {
         int s = mockMvc.perform(post("/orcamentos/" + orcamentoId + "/cancelar").header("Authorization", "Bearer " + tokenOutro)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"percentualMulta\":50}")).andReturn().getResponse().getStatus();
         assertEquals(404, s);
+        assertEquals("SINAL_PAGO", statusAtual());
+    }
+
+
+    @Test
+    void multaEmReaisComEntradaHostilNuncaDa500EOsDoisCamposOuNenhumSaoRecusados() throws Exception {
+        preparar();
+        for (String corpo : List.of(
+                "{\"comMulta\":true,\"valorMulta\":1e20}", "{\"comMulta\":true,\"valorMulta\":1e999}",
+                "{\"comMulta\":true,\"valorMulta\":-1e999}", "{\"comMulta\":true,\"valorMulta\":\"abc\"}",
+                "{\"comMulta\":true,\"valorMulta\":null}", "{\"comMulta\":true}",
+                "{\"comMulta\":true,\"valorMulta\":10,\"percentualMulta\":10}",
+                "{\"comMulta\":true,\"valorMulta\":10.001}", "{\"comMulta\":true,\"valorMulta\":0}",
+                "{\"comMulta\":true,\"valorMulta\":1000.01}", "{\"comMulta\":true,\"valorMulta\":[1]}",
+                "{\"comMulta\":\"sim\",\"valorMulta\":10}", "{\"comMulta\":true,\"valorMulta\":")) {
+            assertNaoFoi500(corpo);
+        }
+        cancelar("{\"comMulta\":true,\"valorMulta\":10,\"percentualMulta\":10}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Informe a multa em valor ou em percentual, não os dois."));
+        cancelar("{\"comMulta\":true}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Informe a multa em valor ou em percentual, não os dois."));
+        int s = mockMvc.perform(post("/orcamentos/" + orcamentoId + "/cancelar").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.TEXT_PLAIN).content("valorMulta=50")).andReturn().getResponse().getStatus();
+        assertTrue(s >= 400 && s < 500, "content-type errado: " + s);
+        assertEquals("SINAL_PAGO", statusAtual());
+    }
+
+    @Test
+    void multaEmReaisValidaCancelaEGravaOPercentualCalculado() throws Exception {
+        preparar();
+        cancelar("{\"comMulta\":true,\"valorMulta\":250,\"motivoCancelamento\":\"Desistencia\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.percentualMulta").value(25.0))
+                .andExpect(jsonPath("$.valorMultaBruta").value(250.0));
+    }
+
+    @Test
+    void orcamentoDeOutraContaResponde404IgualAoInexistente() throws Exception {
+        preparar();
+        Usuario outro = usuarioRepository.save(Usuario.builder().email("orc-hostil-p-" + UUID.randomUUID() + "@test.com")
+                .senhaHash("x").ativo(true).build());
+        String tokenOutro = jwtTokenProvider.generateToken(outro);
+        String corpo = "{\"comMulta\":true,\"valorMulta\":50,\"motivoCancelamento\":\"Desistencia\"}";
+        var alheio = mockMvc.perform(post("/orcamentos/" + orcamentoId + "/cancelar").header("Authorization", "Bearer " + tokenOutro)
+                .contentType(MediaType.APPLICATION_JSON).content(corpo)).andReturn().getResponse();
+        var inexistente = mockMvc.perform(post("/orcamentos/" + UUID.randomUUID() + "/cancelar").header("Authorization", "Bearer " + tokenOutro)
+                .contentType(MediaType.APPLICATION_JSON).content(corpo)).andReturn().getResponse();
+        assertEquals(404, alheio.getStatus());
+        assertEquals(inexistente.getStatus(), alheio.getStatus());
+        assertEquals(inexistente.getContentAsString().replaceAll("\"timestamp\":\"[^\"]*\"|\"path\":\"[^\"]*\"", ""),
+                alheio.getContentAsString().replaceAll("\"timestamp\":\"[^\"]*\"|\"path\":\"[^\"]*\"", ""));
         assertEquals("SINAL_PAGO", statusAtual());
     }
 

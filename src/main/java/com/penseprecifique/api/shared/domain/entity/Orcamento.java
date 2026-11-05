@@ -121,6 +121,10 @@ public class Orcamento {
     @Column(name = "valor_multa", precision = 10, scale = 2)
     private BigDecimal valorMulta;
 
+    /** V0.19.0 (#692, RN-NOVA-58) — valor total da multa (referência dos lançamentos); {@link #valorMulta} é só a parte a receber. */
+    @Column(name = "valor_multa_bruta", precision = 10, scale = 2)
+    private BigDecimal valorMultaBruta;
+
     @Column(name = "valor_devolvido_multa", precision = 10, scale = 2)
     private BigDecimal valorDevolvidoMulta;
 
