@@ -69,6 +69,16 @@ class AgendaHttpIT {
         }
     }
 
+    /** Mensagem única da faixa 2000–2100 (PP-668): o 400 do período traz o texto comum. */
+    @Test
+    void periodoForaDaFaixaTrazMensagemUnica() throws Exception {
+        String t = token();
+        for (String url : new String[] {"/agenda/compromissos?de=1999-12-31&ate=2000-01-02", "/agenda/compromissos?de=2100-12-01&ate=2101-01-02"}) {
+            String corpo = mvc.perform(get(url).header("Authorization", "Bearer " + t)).andReturn().getResponse().getContentAsString();
+            assertTrue(corpo.contains(com.penseprecifique.api.shared.validation.FaixaDataPermitida.MENSAGEM), url + " -> " + corpo);
+        }
+    }
+
     /** Entrada hostil na paginação dos atrasados: valores negativos, zero, gigantes ou texto nunca derrubam a rota. */
     @Test
     void paginacaoHostilNaoDa500() throws Exception {
