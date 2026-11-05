@@ -67,4 +67,8 @@ public interface ParcelaRepository extends JpaRepository<Parcela, UUID> {
     @Query("SELECT p.lancamento.id, COUNT(p) FROM Parcela p WHERE p.lancamento.id IN :ids " +
             "AND p.situacao <> com.penseprecifique.api.financeiro.SituacaoParcela.CANCELADA GROUP BY p.lancamento.id")
     List<Object[]> contarAtivasPorLancamento(@Param("ids") Collection<UUID> ids);
+
+    /** PP-707: total de parcelas (inclusive canceladas) de cada lançamento, só para exibir "n de N" numa parcela cancelada. */
+    @Query("SELECT p.lancamento.id, COUNT(p) FROM Parcela p WHERE p.lancamento.id IN :ids GROUP BY p.lancamento.id")
+    List<Object[]> contarTodasPorLancamento(@Param("ids") Collection<UUID> ids);
 }

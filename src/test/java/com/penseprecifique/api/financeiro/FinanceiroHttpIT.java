@@ -120,6 +120,41 @@ class FinanceiroHttpIT {
         assertEquals(0, json.readTree(alheia.getResponse().getContentAsString()).get("itens").size());
     }
 
+    /** CEN-NOVO-97/98/99 pelo HTTP: "Todas" traz o cancelado com selo; os demais filtros não; totais só com o em aberto; outra conta não vê. */
+    @Test
+    void todasTrazCanceladoComSeloPeloHttpEOutrosFiltrosNao() throws Exception {
+        Conta c = conta();
+        Conta outra = conta();
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(c.email(), null, List.of()));
+        LocalDate dia = LocalDate.now(relogioBrasilia).plusDays(1);
+        Lancamento cancelado = service.criar(new NovoLancamento(TipoLancamento.A_PAGAR, "Cancelado", OrigemLancamento.AVULSO, null, null,
+                DivisaoParcelas.dividir(new BigDecimal("100.00"), 1, dia)));
+        service.cancelar(cancelado.getId());
+        service.criar(new NovoLancamento(TipoLancamento.A_PAGAR, "Aberto", OrigemLancamento.AVULSO, null, null,
+                DivisaoParcelas.dividir(new BigDecimal("50.00"), 1, dia)));
+        JsonNode todas = json.readTree(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&situacao=TODAS").header("Authorization", "Bearer " + c.token())).andReturn().getResponse().getContentAsString());
+        assertEquals(2, todas.get("itens").size());
+        assertEquals(new BigDecimal("50.00"), todas.get("totalEmAberto").decimalValue().setScale(2));
+        boolean achou = false;
+        for (JsonNode i : todas.get("itens")) {
+            if ("CANCELADA".equals(i.get("situacaoExibida").asText())) {
+                achou = true;
+                assertEquals("Cancelado", i.get("rotulo").asText());
+                assertEquals(new BigDecimal("100.00"), i.get("valor").decimalValue().setScale(2));
+            }
+        }
+        assertTrue(achou);
+        for (String f : List.of("EM_ABERTO", "VENCIDAS", "BAIXADAS")) {
+            JsonNode lista = json.readTree(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&situacao=" + f).header("Authorization", "Bearer " + c.token())).andReturn().getResponse().getContentAsString());
+            for (JsonNode i : lista.get("itens")) {
+                assertTrue(!"CANCELADA".equals(i.get("situacaoExibida").asText()), f);
+            }
+        }
+        JsonNode alheia = json.readTree(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&situacao=TODAS").header("Authorization", "Bearer " + outra.token())).andReturn().getResponse().getContentAsString());
+        assertEquals(0, alheia.get("itens").size());
+        assertEquals(400, status(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR&situacao=TODAS&de=2030-05-10&ate=2030-05-01").header("Authorization", "Bearer " + c.token())).andReturn()));
+    }
+
     @Test
     void semTokenNaoEntra() throws Exception {
         int s = status(mvc.perform(get("/financeiro/parcelas?tipo=A_PAGAR")).andReturn());
@@ -181,7 +216,7 @@ class FinanceiroHttpIT {
     void listaHostil() throws Exception {
         Conta c = conta();
         String[] consultas = {
-                "", "?tipo=", "?tipo=XYZ", "?tipo=a_pagar", "?tipo=A_PAGAR&situacao=XYZ", "?tipo=A_PAGAR&de=abc", "?tipo=A_PAGAR&ate=2030-13-45",
+                "", "?tipo=", "?tipo=XYZ", "?tipo=a_pagar", "?tipo=A_PAGAR&situacao=XYZ", "?tipo=A_PAGAR&situacao=todas", "?tipo=A_PAGAR&situacao=TODAS&situacao=BAIXADAS", "?tipo=A_PAGAR&situacao=TODAS&size=100000&sort=x;drop", "?tipo=A_PAGAR&de=abc", "?tipo=A_PAGAR&ate=2030-13-45",
                 "?tipo=A_PAGAR&de=1800-01-01", "?tipo=A_PAGAR&ate=9999-12-31", "?tipo=A_PAGAR&de=2030-05-10&ate=2030-05-01",
                 "?tipo=A_PAGAR&de=-999999999-01-01", "?tipo=A_PAGAR&page=-1", "?tipo=A_PAGAR&size=0", "?tipo=A_PAGAR&size=100000",
                 "?tipo=A_PAGAR&page=abc", "?tipo=A_PAGAR&page=99999999999", "?tipo=A_PAGAR&sort=inexistente,asc", "?tipo=A_PAGAR&sort=valor;drop table x",
