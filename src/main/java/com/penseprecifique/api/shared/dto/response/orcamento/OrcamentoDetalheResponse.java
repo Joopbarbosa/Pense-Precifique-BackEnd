@@ -61,6 +61,8 @@ public class OrcamentoDetalheResponse {
     private TipoCancelamento cancelamentoTipo;
     private BigDecimal percentualMulta;
     private BigDecimal valorMulta;
+    /** V0.19.0 (#692, RN-NOVA-58) — valor total da multa (R$); {@code valorMulta} é a parte a receber. */
+    private BigDecimal valorMultaBruta;
     private BigDecimal valorDevolvidoMulta;
     private Boolean estornoSinal;
     private LocalDateTime dataEstornoSinal;
