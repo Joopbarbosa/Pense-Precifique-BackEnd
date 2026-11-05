@@ -101,10 +101,14 @@ class OrcamentoPagamentoFinanceiroIT {
 
     /** Orçamento ENVIADO de total R$ 300,00, com prazo de produção (não elegível ao atalho). */
     private UUID enviado(boolean comPrazo) {
+        return enviado(comPrazo, "300.00");
+    }
+
+    private UUID enviado(boolean comPrazo, String preco) {
         OrcamentoItemRequest item = new OrcamentoItemRequest();
         item.setProdutoId(produto.getId());
         item.setMargemAplicada(BigDecimal.ZERO);
-        item.setPrecoUnitario(new BigDecimal("300.00"));
+        item.setPrecoUnitario(new BigDecimal(preco));
         item.setQuantidade(1);
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
@@ -636,5 +640,116 @@ class OrcamentoPagamentoFinanceiroIT {
         req.setPercentualSinal(null);
         req.setValorSinal(new BigDecimal("300.01"));
         assertThrows(BusinessException.class, () -> orcamentoService.criar(req));
+    }
+
+    // --------------------------------------------------------------------------------------------- PP-692 (RN-NOVA-58; CEN-NOVO-93, 94, 103, 104)
+
+    private UUID sinalPago(String preco, String sinal) {
+        UUID id = enviado(true, preco);
+        aprovar(id, pagamento(true, sinal));
+        avancar(id);
+        receberSinal(id, pix.getId());
+        assertEquals(StatusOrcamento.SINAL_PAGO, status(id));
+        return id;
+    }
+
+    private AvancaStatusRequest comMulta(String valor, String percentual) {
+        AvancaStatusRequest r = cancelamento();
+        r.setComMulta(true);
+        if (valor != null) r.setValorMulta(new BigDecimal(valor));
+        if (percentual != null) r.setPercentualMulta(new BigDecimal(percentual));
+        return r;
+    }
+
+    private String erro(UUID id, AvancaStatusRequest r) {
+        BusinessException e = assertThrows(BusinessException.class, () -> orcamentoService.cancelar(id, r));
+        assertEquals(StatusOrcamento.SINAL_PAGO, status(id), "recusa não pode mudar o status");
+        return e.getMessage();
+    }
+
+    @Test
+    void sinalPagoMultaEmReaisCalculaOPercentualEGeraParcelaMultaDaDiferenca() {
+        UUID id = sinalPago("300.00", "90.00");
+        var r = orcamentoService.cancelar(id, comMulta("150.00", null));
+        assertValor("50.00", r.getPercentualMulta());
+        assertValor("150.00", r.getValorMultaBruta());
+        assertValor("60.00", r.getValorMulta());
+        assertValor("60.00", parcela(id, PapelParcela.MULTA).valor());
+        assertEquals(SituacaoParcela.EM_ABERTO, parcela(id, PapelParcela.MULTA).situacao());
+    }
+
+    @Test
+    void sinalPagoMultaEmPercentualCalculaOValorEEstornaOExcedente() {
+        UUID id = sinalPago("300.00", "90.00");
+        AvancaStatusRequest req = comMulta(null, "10");
+        req.setEstornarSinal(true);
+        req.setDataEstornoSinal(LocalDateTime.now());
+        var r = orcamentoService.cancelar(id, req);
+        assertValor("30.00", r.getValorMultaBruta());
+        assertValor("10.00", r.getPercentualMulta());
+        assertValor("60.00", lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL).get(0).getValorTotal());
+        assertTrue(parcelas(id).stream().noneMatch(p -> p.papel() == PapelParcela.MULTA));
+    }
+
+    @Test
+    void sinalPagoMultaIgualAoRecebidoNaoGeraParcelaNemEstorno() {
+        UUID id = sinalPago("300.00", "90.00");
+        orcamentoService.cancelar(id, comMulta("90.00", null));
+        assertTrue(parcelas(id).stream().noneMatch(p -> p.papel() == PapelParcela.MULTA));
+        assertTrue(lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL).isEmpty());
+    }
+
+    @Test
+    void valorEmReaisQueDaMenosDeUmCentesimoDePercentoGravaZeroPorCento() {
+        UUID id = sinalPago("300.00", "90.00");
+        var r = orcamentoService.cancelar(id, comMulta("0.01", null));
+        assertValor("0.00", r.getPercentualMulta());
+        assertValor("0.01", r.getValorMultaBruta());
+    }
+
+    @Test
+    void percentualQueResultaEmMenosDeUmCentavoERecusado() {
+        UUID id = sinalPago("10.00", "1.00");
+        assertEquals("A multa resulta em menos de R$ 0,01.", erro(id, comMulta(null, "0.01")));
+    }
+
+    @Test
+    void comMultaExigeExatamenteUmDosDoisCampos() {
+        UUID id = sinalPago("300.00", "90.00");
+        assertEquals("Informe a multa em valor ou em percentual, não os dois.", erro(id, comMulta("10.00", "10")));
+        assertEquals("Informe a multa em valor ou em percentual, não os dois.", erro(id, comMulta(null, null)));
+    }
+
+    @Test
+    void multaForaDosLimitesERecusadaComAsMensagensDaRN50() {
+        UUID id = sinalPago("300.00", "90.00");
+        assertEquals("A multa não pode ser maior que o total do orçamento.", erro(id, comMulta("300.01", null)));
+        assertEquals("A multa não pode ser maior que o total do orçamento.", erro(id, comMulta(null, "100.01")));
+        assertEquals("A multa deve ter no máximo duas casas decimais.", erro(id, comMulta("10.001", null)));
+        assertEquals("Informe uma multa maior que zero ou escolha cancelar sem multa.", erro(id, comMulta("0", null)));
+        assertEquals("Informe uma multa maior que zero ou escolha cancelar sem multa.", erro(id, comMulta(null, "0")));
+    }
+
+    @Test
+    void semMultaNaoExigeNenhumCampoENaoGravaMulta() {
+        UUID id = sinalPago("300.00", "90.00");
+        AvancaStatusRequest req = cancelamento();
+        req.setComMulta(false);
+        var r = orcamentoService.cancelar(id, req);
+        assertEquals(StatusOrcamento.CANCELADO, status(id));
+        assertNull(r.getValorMultaBruta());
+        assertTrue(parcelas(id).stream().noneMatch(p -> p.papel() == PapelParcela.MULTA));
+    }
+
+    @Test
+    void cancelarPagoComMultaEmReaisEstornaORecebidoMenosAMulta() {
+        UUID id = pagoComEstoqueBaixado();
+        AvancaStatusRequest req = cancelarPago(true, true);
+        req.setComMulta(true);
+        req.setValorMulta(new BigDecimal("100.00"));
+        var r = orcamentoService.cancelar(id, req);
+        assertValor("33.33", r.getPercentualMulta());
+        assertValor("100.00", r.getValorMultaBruta());
+        assertValor("200.00", lancamentos.findByOrcamentoIdAndSubtipo(id, SubtipoLancamento.ESTORNO_SINAL).get(0).getValorTotal());
     }
 }

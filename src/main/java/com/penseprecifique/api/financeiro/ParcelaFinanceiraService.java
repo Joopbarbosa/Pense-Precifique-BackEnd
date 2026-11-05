@@ -54,15 +54,18 @@ public class ParcelaFinanceiraService {
         Set<SituacaoParcela> situacoes = switch (f) {
             case EM_ABERTO, VENCIDAS -> EnumSet.of(SituacaoParcela.EM_ABERTO);
             case BAIXADAS -> EnumSet.of(SituacaoParcela.BAIXADA);
-            case TODAS -> EnumSet.of(SituacaoParcela.EM_ABERTO, SituacaoParcela.BAIXADA);
+            // PP-707 / RN-NOVA-59: só em "Todas" as canceladas aparecem (com selo); os totais de previsto continuam só Em aberto
+            case TODAS -> EnumSet.of(SituacaoParcela.EM_ABERTO, SituacaoParcela.BAIXADA, SituacaoParcela.CANCELADA);
         };
         // a ordenação é fixa (vencidas primeiro, depois vencimento): o sort do pedido é ignorado
         Pageable pagina = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<Parcela> parcelas = parcelaRepository.listar(usuarioId, tipo, inicio, fim, situacoes,
                 f == FiltroSituacaoParcela.VENCIDAS, periodoPadrao, hoje, pagina);
         Map<UUID, Integer> totais = totaisPorLancamento(parcelas.getContent());
+        Map<UUID, Integer> totaisGerais = totaisGeraisPorLancamento(parcelas.getContent());
         List<ParcelaFinanceiraResponse> itens = parcelas.getContent().stream()
-                .map(p -> paraResposta(p, totais.getOrDefault(p.getLancamento().getId(), 1), hoje)).toList();
+                .map(p -> paraResposta(p, (p.getSituacao() == SituacaoParcela.CANCELADA ? totaisGerais : totais)
+                        .getOrDefault(p.getLancamento().getId(), 1), hoje)).toList();
         return new ListaParcelasResponse(itens, parcelas.getTotalElements(), parcelas.getNumber(), parcelas.getSize(),
                 parcelaRepository.totalEmAberto(usuarioId, tipo, inicio, fim, periodoPadrao, hoje),
                 parcelaRepository.totalVencido(usuarioId, tipo, inicio, fim, periodoPadrao, hoje),
@@ -79,7 +82,7 @@ public class ParcelaFinanceiraService {
     /** Converte a parcela já gravada na resposta (usada também após baixar/desfazer). */
     @Transactional(readOnly = true)
     public ParcelaFinanceiraResponse paraResposta(Parcela p) {
-        Map<UUID, Integer> totais = totaisPorLancamento(List.of(p));
+        Map<UUID, Integer> totais = p.getSituacao() == SituacaoParcela.CANCELADA ? totaisGeraisPorLancamento(List.of(p)) : totaisPorLancamento(List.of(p));
         return paraResposta(p, totais.getOrDefault(p.getLancamento().getId(), 1), LocalDate.now(relogioBrasilia));
     }
 
@@ -90,6 +93,20 @@ public class ParcelaFinanceiraService {
             return mapa;
         }
         for (Object[] linha : parcelaRepository.contarAtivasPorLancamento(ids)) {
+            mapa.put((UUID) linha[0], ((Number) linha[1]).intValue());
+        }
+        return mapa;
+    }
+
+    /** PP-707: parcela cancelada mostra "n de N" com N = todas as parcelas do lançamento (as ativas não a contam, RN-NOVA-1). */
+    private Map<UUID, Integer> totaisGeraisPorLancamento(List<Parcela> parcelas) {
+        Set<UUID> ids = parcelas.stream().filter(p -> p.getSituacao() == SituacaoParcela.CANCELADA)
+                .map(p -> p.getLancamento().getId()).collect(Collectors.toSet());
+        Map<UUID, Integer> mapa = new HashMap<>();
+        if (ids.isEmpty()) {
+            return mapa;
+        }
+        for (Object[] linha : parcelaRepository.contarTodasPorLancamento(ids)) {
             mapa.put((UUID) linha[0], ((Number) linha[1]).intValue());
         }
         return mapa;
@@ -107,7 +124,7 @@ public class ParcelaFinanceiraService {
             }
             case CANCELADA -> {
                 exibida = "CANCELADA";
-                rotulo = "Cancelada";
+                rotulo = "Cancelado";
             }
             default -> {
                 if (p.getVencimento().isBefore(hoje)) {

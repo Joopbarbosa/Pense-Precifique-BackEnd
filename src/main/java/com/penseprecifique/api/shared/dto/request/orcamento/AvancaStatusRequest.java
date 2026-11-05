@@ -22,7 +22,17 @@ public class AvancaStatusRequest {
     @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String motivoCancelamento;
     private TipoCancelamento tipoCancelamento;
-    /** V0.19.0 (#692, RN-NOVA-50) — ausente = cancelar sem multa; informado, precisa ser maior que 0 e até 100 (do total). */
+    /**
+     * V0.19.0 (#692, RN-NOVA-58) — "com multa"? Ausente: vale "com multa" se veio valor ou percentual (pedido antigo).
+     * {@code true} exige exatamente um dos dois campos; {@code false} cancela sem multa e ignora os campos.
+     */
+    private Boolean comMulta;
+
+    /** V0.19.0 (#692, RN-NOVA-58) — multa em R$ (de 0,01 até o total do orçamento, 2 casas); excludente com {@link #percentualMulta}. */
+    @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "Informe uma multa maior que zero ou escolha cancelar sem multa.")
+    private BigDecimal valorMulta;
+
+    /** V0.19.0 (#692, RN-NOVA-50/58) — ausente = cancelar sem multa; informado, precisa ser maior que 0 e até 100 (do total). */
     @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "Informe uma multa maior que zero ou escolha cancelar sem multa.")
     @jakarta.validation.constraints.DecimalMax(value = "100", message = "A multa não pode ser maior que o total do orçamento.")
     @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "A multa deve ter no máximo duas casas decimais.")

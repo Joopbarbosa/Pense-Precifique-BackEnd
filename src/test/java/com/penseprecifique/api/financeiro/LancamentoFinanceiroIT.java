@@ -24,6 +24,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -302,8 +303,90 @@ class LancamentoFinanceiroIT {
         assertThrows(BusinessException.class, () -> service.baixar(depois.get(1).getId(), null, metodo.getId()));
         assertEquals(new BigDecimal("25.00"), service.cancelar(l.getId()).getValorTotal());
         ListaParcelasResponse r = consulta.listar(TipoLancamento.A_PAGAR, hoje, hoje.plusMonths(6), FiltroSituacaoParcela.TODAS, PageRequest.of(0, 20));
-        assertEquals(1, r.itens().size());
-        assertEquals(1, r.itens().get(0).totalParcelas());
+        // PP-707 / RN-NOVA-59: "Todas" traz a Paga (1 de 1) e as 3 canceladas, cada uma com seu selo
+        assertEquals(4, r.itens().size());
+        assertEquals(1, r.itens().stream().filter(i -> "PAGA".equals(i.situacaoExibida()) && i.totalParcelas() == 1).count());
+        assertEquals(3, r.itens().stream().filter(i -> "CANCELADA".equals(i.situacaoExibida())).count());
+        assertTrue(r.itens().stream().filter(i -> "CANCELADA".equals(i.situacaoExibida())).allMatch(i -> "Cancelado".equals(i.rotulo()) && i.totalParcelas() == 4));
+    }
+
+    /** CEN-NOVO-97 — R$ 100,00 cancelado e R$ 50,00 em aberto: "Todas" traz os dois, o total a pagar mostra só R$ 50,00. */
+    @Test
+    void todasTrazCanceladoComSeloETotaisSoSomamOEmAberto() {
+        seed();
+        Lancamento cancelado = criar(TipoLancamento.A_PAGAR, "100.00", 1, hoje.plusDays(3));
+        service.cancelar(cancelado.getId());
+        Lancamento aberto = criar(TipoLancamento.A_PAGAR, "50.00", 1, hoje.plusDays(4));
+        ListaParcelasResponse todas = consulta.listar(TipoLancamento.A_PAGAR, null, null, FiltroSituacaoParcela.TODAS, PageRequest.of(0, 10));
+        assertEquals(2, todas.itens().size());
+        ParcelaFinanceiraResponse c = todas.itens().stream().filter(i -> i.lancamentoId().equals(cancelado.getId())).findFirst().orElseThrow();
+        assertEquals("CANCELADA", c.situacaoExibida());
+        assertEquals("Cancelado", c.rotulo());
+        assertEquals(0, c.valor().compareTo(new BigDecimal("100.00")));
+        assertEquals(new BigDecimal("50.00"), todas.totalEmAberto().setScale(2));
+        assertEquals(0, todas.totalVencido().compareTo(BigDecimal.ZERO));
+        assertEquals(aberto.getId(), todas.itens().stream().filter(i -> !"CANCELADA".equals(i.situacaoExibida())).findFirst().orElseThrow().lancamentoId());
+    }
+
+    /** CEN-NOVO-98 — nenhum outro filtro mostra o cancelado, nem soma nos totais; vale para A pagar e A receber. */
+    @Test
+    void outrosFiltrosNuncaMostramCancelado() {
+        seed();
+        for (TipoLancamento tipo : TipoLancamento.values()) {
+            Lancamento cancelado = criar(tipo, "100.00", 1, hoje.plusDays(2));
+            service.cancelar(cancelado.getId());
+            Lancamento aberto = criar(tipo, "50.00", 1, hoje.plusDays(3));
+            Lancamento vencida = criar(tipo, "20.00", 1, hoje.minusDays(2));
+            for (FiltroSituacaoParcela f : new FiltroSituacaoParcela[] {null, FiltroSituacaoParcela.EM_ABERTO, FiltroSituacaoParcela.VENCIDAS, FiltroSituacaoParcela.BAIXADAS}) {
+                ListaParcelasResponse r = consulta.listar(tipo, null, null, f, PageRequest.of(0, 10));
+                assertTrue(r.itens().stream().noneMatch(i -> i.lancamentoId().equals(cancelado.getId()) || "CANCELADA".equals(i.situacaoExibida())), tipo + " " + f);
+                assertEquals(new BigDecimal("70.00"), r.totalEmAberto().setScale(2));
+                assertEquals(new BigDecimal("20.00"), r.totalVencido().setScale(2));
+            }
+            assertNotNull(aberto);
+            assertNotNull(vencida);
+        }
+    }
+
+    /** RN-NOVA-59 (desempate) — lançamento misto: parcela paga fica no realizado, cancelada com selo, só a não cancelada soma no previsto. */
+    @Test
+    void lancamentoMistoCadaParcelaComSeuSeloESoNaoCanceladasSomam() {
+        seed();
+        Lancamento l = criar(TipoLancamento.A_PAGAR, "90.00", 3, hoje.plusDays(1));
+        List<Parcela> ps = parcelas(l);
+        service.baixar(ps.get(0).getId(), null, metodo.getId());
+        // cancelar o lançamento cancela as parcelas 2 e 3 (Em aberto) e mantém a 1 Paga: lançamento misto
+        service.cancelar(l.getId());
+        Lancamento outro = criar(TipoLancamento.A_PAGAR, "60.00", 2, hoje.plusDays(2));
+        ListaParcelasResponse todas = consulta.listar(TipoLancamento.A_PAGAR, hoje, hoje.plusMonths(3), FiltroSituacaoParcela.TODAS, PageRequest.of(0, 20));
+        long canceladas = todas.itens().stream().filter(i -> i.lancamentoId().equals(l.getId()) && "CANCELADA".equals(i.situacaoExibida())).count();
+        long pagas = todas.itens().stream().filter(i -> i.lancamentoId().equals(l.getId()) && "PAGA".equals(i.situacaoExibida())).count();
+        assertEquals(2, canceladas);
+        assertEquals(1, pagas);
+        // previsto soma só as 2 parcelas Em aberto do outro lançamento (30,00 + 30,00); a paga e as canceladas ficam fora
+        assertEquals(new BigDecimal("60.00"), todas.totalEmAberto().setScale(2));
+        assertEquals(outro.getValorTotal().setScale(2), todas.totalEmAberto().setScale(2));
+        ListaParcelasResponse pagasFiltro = consulta.listar(TipoLancamento.A_PAGAR, hoje, hoje.plusMonths(3), FiltroSituacaoParcela.BAIXADAS, PageRequest.of(0, 20));
+        assertEquals(1, pagasFiltro.itens().size());
+        assertEquals("PAGA", pagasFiltro.itens().get(0).situacaoExibida());
+    }
+
+    /** RN-NOVA-59 — "Todas" respeita o período e o isolamento: cancelado de outra conta nunca aparece. */
+    @Test
+    void canceladoDeOutraContaNaoApareceEPeriodoEExato() {
+        seed();
+        Usuario outra = novaUsuaria();
+        entrar(outra);
+        Lancamento alheio = criar(TipoLancamento.A_PAGAR, "100.00", 1, hoje);
+        service.cancelar(alheio.getId());
+        entrar(usuario);
+        Lancamento meu = criar(TipoLancamento.A_PAGAR, "10.00", 1, hoje.plusMonths(2));
+        service.cancelar(meu.getId());
+        ListaParcelasResponse padrao = consulta.listar(TipoLancamento.A_PAGAR, null, null, FiltroSituacaoParcela.TODAS, PageRequest.of(0, 10));
+        assertTrue(padrao.itens().stream().noneMatch(i -> i.lancamentoId().equals(alheio.getId())));
+        ListaParcelasResponse exato = consulta.listar(TipoLancamento.A_PAGAR, hoje.plusMonths(2), hoje.plusMonths(2), FiltroSituacaoParcela.TODAS, PageRequest.of(0, 10));
+        assertEquals(1, exato.itens().size());
+        assertEquals("Cancelado", exato.itens().get(0).rotulo());
     }
 
     @Test
