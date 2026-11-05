@@ -9,6 +9,7 @@ import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
 import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelService;
 import com.penseprecifique.api.insumo.InsumoRepository;
+import com.penseprecifique.api.produto.FichaTecnicaItemRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.*;
 import com.penseprecifique.api.shared.domain.enums.StatusVendaCaixa;
@@ -55,6 +56,9 @@ class VendaCaixaItemCatalogoIT {
     @Autowired ItemCatalogoRepository itemCatalogoRepository;
     @Autowired ItemCatalogoComponenteRepository itemCatalogoComponenteRepository;
     @Autowired InsumoRepository insumoRepository;
+    @Autowired FichaTecnicaItemRepository fichaTecnicaItemRepository;
+    @Autowired VendaCaixaItemRepository vendaCaixaItemRepository;
+    @Autowired VendaCaixaItemCustomizacaoRepository vendaCaixaItemCustomizacaoRepository;
     @Autowired CaixaTurnoService caixaTurnoService;
     @Autowired VendaCaixaService vendaCaixaService;
     @Autowired MetodoPagamentoConfiguravelService metodoPagamentoService;
@@ -100,6 +104,93 @@ class VendaCaixaItemCatalogoIT {
     private UUID metodoDinheiroId() {
         return metodoPagamentoService.listar().stream()
                 .filter(m -> m.tipo() == TipoMetodoPagamento.DINHEIRO).findFirst().orElseThrow().id();
+    }
+
+    private Insumo criarInsumo(UnidadeMedida unidade, String custo) {
+        return insumoRepository.save(Insumo.builder()
+                .usuario(usuario).numero(contador.getAndIncrement()).nome("Material de teste").unidadeMedida(unidade)
+                .custoUnitario(new BigDecimal(custo))
+                .estoqueAtual(new BigDecimal("100")).permitirEstoqueNegativo(true).build());
+    }
+
+    private UnidadeMedida criarUnidade() {
+        return unidadeMedidaRepository.save(UnidadeMedida.builder()
+                .usuario(usuario).nome("Unidade de teste").sigla("ut").padrao(false).build());
+    }
+
+    /** PP-706 (subtarefa da PP-290) / CXA-012: venda de item de Catálogo grava o custo de material
+     * unitário do item (componentes insumo e produto-base, por unidade vendida) e da customização avulsa. */
+    @Test
+    void gravaCustoMaterialUnitarioDoItemDeCatalogoEDaCustomizacaoAvulsa() {
+        seedUsuario();
+        Insumo material = criarInsumo(criarUnidade(), "2.00");
+        Produto produtoBase = criarProduto("Base com material", TipoProduto.PRODUTO, new BigDecimal("10.00"), new BigDecimal("10"));
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(produtoBase).insumo(material).quantidade(BigDecimal.ONE).build());
+        Produto customizacao = criarProduto("Customização com material", TipoProduto.CUSTOMIZACAO, new BigDecimal("5.00"), new BigDecimal("10"));
+        fichaTecnicaItemRepository.save(FichaTecnicaItem.builder()
+                .produto(customizacao).insumo(material).quantidade(new BigDecimal("2.5")).build());
+        Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
+                .usuario(usuario).numero(1).nome("Catálogo Teste").ativo(true).build());
+        ItemCatalogo item = itemCatalogoRepository.save(ItemCatalogo.builder()
+                .catalogo(catalogo).nome("Kit com material").tempoProducao(0)
+                .precoVenda(new BigDecimal("30.00")).override(true).build());
+        itemCatalogoComponenteRepository.save(ItemCatalogoComponente.builder()
+                .itemCatalogo(item).insumo(material).quantidade(new BigDecimal("3")).build());
+        itemCatalogoComponenteRepository.save(ItemCatalogoComponente.builder()
+                .itemCatalogo(item).produtoBase(produtoBase).quantidade(BigDecimal.ONE).build());
+
+        // 2 unidades do item (60,00) + 1 customização avulsa (5,00)
+        VendaCaixaResponseDTO venda = (VendaCaixaResponseDTO) vendaCaixaService.registrarVenda(new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(item.getId(), null, new BigDecimal("2"),
+                        List.of(new VendaCaixaItemCustomizacaoRequestDTO(customizacao.getId(), 1)))),
+                null, null,
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("65.00"), null)),
+                null));
+
+        VendaCaixaItem gravado = vendaCaixaItemRepository.findByVendaCaixaId(venda.id()).getFirst();
+        VendaCaixaItemCustomizacao customizacaoGravada = vendaCaixaItemCustomizacaoRepository
+                .findByVendaCaixaItemId(gravado.getId()).getFirst();
+        // por unidade: 3 x 2,00 (insumo) + 1 x 2,00 (custo de material do produto-base) = 8,00
+        assertEquals(0, new BigDecimal("8.0000").compareTo(gravado.getCustoMaterialUnitario()));
+        // customização avulsa: 2,5 x 2,00
+        assertEquals(0, new BigDecimal("5.0000").compareTo(customizacaoGravada.getCustoMaterialUnitario()));
+    }
+
+    /** PP-706 — item de Catálogo sem componentes de custo grava 0 (nunca nulo nem erro). */
+    @Test
+    void itemDeCatalogoSemCustoDeMaterialGravaCustoZero() {
+        seedUsuario();
+        Produto semFicha = criarProduto("Base sem ficha", TipoProduto.PRODUTO, new BigDecimal("10.00"), new BigDecimal("10"));
+        Catalogo catalogo = catalogoRepository.save(Catalogo.builder()
+                .usuario(usuario).numero(1).nome("Catálogo Teste").ativo(true).build());
+        ItemCatalogo item = criarItemCatalogo(catalogo, new BigDecimal("10.00"), semFicha);
+
+        VendaCaixaResponseDTO venda = (VendaCaixaResponseDTO) vendaCaixaService.registrarVenda(new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(item.getId(), null, BigDecimal.ONE, null)),
+                null, null,
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("10.00"), null)),
+                null));
+
+        VendaCaixaItem gravado = vendaCaixaItemRepository.findByVendaCaixaId(venda.id()).getFirst();
+        assertNotNull(gravado.getCustoMaterialUnitario());
+        assertEquals(0, BigDecimal.ZERO.compareTo(gravado.getCustoMaterialUnitario()));
+    }
+
+    /** PP-706 — entrada hostil: id de item de catálogo inexistente/de outra conta vira erro de negócio, nunca 500. */
+    @Test
+    void itemDeCatalogoInexistenteOuDeOutraContaNaoVende() {
+        seedUsuario();
+        VendaCaixaRequestDTO request = new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(UUID.randomUUID(), null, BigDecimal.ONE, null)),
+                null, null,
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("10.00"), null)),
+                null);
+        BusinessException ex = assertThrows(BusinessException.class, () -> vendaCaixaService.registrarVenda(request));
+        assertEquals("Item de catálogo não encontrado", ex.getMessage());
     }
 
     @Test
