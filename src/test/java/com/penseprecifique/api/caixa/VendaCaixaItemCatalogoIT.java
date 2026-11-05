@@ -179,15 +179,35 @@ class VendaCaixaItemCatalogoIT {
         assertEquals(0, BigDecimal.ZERO.compareTo(gravado.getCustoMaterialUnitario()));
     }
 
-    /** PP-706 — entrada hostil: id de item de catálogo inexistente/de outra conta vira erro de negócio, nunca 500. */
+    /** PP-706 — entrada hostil: id de item de catálogo inexistente vira erro de negócio, nunca 500. */
     @Test
-    void itemDeCatalogoInexistenteOuDeOutraContaNaoVende() {
+    void itemDeCatalogoInexistenteNaoVende() {
         seedUsuario();
         VendaCaixaRequestDTO request = new VendaCaixaRequestDTO(
                 null,
                 List.of(new VendaCaixaItemRequestDTO(UUID.randomUUID(), null, BigDecimal.ONE, null)),
                 null, null,
                 List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("10.00"), null)),
+                null);
+        BusinessException ex = assertThrows(BusinessException.class, () -> vendaCaixaService.registrarVenda(request));
+        assertEquals("Item de catálogo não encontrado", ex.getMessage());
+    }
+
+    /** PP-706 — entrada hostil: item de catálogo existente, mas de outra conta, não pode ser vendido. */
+    @Test
+    void itemDeCatalogoDeOutraContaNaoVende() {
+        seedUsuario();
+        Usuario outra = usuarioRepository.save(Usuario.builder()
+                .email("outra-conta-" + UUID.randomUUID() + "@test.com")
+                .senhaHash(passwordEncoder.encode(SENHA_TESTE)).ativo(true).build());
+        Catalogo catalogoAlheio = catalogoRepository.save(Catalogo.builder()
+                .usuario(outra).numero(1).nome("Catálogo alheio").ativo(true).build());
+        ItemCatalogo itemAlheio = criarItemCatalogo(catalogoAlheio, new BigDecimal("30.00"));
+        VendaCaixaRequestDTO request = new VendaCaixaRequestDTO(
+                null,
+                List.of(new VendaCaixaItemRequestDTO(itemAlheio.getId(), null, BigDecimal.ONE, null)),
+                null, null,
+                List.of(new VendaCaixaPagamentoRequestDTO(metodoDinheiroId(), new BigDecimal("30.00"), null)),
                 null);
         BusinessException ex = assertThrows(BusinessException.class, () -> vendaCaixaService.registrarVenda(request));
         assertEquals("Item de catálogo não encontrado", ex.getMessage());
