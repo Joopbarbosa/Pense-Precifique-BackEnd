@@ -80,6 +80,8 @@ class DashboardCadastrosEstoqueIT {
         fichas.save(FichaTecnicaItem.builder().produto(laco).insumo(material).quantidade(BigDecimal.ONE).build());
         produtos.save(Produto.builder().usuario(usuario).numero(2).nome("Laço grande").tipo(TipoProduto.PRODUTO)
                 .rendimento(BigDecimal.ONE).tempoProducao(10).precoVenda(bd("20.00")).estoqueAtual(BigDecimal.ZERO).ativo(true).build());
+        produtos.save(Produto.builder().usuario(usuario).numero(3).nome("Laço inativo").tipo(TipoProduto.PRODUTO)
+                .rendimento(BigDecimal.ONE).tempoProducao(10).precoVenda(bd("99.00")).estoqueAtual(bd("5")).ativo(false).build());
 
         DashboardCadastrosResponse.Estoque e = service.dashboard(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), null).estoque();
 
@@ -87,7 +89,11 @@ class DashboardCadastrosEstoqueIT {
         assertEquals(0, bd("40.67").compareTo(e.valorProdutosProntos()));
         assertEquals(0, bd("100.67").compareTo(e.valorTotal()));
         assertEquals(0, bd("60.00").compareTo(e.potencialVenda()));
-        assertEquals(3, e.valorItens().size(), "fita, papel e laço pequeno; o laço grande (sem estoque) e o material (estoque zero) não entram");
+        assertEquals(4, e.valorItens().size(), "fita, papel, laço pequeno e laço grande ativo com estoque zero; produto inativo não entra");
+        assertTrue(e.valorItens().stream().anyMatch(l -> l.nome().equals("Laço grande") && l.valor().signum() == 0));
+        assertTrue(e.potencialItens().stream().anyMatch(l -> l.nome().equals("Laço grande") && l.valor().signum() == 0));
+        assertTrue(e.valorItens().stream().noneMatch(l -> l.nome().equals("Laço inativo")));
+        assertTrue(e.potencialItens().stream().noneMatch(l -> l.nome().equals("Laço inativo")));
         assertEquals(1, e.insumosAbaixoMinimo(), "só a fita (10 < 15); o papel tem 100 e o mínimo é 50");
         assertEquals(0, bd("5").compareTo(e.abaixoMinimoItens().get(0).falta()));
         assertEquals(0, bd("0").compareTo(e.percentualCmv().valor()), "sem vendas no período, 0%");
@@ -128,13 +134,14 @@ class DashboardCadastrosEstoqueIT {
 
         DashboardCadastrosResponse.Estoque e = service.dashboard(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), null).estoque();
 
-        assertEquals(List.of("Laço pequeno", "Fita de cetim", "Papel couchê"), e.valorItens().stream().map(DashboardCadastrosResponse.LinhaEstoque::nome).toList(),
-                "maior valor primeiro; o empate de R$ 30,00 desempata pelo nome");
-        assertEquals(List.of("PRODUTO", "INSUMO", "INSUMO"), e.valorItens().stream().map(DashboardCadastrosResponse.LinhaEstoque::tipo).toList());
+        assertEquals(List.of("Laço pequeno", "Fita de cetim", "Papel couchê", "Laço grande"), e.valorItens().stream().map(DashboardCadastrosResponse.LinhaEstoque::nome).toList(),
+                "maior valor primeiro; linhas zeradas ficam ao final em ordem estável");
+        assertEquals(List.of("PRODUTO", "INSUMO", "INSUMO", "PRODUTO"), e.valorItens().stream().map(DashboardCadastrosResponse.LinhaEstoque::tipo).toList());
         assertEquals(0, bd("4").compareTo(e.valorItens().get(0).estoque()));
         assertEquals(0, bd("100.67").compareTo(e.valorTotal()), "total do rodapé");
-        assertEquals(1, e.potencialItens().size());
-        assertEquals("Laço pequeno", e.potencialItens().get(0).nome());
+        assertEquals(2, e.potencialItens().size());
+        assertTrue(e.potencialItens().stream().anyMatch(l -> l.nome().equals("Laço grande") && l.valor().signum() == 0));
+        assertTrue(e.potencialItens().stream().anyMatch(l -> l.nome().equals("Laço pequeno")));
         assertEquals(0, bd("15.00").compareTo(e.potencialItens().get(0).precoVenda()));
         assertEquals(0, bd("60.00").compareTo(e.potencialItens().get(0).valor()));
         assertEquals(0, bd("60.00").compareTo(e.potencialVenda()));

@@ -15,6 +15,8 @@ public record TaxaParcelaRequestDTO(
         Integer parcela,
 
         @NotNull(message = "A taxa da parcela é obrigatória")
-        @DecimalMin(value = "0", message = "A taxa não pode ser negativa")
+        @DecimalMin(value = "0", message = "A taxa deve estar entre 0% e 100%.")
+        @jakarta.validation.constraints.DecimalMax(value = "100", message = "A taxa deve estar entre 0% e 100%.")
+        @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "A taxa deve estar entre 0% e 100%.")
         BigDecimal taxa
 ) {}

@@ -6,6 +6,7 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -17,6 +18,13 @@ public class ClienteResponse {
     private String nome;
     private String email;
     private String whatsapp;
+    private String whatsappCanonico;
+    private boolean aceitaWhatsapp;
+    private LocalDate aceitaWhatsappEm;
+    private UUID aceitaWhatsappPor;
+    private boolean recusouWhatsapp;
+    private LocalDate recusouWhatsappEm;
+    private UUID recusouWhatsappPor;
     private String telefone;
     private String site;
     private String endereco;

@@ -27,9 +27,20 @@ public class Orcamento {
     @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "cliente_id", nullable = false)
+    /** Obrigatório para a Venda (RN-NOVA-37, validado no serviço); opcional só no Descritivo (#382, DT-NOVA-10). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cliente_id")
     private Cliente cliente;
+
+    /** #382 (RN-NOVA-44) — Venda (padrão) ou Descritivo. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo", nullable = false, length = 20)
+    @Builder.Default
+    private TipoOrcamento tipo = TipoOrcamento.VENDA;
+
+    /** #382 — título do Descritivo; vazio na Venda. */
+    @Column(name = "titulo", length = 200)
+    private String titulo;
 
     @Column(name = "numero", updatable = false)
     private Integer numero;
@@ -39,13 +50,11 @@ public class Orcamento {
     @Builder.Default
     private StatusOrcamento status = StatusOrcamento.RASCUNHO;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "metodo_pagamento", nullable = false, length = 20)
-    @Builder.Default
-    private MetodoPagamento metodoPagamento = MetodoPagamento.PIX;
-
-    @Column(name = "metodo_pagamento_obs", columnDefinition = "TEXT")
-    private String metodoPagamentoObs;
+    /** DT-NOVA-8 / RN-NOVA-37 (V0.19.0, #1185) — método configurável da forma de pagamento; nulo até o passo Pagamento
+     *  da aprovação (gravado na transação da #1174). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metodo_pagamento_id")
+    private MetodoPagamentoConfiguravel metodoPagamento;
 
     @Column(name = "prazo_producao_dias")
     private Integer prazoProducaoDias;
@@ -95,12 +104,9 @@ public class Orcamento {
     @Column(name = "data_entrega")
     private LocalDateTime dataEntrega;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "metodo_sinal_recebido", length = 20)
-    private MetodoPagamento metodoSinalRecebido;
-
-    @Column(name = "metodo_sinal_recebido_obs", columnDefinition = "TEXT")
-    private String metodoSinalRecebidoObs;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metodo_sinal_recebido_id")
+    private MetodoPagamentoConfiguravel metodoSinalRecebido;
 
     @Column(name = "cancelamento_motivo", columnDefinition = "TEXT")
     private String cancelamentoMotivo;
@@ -114,6 +120,10 @@ public class Orcamento {
 
     @Column(name = "valor_multa", precision = 10, scale = 2)
     private BigDecimal valorMulta;
+
+    /** V0.19.0 (#692, RN-NOVA-58) — valor total da multa (referência dos lançamentos); {@link #valorMulta} é só a parte a receber. */
+    @Column(name = "valor_multa_bruta", precision = 10, scale = 2)
+    private BigDecimal valorMultaBruta;
 
     @Column(name = "valor_devolvido_multa", precision = 10, scale = 2)
     private BigDecimal valorDevolvidoMulta;

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.caixa;
 
+import java.time.Clock;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.CaixaMovimento;
 import com.penseprecifique.api.shared.domain.entity.CaixaTurno;
@@ -38,6 +39,7 @@ public class CaixaTurnoService {
     private static final int JUSTIFICATIVA_MINIMA = 30;
 
     private final CaixaTurnoRepository caixaTurnoRepository;
+    private final Clock clock;
     private final CaixaMovimentoRepository caixaMovimentoRepository;
     private final VendaCaixaPagamentoRepository vendaCaixaPagamentoRepository;
     private final UsuarioRepository usuarioRepository;
@@ -56,7 +58,7 @@ public class CaixaTurnoService {
 
         CaixaTurno turno = CaixaTurno.builder()
                 .usuario(usuario)
-                .dataAbertura(LocalDateTime.now())
+                .dataAbertura(LocalDateTime.now(clock))
                 .valorAbertura(request.valorAbertura())
                 .status(StatusCaixaTurno.ABERTO)
                 .build();
@@ -91,7 +93,7 @@ public class CaixaTurnoService {
                 .tipo(request.tipo())
                 .valor(request.valor())
                 .motivo(request.motivo())
-                .dataMovimento(LocalDateTime.now())
+                .dataMovimento(LocalDateTime.now(clock))
                 .responsavel(responsavel)
                 .build();
 
@@ -161,7 +163,7 @@ public class CaixaTurnoService {
         turno.setValorFechamentoEsperado(valorEsperado);
         turno.setValorFechamentoInformado(request.valorFechamentoInformado());
         turno.setDiferenca(diferenca);
-        turno.setDataFechamento(LocalDateTime.now());
+        turno.setDataFechamento(LocalDateTime.now(clock));
         turno.setStatus(StatusCaixaTurno.FECHADO);
 
         return toResponse(caixaTurnoRepository.save(turno));

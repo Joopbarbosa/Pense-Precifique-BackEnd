@@ -21,6 +21,13 @@ public class ClienteMapper {
         response.setNome(cliente.getNome());
         response.setEmail(cliente.getEmail());
         response.setWhatsapp(cliente.getWhatsapp());
+        response.setWhatsappCanonico(cliente.getWhatsappCanonico());
+        response.setAceitaWhatsapp(Boolean.TRUE.equals(cliente.getAceitaWhatsapp()));
+        response.setAceitaWhatsappEm(cliente.getAceitaWhatsappEm());
+        response.setAceitaWhatsappPor(cliente.getAceitaWhatsappPor() == null ? null : cliente.getAceitaWhatsappPor().getId());
+        response.setRecusouWhatsapp(Boolean.TRUE.equals(cliente.getRecusouWhatsapp()));
+        response.setRecusouWhatsappEm(cliente.getRecusouWhatsappEm());
+        response.setRecusouWhatsappPor(cliente.getRecusouWhatsappPor() == null ? null : cliente.getRecusouWhatsappPor().getId());
         response.setTelefone(cliente.getTelefone());
         response.setSite(cliente.getSite());
         response.setEndereco(cliente.getEndereco());

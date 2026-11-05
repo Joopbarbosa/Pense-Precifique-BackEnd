@@ -10,5 +10,6 @@ public record VendaCaixaPagamentoResponseDTO(
         String metodoPagamentoNome,
         BigDecimal valor,
         Integer parcelas,
-        BigDecimal taxaPercentualAplicada
+        BigDecimal taxaPercentualAplicada,
+        BigDecimal taxaValorAplicada
 ) {}

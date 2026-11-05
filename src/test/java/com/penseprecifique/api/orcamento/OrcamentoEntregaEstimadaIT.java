@@ -1,12 +1,14 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
+import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
+import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
@@ -35,6 +37,7 @@ class OrcamentoEntregaEstimadaIT {
 
     @Autowired OrcamentoService orcamentoService;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired Clock clock;
@@ -63,7 +66,6 @@ class OrcamentoEntregaEstimadaIT {
         item.setQuantidade(1);
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(prazoDias != null);
         req.setPrazoProducaoDias(prazoDias);
         req.setItens(List.of(item));
@@ -75,7 +77,7 @@ class OrcamentoEntregaEstimadaIT {
     }
 
     private void avancar(UUID id, AvancaStatusRequest req) {
-        orcamentoService.avancarStatus(id, req);
+        AprovacaoTeste.avancar(orcamentoService, id, req);
     }
 
     /** CEN-NOVO-17 e CEN-NOVO-13 — com sinal ativo, sem entrega estimada até o sinal ser pago; depois conta dele. */
@@ -84,7 +86,7 @@ class OrcamentoEntregaEstimadaIT {
         seed();
         UUID id = criarOrcamento(true, 10);
         AvancaStatusRequest sinal = new AvancaStatusRequest();
-        sinal.setMetodoSinalRecebido(MetodoPagamento.PIX);
+        sinal.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
         avancar(id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
         avancar(id, new AvancaStatusRequest()); // ENVIADO -> APROVADO
         avancar(id, sinal); // APROVADO -> AGUARDANDO_SINAL

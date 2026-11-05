@@ -23,7 +23,6 @@ import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
 import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
@@ -116,7 +115,6 @@ class OrcamentoDesvincularProducaoIT {
     private OrcamentoRequest requestComItens(List<OrcamentoItemRequest> itens) {
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(false);
         req.setItens(itens);
         req.setSinalAtivo(false);

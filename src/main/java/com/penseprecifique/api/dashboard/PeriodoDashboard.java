@@ -1,5 +1,6 @@
 package com.penseprecifique.api.dashboard;
 
+import java.time.Clock;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 
@@ -15,8 +16,8 @@ import java.time.temporal.ChronoUnit;
 public record PeriodoDashboard(LocalDate inicio, LocalDate fim, LocalDate inicioAnterior, LocalDate fimAnterior,
                                YearMonth primeiroMes, LocalDate inicioGeral) {
 
-    public static PeriodoDashboard de(LocalDate de, LocalDate ate) {
-        LocalDate fim = ate != null ? ate : LocalDate.now();
+    public static PeriodoDashboard de(LocalDate de, LocalDate ate, Clock clock) {
+        LocalDate fim = ate != null ? ate : LocalDate.now(clock);
         LocalDate inicio = de != null ? de : fim.withDayOfMonth(1);
         if (!FaixaDataPermitida.contem(inicio) || !FaixaDataPermitida.contem(fim)) {
             throw BusinessException.explicado("Período inválido", FaixaDataPermitida.MENSAGEM,

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -20,7 +21,6 @@ import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.CriarProducaoVinculadaRequest;
@@ -107,7 +107,6 @@ class OrcamentoCriarProducaoVinculadaIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
@@ -196,8 +195,8 @@ class OrcamentoCriarProducaoVinculadaIT {
         seedUsuarioECliente();
         Produto produto = novoProduto();
         UUID orcamentoId = criarOrcamentoComProduto(produto, 2); // prazoProducaoDias = 5
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO (seta dataAprovacao)
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO (seta dataAprovacao)
 
         List<OrcamentoProducaoResponse> vinculos = orcamentoService.criarProducaoVinculada(
                 orcamentoId, requestCriacao(LocalDate.now().plusDays(20))); // além do prazo prometido (5 dias)
@@ -211,8 +210,8 @@ class OrcamentoCriarProducaoVinculadaIT {
         seedUsuarioECliente();
         Produto produto = novoProduto();
         UUID orcamentoId = criarOrcamentoComProduto(produto, 2); // prazoProducaoDias = 5
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         List<OrcamentoProducaoResponse> vinculos = orcamentoService.criarProducaoVinculada(
                 orcamentoId, requestCriacao(LocalDate.now().plusDays(2)));
@@ -241,7 +240,6 @@ class OrcamentoCriarProducaoVinculadaIT {
         seedUsuarioECliente();
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(false);
         req.setItens(List.of());
         req.setSinalAtivo(false);
@@ -289,7 +287,6 @@ class OrcamentoCriarProducaoVinculadaIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(false);
         req.setItens(List.of(itemA, itemB));
         req.setSinalAtivo(false);

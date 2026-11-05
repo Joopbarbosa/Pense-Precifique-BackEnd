@@ -117,6 +117,7 @@ public class ClienteService {
         String documento = validarPapeisEDocumento(request, usuario.getId(), null);
         Cliente cliente = clienteMapper.toEntity(request, usuario);
         cliente.setDocumento(documento);
+        cliente.setWhatsappCanonico(numeroCanonico(preferido(request.getWhatsapp(), request.getTelefone())));
         // #161 — lockPorId serializa por usuario_id antes de ler o MAX(numero), evitando race condition.
         usuarioRepository.lockPorId(usuario.getId());
         cliente.setNumero(NumeroSequencialUtil.proximoNumero(
@@ -134,6 +135,16 @@ public class ClienteService {
         String documento = validarPapeisEDocumento(request, usuarioId, cliente.getId());
         clienteMapper.updateEntity(request, cliente);
         cliente.setDocumento(documento);
+        String numeroCanonico = numeroCanonico(preferido(request.getWhatsapp(), request.getTelefone()));
+        if (!Objects.equals(numeroCanonico, cliente.getWhatsappCanonico())) {
+            cliente.setAceitaWhatsapp(false);
+            cliente.setAceitaWhatsappEm(null);
+            cliente.setAceitaWhatsappPor(null);
+            cliente.setRecusouWhatsapp(false);
+            cliente.setRecusouWhatsappEm(null);
+            cliente.setRecusouWhatsappPor(null);
+        }
+        cliente.setWhatsappCanonico(numeroCanonico);
         return clienteMapper.toResponse(clienteRepository.save(cliente));
     }
 
@@ -227,6 +238,17 @@ public class ClienteService {
             return null;
         }
         return documento.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    static String numeroCanonico(String numero) {
+        if (numero == null || numero.isBlank()) return null;
+        String digitos = numero.replaceAll("\\D", "");
+        if (numero.strip().startsWith("+") || digitos.length() >= 12) return digitos;
+        return digitos.length() == 10 || digitos.length() == 11 ? "55" + digitos : digitos;
+    }
+
+    private static String preferido(String whatsapp, String telefone) {
+        return whatsapp != null && !whatsapp.isBlank() ? whatsapp : telefone;
     }
 
     private UUID getUsuarioIdAutenticado() {

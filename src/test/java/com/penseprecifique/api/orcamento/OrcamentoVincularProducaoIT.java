@@ -1,5 +1,8 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
+import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
+import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -20,7 +23,6 @@ import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
 import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -57,6 +59,7 @@ class OrcamentoVincularProducaoIT {
     @Autowired OrcamentoService orcamentoService;
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -114,7 +117,6 @@ class OrcamentoVincularProducaoIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
@@ -127,18 +129,18 @@ class OrcamentoVincularProducaoIT {
 
     /** RASCUNHO -> ENVIADO -> APROVADO (sem sinal, deixa em APROVADO pronto pro caminho direto). */
     private void avancarAteAprovadoSemSinal(UUID orcamentoId) {
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
     }
 
     /** RASCUNHO -> ... -> SINAL_PAGO (com sinal). */
     private void avancarAteSinalPago(UUID orcamentoId) {
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
         AvancaStatusRequest sinalReq = new AvancaStatusRequest();
-        sinalReq.setMetodoSinalRecebido(MetodoPagamento.PIX);
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
+        sinalReq.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
     }
 
     /** RN-ORC-VINC-01 (P-B017) — vínculo deixou de ser obrigatório: sem nenhuma produção vinculada, o avanço acontece normalmente. */
@@ -148,7 +150,7 @@ class OrcamentoVincularProducaoIT {
         UUID orcamentoId = criarOrcamento(false);
         avancarAteAprovadoSemSinal(orcamentoId);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         assertTrue(resultado instanceof OrcamentoDetalheResponse);
         assertEquals(StatusOrcamento.EM_PRODUCAO, ((OrcamentoDetalheResponse) resultado).getStatus());
@@ -166,7 +168,7 @@ class OrcamentoVincularProducaoIT {
         vincularReq.setProducaoId(producao.getId());
         orcamentoService.vincularProducao(orcamentoId, vincularReq);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         assertTrue(resultado instanceof OrcamentoDetalheResponse);
         assertEquals(StatusOrcamento.EM_PRODUCAO, ((OrcamentoDetalheResponse) resultado).getStatus());
@@ -192,7 +194,7 @@ class OrcamentoVincularProducaoIT {
         assertEquals(2, orcamentoProducaoRepository.findByOrcamentoId(orcamentoId).size());
 
         avancarAteAprovadoSemSinal(orcamentoId);
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
         assertEquals(StatusOrcamento.EM_PRODUCAO, ((OrcamentoDetalheResponse) resultado).getStatus());
     }
 
@@ -203,7 +205,7 @@ class OrcamentoVincularProducaoIT {
         UUID orcamentoId = criarOrcamento(true);
         avancarAteSinalPago(orcamentoId);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         assertTrue(resultado instanceof OrcamentoDetalheResponse);
         assertEquals(StatusOrcamento.EM_PRODUCAO, ((OrcamentoDetalheResponse) resultado).getStatus());
@@ -256,7 +258,6 @@ class OrcamentoVincularProducaoIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(false);
         req.setItens(List.of(item));
         req.setSinalAtivo(false);
@@ -381,7 +382,6 @@ class OrcamentoVincularProducaoIT {
     private OrcamentoRequest requestComItens(List<OrcamentoItemRequest> itens) {
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(false);
         req.setItens(itens);
         req.setSinalAtivo(false);

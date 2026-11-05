@@ -29,6 +29,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Épico #89, Passo 5 — {@code PdfMicroservicoClient} isolado, sem contexto Spring (construído
@@ -95,6 +96,38 @@ class PdfMicroservicoClientIT {
         wireMockServer.verify(postRequestedFor(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=pdf"))
                 .withHeader("X-User-Token", equalTo("token-de-teste-123"))
                 .withHeader("Content-Type", containing("application/json")));
+    }
+
+    @Test
+    void geracaoControladaRetornaContagemDePaginasAntesDaEntrega() {
+        byte[] pdfFalso = "%PDF-1.4 teste".getBytes(StandardCharsets.UTF_8);
+        wireMockServer.stubFor(post(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=pdf&dividir=false"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/pdf")
+                        .withHeader("X-Pdf-Page-Count", "10").withBody(pdfFalso)));
+        var resultado = client.gerarPdfControlado("orcamento", ORCAMENTO_ID, payloadMinimo(), false);
+        assertEquals(10, resultado.totalPaginas());
+        assertArrayEquals(pdfFalso, resultado.pdf());
+    }
+
+    @Test
+    void avisoEPartesSaoInterpretadosSemEntregarArquivoAntesDaConfirmacao() {
+        wireMockServer.stubFor(post(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=pdf&dividir=false"))
+                .willReturn(aResponse().withStatus(409).withHeader("Content-Type", "application/json")
+                        .withHeader("X-Pdf-Page-Count", "11")
+                        .withBody("{\"tipo\":\"AVISO\",\"message\":\"PDF acima de 10 páginas.\",\"totalPaginas\":11,\"dividirDisponivel\":true}")));
+        var aviso = assertThrows(PdfMicroservicoClient.PdfControleException.class,
+                () -> client.gerarPdfControlado("orcamento", ORCAMENTO_ID, payloadMinimo(), false));
+        assertEquals("AVISO", aviso.getTipo());
+        assertEquals(11, aviso.getTotalPaginas());
+        assertTrue(aviso.isDividirDisponivel());
+
+        wireMockServer.stubFor(post(urlEqualTo("/render/orcamento/" + ORCAMENTO_ID + "?format=pdf&dividir=true"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withHeader("X-Pdf-Page-Count", "11")
+                        .withBody("{\"totalPaginas\":11,\"partes\":[{\"numeroParte\":1,\"totalPaginas\":6,\"pdfBase64\":\"UERG\"},{\"numeroParte\":2,\"totalPaginas\":5,\"pdfBase64\":\"UERG\"}]}")));
+        var dividido = client.gerarPdfControlado("orcamento", ORCAMENTO_ID, payloadMinimo(), true);
+        assertEquals(List.of(6, 5), dividido.partes().stream().map(PdfMicroservicoClient.PdfParte::totalPaginas).toList());
+        assertEquals("PDF", new String(dividido.partes().get(1).bytes(), StandardCharsets.UTF_8));
     }
 
     @Test

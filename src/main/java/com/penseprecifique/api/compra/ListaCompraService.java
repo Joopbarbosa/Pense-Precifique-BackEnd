@@ -181,7 +181,7 @@ public class ListaCompraService {
         List<ListaCompraItem> itens = montarItens(lista.getUsuario(), linhas, true);
         substituirItens(lista, itens);
         lista.setStatus(StatusListaCompra.GERADA);
-        lista.setGeradaEm(LocalDateTime.now());
+        lista.setGeradaEm(LocalDateTime.now(clock));
         listaCompraRepository.save(lista);
         return toResponse(lista, itens);
     }

@@ -2,6 +2,8 @@ package com.penseprecifique.api.shared.dto.request.caixa;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
@@ -20,7 +22,9 @@ public record VendaCaixaItemRequestDTO(
         UUID produtoId,
 
         @NotNull(message = "A quantidade é obrigatória")
-        @DecimalMin(value = "0.001", message = "A quantidade deve ser maior que zero")
+        @DecimalMin(value = "0.01", message = "A quantidade deve ser no mínimo 0,01")
+        @DecimalMax(value = "999999.99", message = "A quantidade deve ser no máximo 999.999,99")
+        @Digits(integer = 6, fraction = 2, message = "A quantidade deve ter no máximo duas casas decimais")
         BigDecimal quantidade,
 
         @Valid

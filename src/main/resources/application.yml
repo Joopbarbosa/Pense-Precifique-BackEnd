@@ -50,6 +50,17 @@ leitor-fiscal:
   chave-produto: ${LEITOR_FISCAL_CHAVE:}
   timeout-seconds: ${LEITOR_FISCAL_TIMEOUT_SECONDS:70}
 
+# V0.19.0 (#1170, DT-NOVA-13/14) — envio de PDF por WhatsApp via Evolution API (rede Docker evolution-rede).
+# Desligado por padrão; a chave vem só de variável de ambiente e nunca sai do servidor.
+evolution:
+  habilitado: ${EVOLUTION_HABILITADO:false}
+  base-url: ${EVOLUTION_BASE_URL:http://evolution-api:8080}
+  api-key: ${EVOLUTION_API_KEY:}
+  timeout-seconds: ${EVOLUTION_TIMEOUT_SECONDS:30}
+  limite-diario: ${EVOLUTION_LIMITE_DIARIO:50}
+  intervalo-segundos: ${EVOLUTION_INTERVALO_SEGUNDOS:30}
+  tamanho-maximo-bytes: ${EVOLUTION_TAMANHO_MAXIMO_BYTES:10485760}
+
 nota:
   # #723 — hosts de portal fiscal aceitos no link do comprovante (hoje só São Paulo, como no leitor-fiscal).
   portais-permitidos: ${NOTA_PORTAIS_PERMITIDOS:www.nfce.fazenda.sp.gov.br}

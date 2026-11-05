@@ -1,7 +1,6 @@
 package com.penseprecifique.api.shared.dto.request.orcamento;
 
 import com.penseprecifique.api.shared.validation.LimitesTexto;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -17,15 +16,34 @@ import java.util.UUID;
 @Setter
 public class AvancaStatusRequest {
 
-    private MetodoPagamento metodoSinalRecebido;
-    @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
-    private String metodoSinalRecebidoObs;
+    /** V0.19.0 (#1185, DT-NOVA-8) — método configurável (de Configurações) em que o sinal foi recebido. */
+    private UUID metodoSinalRecebidoId;
 
     @Size(max = LimitesTexto.DESCRICAO_MAX, message = LimitesTexto.DESCRICAO_MAX_MENSAGEM) // #559/RN-NOVA-18
     private String motivoCancelamento;
     private TipoCancelamento tipoCancelamento;
+    /**
+     * V0.19.0 (#692, RN-NOVA-58) — "com multa"? Ausente: vale "com multa" se veio valor ou percentual (pedido antigo).
+     * {@code true} exige exatamente um dos dois campos; {@code false} cancela sem multa e ignora os campos.
+     */
+    private Boolean comMulta;
+
+    /** V0.19.0 (#692, RN-NOVA-58) — multa em R$ (de 0,01 até o total do orçamento, 2 casas); excludente com {@link #percentualMulta}. */
+    @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "Informe uma multa maior que zero ou escolha cancelar sem multa.")
+    private BigDecimal valorMulta;
+
+    /** V0.19.0 (#692, RN-NOVA-50/58) — ausente = cancelar sem multa; informado, precisa ser maior que 0 e até 100 (do total). */
+    @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "Informe uma multa maior que zero ou escolha cancelar sem multa.")
+    @jakarta.validation.constraints.DecimalMax(value = "100", message = "A multa não pode ser maior que o total do orçamento.")
+    @jakarta.validation.constraints.Digits(integer = 3, fraction = 2, message = "A multa deve ter no máximo duas casas decimais.")
     private BigDecimal percentualMulta;
     private boolean estornarSinal;
+
+    /** V0.19.0 (#692, RN-NOVA-51) — cancelar PAGO/ENTREGUE: estornar o valor recebido? Obrigatório nesses status. */
+    private Boolean estornarValorRecebido;
+
+    /** V0.19.0 (#692, RN-NOVA-51) — cancelar PAGO/ENTREGUE: devolver os insumos ao estoque? Obrigatório nesses status. */
+    private Boolean devolverEstoque;
     private LocalDateTime dataEstornoSinal;
 
     @io.swagger.v3.oas.annotations.media.Schema(minLength = 30, maxLength = LimitesTexto.DESCRICAO_MAX) // #788: mínimo no contrato
@@ -57,4 +75,14 @@ public class AvancaStatusRequest {
     @Valid
     @Size(max = 50, message = "Decisões de produção em excesso")
     private List<DecisaoProducaoCancelamentoRequest> decisoesProducao;
+
+    /** V0.19.0 (#1174, RN-NOVA-38) — passo Pagamento; obrigatório ao aprovar (APROVADO ou atalho ao FINALIZADO). */
+    @Valid
+    private PagamentoOrcamentoRequest pagamento;
+
+    /** V0.19.0 (#1174, RN-NOVA-43) — forma realmente recebida no "Recebi" do saldo/total (ORC-007). */
+    private UUID metodoRecebidoId;
+
+    /** V0.19.0 (#1174) — data do recebimento no "Recebi"; ausente = hoje. */
+    private java.time.LocalDate dataRecebimento;
 }

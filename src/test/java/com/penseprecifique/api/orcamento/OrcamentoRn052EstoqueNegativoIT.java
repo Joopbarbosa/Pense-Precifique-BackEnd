@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
 import com.penseprecifique.api.insumo.InsumoRepository;
@@ -15,7 +16,6 @@ import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -96,15 +96,14 @@ class OrcamentoRn052EstoqueNegativoIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
 
         UUID orcamentoId = orcamentoService.criar(req).getId();
         // RASCUNHO -> ENVIADO -> APROVADO -> EM_PRODUCAO (sinal inativo por padrão)
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
         // Vínculo com produção que termina FINALIZADA — RN-NOVA-6 (vínculo obrigatório) foi
         // removida em P-B017, este vínculo não é mais pré-requisito. vincularProducao() só aceita
         // produção AGUARDANDO_INICIO (adicionarProdutosDeOrcamento), então o vínculo precisa
@@ -116,7 +115,7 @@ class OrcamentoRn052EstoqueNegativoIT {
         orcamentoService.vincularProducao(orcamentoId, vincularReq);
         producao.setEstado(EstadoProducao.FINALIZADA);
         producaoRepository.save(producao);
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
         return orcamentoId;
     }
 
@@ -126,7 +125,7 @@ class OrcamentoRn052EstoqueNegativoIT {
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("3"), true);
         UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 10);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         ConfirmacaoEstoqueNegativoResponse aviso = assertInstanceOf(ConfirmacaoEstoqueNegativoResponse.class, resultado);
         assertEquals(1, aviso.getAvisos().size());
@@ -144,7 +143,7 @@ class OrcamentoRn052EstoqueNegativoIT {
 
         AvancaStatusRequest request = new AvancaStatusRequest();
         request.setConfirmarEstoqueNegativoProdutoIds(List.of(produto.getId()));
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, request);
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, request);
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());
@@ -168,7 +167,7 @@ class OrcamentoRn052EstoqueNegativoIT {
         AvancaStatusRequest request = new AvancaStatusRequest();
         request.setConfirmarEstoqueNegativoProdutoIds(List.of(produto.getId()));
 
-        assertThrows(BusinessException.class, () -> orcamentoService.avancarStatus(orcamentoId, request));
+        assertThrows(BusinessException.class, () -> AprovacaoTeste.avancar(orcamentoService, orcamentoId, request));
 
         Produto inalterado = produtoRepository.findById(produto.getId()).orElseThrow();
         assertEquals(0, new BigDecimal("3").compareTo(inalterado.getEstoqueAtual()));
@@ -180,7 +179,7 @@ class OrcamentoRn052EstoqueNegativoIT {
         Produto produto = novoProduto("Kit Convite", 1, new BigDecimal("100"), true);
         UUID orcamentoId = criarOrcamentoAteEmProducao(produto, 10);
 
-        Object resultado = orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest());
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest());
 
         OrcamentoDetalheResponse detalhe = assertInstanceOf(OrcamentoDetalheResponse.class, resultado);
         assertEquals(StatusOrcamento.FINALIZADO, detalhe.getStatus());

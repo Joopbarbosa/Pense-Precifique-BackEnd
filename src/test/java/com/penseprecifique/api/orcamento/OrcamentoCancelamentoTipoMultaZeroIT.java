@@ -1,5 +1,8 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
+import com.penseprecifique.api.testsupport.MetodosPagamentoTeste;
+import com.penseprecifique.api.empresa.MetodoPagamentoConfiguravelRepository;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.unidademedida.UnidadeMedidaRepository;
@@ -16,7 +19,6 @@ import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoCancelamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -79,6 +81,7 @@ class OrcamentoCancelamentoTipoMultaZeroIT {
     @Autowired UnidadeMedidaRepository unidadeMedidaRepository;
     @Autowired PdfService pdfService;
     @Autowired UsuarioRepository usuarioRepository;
+    @Autowired MetodoPagamentoConfiguravelRepository metodoPagamentoRepository;
     @Autowired ClienteRepository clienteRepository;
     @Autowired ProdutoRepository produtoRepository;
     @Autowired InsumoRepository insumoRepository;
@@ -131,7 +134,6 @@ class OrcamentoCancelamentoTipoMultaZeroIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(item));
@@ -150,14 +152,14 @@ class OrcamentoCancelamentoTipoMultaZeroIT {
 
     /** RASCUNHO -> ... -> SINAL_PAGO -> EM_PRODUCAO (sinal pago, pré-requisito do mini-estorno de RN-NOVA-1). */
     private void avancarAteEmProducao(UUID orcamentoId) {
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // ENVIADO -> APROVADO
         AvancaStatusRequest sinalReq = new AvancaStatusRequest();
-        sinalReq.setMetodoSinalRecebido(MetodoPagamento.PIX);
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
-        orcamentoService.avancarStatus(orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
+        sinalReq.setMetodoSinalRecebidoId(MetodosPagamentoTeste.pix(metodoPagamentoRepository, usuario).getId());
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // APROVADO -> AGUARDANDO_SINAL
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, sinalReq); // AGUARDANDO_SINAL -> SINAL_PAGO
         vincularNovaProducao(orcamentoId); // RN-NOVA-6 — pré-requisito da transição para EM_PRODUCAO
-        orcamentoService.avancarStatus(orcamentoId, new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
+        AprovacaoTeste.avancar(orcamentoService, orcamentoId, new AvancaStatusRequest()); // SINAL_PAGO -> EM_PRODUCAO
     }
 
     @Test

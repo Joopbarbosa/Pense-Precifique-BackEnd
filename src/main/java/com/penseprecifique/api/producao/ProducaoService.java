@@ -1,5 +1,6 @@
 package com.penseprecifique.api.producao;
 
+import java.time.Clock;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.HistoricoStatusProducao;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -96,6 +97,7 @@ import java.util.stream.Collectors;
 public class ProducaoService {
 
     private final ProducaoRepository producaoRepository;
+    private final Clock clock;
     private final ProducaoProdutoRepository producaoProdutoRepository;
     private final HistoricoStatusProducaoRepository historicoStatusProducaoRepository;
     private final ProducaoInsumoConsumidoRepository producaoInsumoConsumidoRepository;
@@ -333,7 +335,7 @@ public class ProducaoService {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new BusinessException("Usuário autenticado não encontrado"));
 
-        LocalDate inicio = dataInicio != null ? dataInicio : LocalDate.now();
+        LocalDate inicio = dataInicio != null ? dataInicio : LocalDate.now(clock);
         validarDatas(inicio, dataTerminoPrevista);
 
         Producao producao = Producao.builder()
@@ -886,7 +888,7 @@ public class ProducaoService {
                     .build());
         }
 
-        producao.setDataTerminoReal(LocalDate.now());
+        producao.setDataTerminoReal(LocalDate.now(clock));
         transicionar(producao, EstadoProducao.FINALIZADA, OrigemHistoricoStatus.USUARIO, null);
         return montarDetalhe(producao, List.of());
     }

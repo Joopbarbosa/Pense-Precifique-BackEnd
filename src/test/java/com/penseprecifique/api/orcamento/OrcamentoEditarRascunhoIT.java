@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.catalogo.CatalogoRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoComponenteRepository;
 import com.penseprecifique.api.catalogo.ItemCatalogoRepository;
@@ -12,7 +13,6 @@ import com.penseprecifique.api.shared.domain.entity.ItemCatalogo;
 import com.penseprecifique.api.shared.domain.entity.ItemCatalogoComponente;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
@@ -106,7 +106,6 @@ class OrcamentoEditarRascunhoIT {
     private OrcamentoRequest requestBase(List<OrcamentoItemRequest> itens) {
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(itens);
@@ -169,7 +168,7 @@ class OrcamentoEditarRascunhoIT {
         OrcamentoRequest criacao = requestBase(List.of(itemAvulso(produto, new BigDecimal("100.00"), 1)));
         OrcamentoDetalheResponse criado = orcamentoService.criar(criacao);
 
-        orcamentoService.avancarStatus(criado.getId(), new com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, criado.getId(), new com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest()); // RASCUNHO -> ENVIADO
 
         OrcamentoRequest edicao = requestBase(List.of(itemAvulso(produto, new BigDecimal("100.00"), 1)));
         BusinessException ex = assertThrows(BusinessException.class,

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.orcamento;
 
+import java.time.Clock;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
@@ -18,7 +19,6 @@ import com.penseprecifique.api.shared.domain.entity.ReciboEstorno;
 import com.penseprecifique.api.shared.domain.entity.ReciboPagamento;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoInsumo;
 import com.penseprecifique.api.shared.domain.enums.MotivoMovimentacaoProduto;
 import com.penseprecifique.api.shared.domain.enums.ReferenciaMovimentacaoTipo;
@@ -36,6 +36,9 @@ import com.penseprecifique.api.shared.dto.request.producao.CancelarProducaoReque
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemCustomizacaoRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
+import com.penseprecifique.api.shared.dto.request.orcamento.PagamentoOrcamentoRequest;
+import com.penseprecifique.api.shared.dto.response.orcamento.PagamentoOrcamentoValidadoResponse;
+import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.dto.request.orcamento.SimularAlertasOrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.VincularProducaoRequest;
 import com.penseprecifique.api.shared.dto.request.producao.ProducaoProdutoRequest;
@@ -68,6 +71,10 @@ import com.penseprecifique.api.producao.ProducaoRepository;
 import com.penseprecifique.api.producao.ProducaoService;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.util.IdentificadorFormatter;
+import com.penseprecifique.api.financeiro.LancamentoFinanceiroService;
+import com.penseprecifique.api.financeiro.OrcamentoDaParcela;
+import com.penseprecifique.api.financeiro.PagamentoDoOrcamento;
+import com.penseprecifique.api.financeiro.PapelParcela;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -134,7 +141,7 @@ public class OrcamentoService {
                     + "ELSE 9 END, 9)"
     );
 
-    private final java.time.Clock clock;
+    private final Clock clock;
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
     private final OrcamentoItemCustomizacaoRepository orcamentoItemCustomizacaoRepository;
@@ -156,6 +163,8 @@ public class OrcamentoService {
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoMapper orcamentoMapper;
     private final CustoMaterialService custoMaterialService;
+    private final PagamentoOrcamentoValidador pagamentoValidador; // #1185
+    private final LancamentoFinanceiroService lancamentoFinanceiroService; // #1174
 
     /**
      * Frente 3/P-BE-CONSOLIDADO-001 — filtro opcional de intervalo de data de criação
@@ -298,8 +307,6 @@ public class OrcamentoService {
                 .cliente(cliente)
                 .numero(proximoNumero(usuarioId))
                 .status(StatusOrcamento.RASCUNHO)
-                .metodoPagamento(request.getMetodoPagamento())
-                .metodoPagamentoObs(request.getMetodoPagamentoObs())
                 .prazoProducaoDias(request.getPrazoProducaoDias())
                 .inicioAssimQueAprovado(request.isInicioAssimQueAprovado())
                 .dataInicioEstimada(request.getDataInicioEstimada())
@@ -409,8 +416,6 @@ public class OrcamentoService {
         BigDecimal total = calcularTotal(subtotalOrcamento, tipoDesconto, descontoValor);
 
         orcamento.setCliente(cliente);
-        orcamento.setMetodoPagamento(request.getMetodoPagamento());
-        orcamento.setMetodoPagamentoObs(request.getMetodoPagamentoObs());
         orcamento.setPrazoProducaoDias(request.getPrazoProducaoDias());
         orcamento.setInicioAssimQueAprovado(request.isInicioAssimQueAprovado());
         orcamento.setDataInicioEstimada(request.getDataInicioEstimada());
@@ -449,8 +454,8 @@ public class OrcamentoService {
     }
 
     /**
-     * RN-NOVA-5 — campos copiados diretamente: cliente, pagamento (+obs), prazo, sinal
-     * (percentualSinal — quando presente, valorSinal é sempre recalculado por
+     * RN-NOVA-5 — campos copiados diretamente: cliente, prazo, desconto, observações. Pagamento e sinal NÃO
+     * são copiados (CEN-NOVO-43, #1185). Histórico do tratamento antigo do sinal (percentualSinal — quando presente, valorSinal é sempre recalculado por
      * {@link #calcularValorSinal} dentro de {@link #criar}, nunca copiado do original; quando o
      * original configura sinal só por valor direto, sem percentualSinal, o valor é copiado tal como
      * estava — {@link #calcularValorSinal} já trata esse modo como literal, sem recálculo, mesmo em
@@ -466,21 +471,13 @@ public class OrcamentoService {
     private OrcamentoRequest montarRequestDuplicacao(Orcamento original) {
         OrcamentoRequest request = new OrcamentoRequest();
         request.setClienteId(original.getCliente().getId());
-        request.setMetodoPagamento(original.getMetodoPagamento());
-        request.setMetodoPagamentoObs(original.getMetodoPagamentoObs());
         request.setTemPrazoProducao(original.getPrazoProducaoDias() != null);
         request.setPrazoProducaoDias(original.getPrazoProducaoDias());
         request.setInicioAssimQueAprovado(true);
         request.setDataInicioEstimada(null);
-        request.setSinalAtivo(Boolean.TRUE.equals(original.getSinalAtivo()));
-        request.setPercentualSinal(original.getPercentualSinal());
-        // P-B021 (#314) — sinal configurado só por valor direto (sem percentualSinal) precisa do
-        // valor copiado, senão calcularValorSinal() não tem de onde tirar o valor e validarRegras()
-        // rejeita a duplicação inteira. Só copiado quando não há percentual (modo percentual sempre
-        // recalcula, ignora valorSinal do request).
-        if (original.getPercentualSinal() == null) {
-            request.setValorSinal(original.getValorSinal());
-        }
+        // CEN-NOVO-43 / RN-NOVA-37 (V0.19.0, #1185): a duplicata é rascunho SEM pagamento, SEM sinal e SEM parcelas;
+        // forma de pagamento e sinal são definidos de novo no passo Pagamento da aprovação.
+        request.setSinalAtivo(false);
         request.setTipoDesconto(original.getDescontoTipo() != null ? original.getDescontoTipo().name() : null);
         request.setDescontoValor(original.getDescontoValor());
         request.setObservacoes(original.getObservacoes());
@@ -908,18 +905,21 @@ public class OrcamentoService {
             case RASCUNHO:
                 orcamento.setStatus(StatusOrcamento.ENVIADO);
                 if (orcamento.getDataEnvio() == null) {
-                    orcamento.setDataEnvio(LocalDateTime.now());
+                    orcamento.setDataEnvio(LocalDateTime.now(clock));
                 }
                 break;
 
             case ENVIADO:
+                // V0.19.0 (#1174, RN-NOVA-38) — aprovar exige o passo Pagamento; validado antes de qualquer gravação.
+                PagamentoOrcamentoValidadoResponse pagamentoAprovado = validarPagamentoDaAprovacao(orcamento, request, usuarioId);
                 // RN-NOVA-2 (V0.8.2) — atalho: sinal inativo + sem prazo de produção + estoque
                 // suficiente pula APROVADO/AGUARDANDO_SINAL/SINAL_PAGO/EM_PRODUCAO e vai direto pra
                 // FINALIZADO, reaproveitando a mesma checagem/baixa de estoque de EM_PRODUCAO→FINALIZADO.
                 // Exceção deliberada ao invariante de ORC-005 (fluxo unidirecional, um passo por vez).
                 // RN-NOVA-2 (revisada, P-B012) — ignorarAtalhoAprovacaoDireta=true força o fluxo normal
                 // mesmo elegível: usuário recusou o atalho na modal de confirmação do frontend.
-                if (!request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento)) {
+                if (!request.isIgnorarAtalhoAprovacaoDireta()
+                        && elegivelParaAtalhoAprovacaoDireta(orcamento, !pagamentoAprovado.temSinal())) {
                     List<OrcamentoItem> itensAtalho = orcamentoItemRepository.findByOrcamentoId(orcamento.getId());
                     List<UUID> confirmadosAtalho = request.getConfirmarEstoqueNegativoProdutoIds() != null
                             ? request.getConfirmarEstoqueNegativoProdutoIds() : List.of();
@@ -933,11 +933,12 @@ public class OrcamentoService {
                         // RN-033/ORC-019 — data de aprovação é registrada mesmo pulando o status
                         // APROVADO persistido: o orçamento passou pela aprovação conceitualmente, e
                         // essa data aparece nos PDFs de recibo/multa gerados depois de FINALIZADO.
-                        orcamento.setDataAprovacao(LocalDateTime.now());
+                        orcamento.setDataAprovacao(LocalDateTime.now(clock));
+                        gravarPagamentoDaAprovacao(orcamento, pagamentoAprovado, usuarioId);
                         baixarEstoque(orcamento, itensAtalho);
                         orcamento.setStatus(StatusOrcamento.FINALIZADO);
                         if (orcamento.getDataFinalizacao() == null) {
-                            orcamento.setDataFinalizacao(LocalDateTime.now());
+                            orcamento.setDataFinalizacao(LocalDateTime.now(clock));
                         }
                         break;
                     }
@@ -945,7 +946,8 @@ public class OrcamentoService {
                     // se aplica, sem erro (RN-NOVA-2), segue para a transição normal abaixo.
                 }
                 orcamento.setStatus(StatusOrcamento.APROVADO);
-                orcamento.setDataAprovacao(LocalDateTime.now());
+                orcamento.setDataAprovacao(LocalDateTime.now(clock));
+                gravarPagamentoDaAprovacao(orcamento, pagamentoAprovado, usuarioId);
                 break;
 
             case APROVADO:
@@ -957,20 +959,31 @@ public class OrcamentoService {
                 break;
 
             case AGUARDANDO_SINAL:
-                if (request.getMetodoSinalRecebido() == null) {
-                    throw new BusinessException("O método de recebimento do sinal é obrigatório");
+                if (request.getMetodoSinalRecebidoId() == null) {
+                    throw BusinessException.noCampo("metodoSinalRecebidoId", "O método de recebimento do sinal é obrigatório");
                 }
-                if (request.getMetodoSinalRecebido() == MetodoPagamento.OUTRO) {
-                    String obs = request.getMetodoSinalRecebidoObs();
-                    if (obs == null || obs.trim().length() < MIN_OBS_OUTRO) {
-                        throw new BusinessException(
-                                "Para o método OUTRO, a observação é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
-                    }
-                }
+                // RN-NOVA-42 (#1185): método configurável ATIVO da própria empresa (id inexistente e de outra empresa: mesma resposta)
+                MetodoPagamentoConfiguravel metodoSinal = pagamentoValidador.validarMetodo(request.getMetodoSinalRecebidoId(), usuarioId);
                 orcamento.setStatus(StatusOrcamento.SINAL_PAGO);
-                orcamento.setDataSinalPago(LocalDateTime.now());
-                orcamento.setMetodoSinalRecebido(request.getMetodoSinalRecebido());
-                orcamento.setMetodoSinalRecebidoObs(request.getMetodoSinalRecebidoObs());
+                orcamento.setDataSinalPago(LocalDateTime.now(clock));
+                orcamento.setMetodoSinalRecebido(metodoSinal);
+                // RN-NOVA-11 — "Recebi" do sinal baixa a parcela Sinal (ORC-014)
+                lancamentoFinanceiroService.baixarDoOrcamento(orcamento, Set.of(PapelParcela.SINAL),
+                        request.getDataRecebimento(), metodoSinal.getId());
+                // RN-NOVA-40 — sinal de 100%: não há saldo; vai direto a PAGO, com o recibo
+                if (orcamento.getValorSinal() != null && orcamento.getTotal() != null
+                        && orcamento.getValorSinal().compareTo(orcamento.getTotal()) >= 0) {
+                    reciboPagamentoRepository.save(ReciboPagamento.builder()
+                            .orcamento(orcamento)
+                            .valorTotal(orcamento.getTotal())
+                            .valorSinalPago(orcamento.getValorSinal())
+                            .valorRestantePago(BigDecimal.ZERO.setScale(2))
+                            .totalQuitado(orcamento.getTotal())
+                            .metodoPagamento(metodoSinal)
+                            .build());
+                    orcamento.setDataPagamento(LocalDateTime.now(clock));
+                    orcamento.setStatus(StatusOrcamento.PAGO);
+                }
                 break;
 
             case SINAL_PAGO:
@@ -1034,7 +1047,7 @@ public class OrcamentoService {
                 baixarEstoque(orcamento, itensParaBaixa);
                 orcamento.setStatus(StatusOrcamento.FINALIZADO);
                 if (orcamento.getDataFinalizacao() == null) {
-                    orcamento.setDataFinalizacao(LocalDateTime.now());
+                    orcamento.setDataFinalizacao(LocalDateTime.now(clock));
                 }
                 break;
 
@@ -1047,18 +1060,26 @@ public class OrcamentoService {
                         : BigDecimal.ZERO;
                 BigDecimal valorRestantePago = orcamento.getTotal().subtract(valorSinalPago);
 
+                // RN-NOVA-43 — forma realmente recebida (se informada); na falta, vale a combinada
+                MetodoPagamentoConfiguravel metodoRecebido = request.getMetodoRecebidoId() == null ? null
+                        : pagamentoValidador.validarMetodo(request.getMetodoRecebidoId(), usuarioId);
                 reciboPagamentoRepository.save(ReciboPagamento.builder()
                         .orcamento(orcamento)
                         .valorTotal(orcamento.getTotal())
                         .valorSinalPago(valorSinalPago)
                         .valorRestantePago(valorRestantePago)
                         .totalQuitado(orcamento.getTotal())
+                        .metodoPagamento(metodoRecebido)
                         .build());
+                // RN-NOVA-11 — "Recebi" do saldo/total baixa a parcela correspondente (ORC-007)
+                MetodoPagamentoConfiguravel metodoDaBaixa = metodoRecebido != null ? metodoRecebido : orcamento.getMetodoPagamento();
+                lancamentoFinanceiroService.baixarDoOrcamento(orcamento, Set.of(PapelParcela.SALDO, PapelParcela.TOTAL),
+                        request.getDataRecebimento(), metodoDaBaixa == null ? null : metodoDaBaixa.getId());
 
                 // DT-NOVA-4 (V0.10.0, #466) — setado uma única vez, nunca sobrescrito depois; o
                 // frontend passa a checar este campo (não o status atual) pra manter o Recibo de
                 // Pagamento visível mesmo depois do orçamento avançar pra ENTREGUE.
-                orcamento.setDataPagamento(LocalDateTime.now());
+                orcamento.setDataPagamento(LocalDateTime.now(clock));
                 orcamento.setStatus(StatusOrcamento.PAGO);
                 break;
 
@@ -1101,7 +1122,10 @@ public class OrcamentoService {
         SimulacaoAvancoStatusResponse resposta = new SimulacaoAvancoStatusResponse();
         resposta.setStatusAtual(StatusOrcamento.ENVIADO);
 
-        boolean elegivel = !request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento);
+        boolean semSinal = request.getPagamento() != null
+                ? !Boolean.TRUE.equals(request.getPagamento().getTemSinal())
+                : !Boolean.TRUE.equals(orcamento.getSinalAtivo());
+        boolean elegivel = !request.isIgnorarAtalhoAprovacaoDireta() && elegivelParaAtalhoAprovacaoDireta(orcamento, semSinal);
         if (!elegivel) {
             resposta.setAtalhoAplicavel(false);
             resposta.setStatusResultante(StatusOrcamento.APROVADO);
@@ -1525,8 +1549,8 @@ public class OrcamentoService {
      * liberando o atalho, deliberadamente — RN-NOVA-20 é só um AVISO informativo (nunca bloqueio), e
      * o atalho já pula por natureza vários passos/avisos intermediários do fluxo normal.
      */
-    private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento) {
-        if (Boolean.TRUE.equals(orcamento.getSinalAtivo()) || orcamento.getPrazoProducaoDias() != null) {
+    private boolean elegivelParaAtalhoAprovacaoDireta(Orcamento orcamento, boolean semSinal) {
+        if (!semSinal || orcamento.getPrazoProducaoDias() != null) {
             return false;
         }
         return orcamentoProducaoRepository.findByOrcamentoId(orcamento.getId()).stream()
@@ -1629,7 +1653,16 @@ public class OrcamentoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
 
         StatusOrcamento atual = orcamento.getStatus();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
+        // V0.19.0 (#1174, RN-NOVA-12/51) — o que o cancelamento faz no financeiro
+        boolean tocaFinanceiro = true;
+        BigDecimal estornoValor = null;
+        LocalDate estornoData = null;
+        UUID estornoMetodoId = null;
+        BigDecimal multaAReceber = null;
+        // V0.19.0 (#692, RN-NOVA-58) — multa em R$ ou em %; vale em SINAL_PAGO, EM_PRODUCAO, PAGO, ENTREGUE e FINALIZADO.
+        // Resolvida antes de qualquer efeito: pedido inválido não altera nada.
+        MultaInformada multaInformada = aceitaMulta(atual) ? resolverMulta(request, orcamento.getTotal()) : null;
         // Já cancelado cai no erro de negócio do switch; as decisões só são validadas quando há o que decidir.
         Map<UUID, Boolean> decisoes = atual == StatusOrcamento.CANCELADO
                 ? new LinkedHashMap<>() : validarDecisoesProducao(orcamento, request);
@@ -1644,30 +1677,49 @@ public class OrcamentoService {
                 break;
 
             case SINAL_PAGO:
-                orcamento.setCancelamentoTipo(TipoCancelamento.ESTORNO);
+                orcamento.setCancelamentoTipo(multaInformada == null ? TipoCancelamento.ESTORNO : TipoCancelamento.MULTA);
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
+                BigDecimal sinalRecebido = orcamento.getValorSinal() == null ? BigDecimal.ZERO : orcamento.getValorSinal();
+                ResultadoMulta multaSinal = multaInformada == null ? null
+                        : aplicarMulta(orcamento, multaInformada, sinalRecebido, request.isEstornarSinal());
+                if (multaSinal != null) {
+                    multaAReceber = multaSinal.valorMulta();
+                }
                 if (request.isEstornarSinal()) {
                     if (request.getDataEstornoSinal() == null) {
                         throw new BusinessException("A data do estorno é obrigatória.");
                     }
-                    reciboEstornoRepository.save(ReciboEstorno.builder()
-                            .orcamento(orcamento)
-                            .valorEstornado(orcamento.getValorSinal())
-                            .dataEstorno(request.getDataEstornoSinal())
-                            .build());
-                    orcamento.setEstornoSinal(true);
-                    orcamento.setDataEstornoSinal(request.getDataEstornoSinal());
+                    // RN-NOVA-51/58 — estorna o recebido menos a multa; multa >= recebido: nada é estornado.
+                    BigDecimal aEstornar = multaSinal == null ? orcamento.getValorSinal() : multaSinal.valorDevolvido();
+                    if (aEstornar != null && aEstornar.signum() > 0) {
+                        reciboEstornoRepository.save(ReciboEstorno.builder()
+                                .orcamento(orcamento)
+                                .valorEstornado(aEstornar)
+                                .dataEstorno(request.getDataEstornoSinal())
+                                .build());
+                        orcamento.setEstornoSinal(true);
+                        orcamento.setDataEstornoSinal(request.getDataEstornoSinal());
+                        estornoValor = aEstornar;
+                        estornoData = request.getDataEstornoSinal().toLocalDate();
+                    }
                 }
                 break;
 
             case EM_PRODUCAO:
             case FINALIZADO:
                 orcamento.setCancelamentoTipo(TipoCancelamento.MULTA);
-                orcamento.setPercentualMulta(request.getPercentualMulta());
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
-                ResultadoMulta resultadoMulta = calcularResultadoMulta(orcamento);
-                orcamento.setValorMulta(resultadoMulta.valorMulta());
-                orcamento.setValorDevolvidoMulta(resultadoMulta.valorDevolvido());
+                if (multaInformada != null) {
+                    BigDecimal sinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
+                            ? orcamento.getValorSinal() : BigDecimal.ZERO;
+                    // mini-estorno automático (RN-NOVA-1): o excedente do sinal sobre a multa volta à cliente
+                    ResultadoMulta resultadoMulta = aplicarMulta(orcamento, multaInformada, sinalPago, true);
+                    multaAReceber = resultadoMulta.valorMulta();
+                    estornoValor = resultadoMulta.valorDevolvido();
+                } else {
+                    orcamento.setValorMulta(BigDecimal.ZERO); // sem multa: RN-NOVA-28 mantém o tipo MULTA com valor 0
+                }
+                estornoData = LocalDate.now(clock);
                 if (atual == StatusOrcamento.FINALIZADO) {
                     reverterEstoque(orcamento, request.getMotivoCancelamento());
                 }
@@ -1680,8 +1732,29 @@ public class OrcamentoService {
                     throw new BusinessException(
                             "A justificativa é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
                 }
+                // V0.19.0 (#692, RN-NOVA-51) — duas decisões separadas, ambas obrigatórias
+                if (request.getEstornarValorRecebido() == null || request.getDevolverEstoque() == null) {
+                    throw new BusinessException("Responda se o valor recebido será estornado e se os insumos voltam ao estoque.");
+                }
                 orcamento.setCancelamentoTipo(TipoCancelamento.JUSTIFICATIVA);
                 orcamento.setCancelamentoMotivo(justificativa);
+                LancamentoFinanceiroService.RecebidoDoOrcamento recebidoPago = lancamentoFinanceiroService.recebidoDoOrcamento(orcamento);
+                boolean estornaRecebido = Boolean.TRUE.equals(request.getEstornarValorRecebido());
+                ResultadoMulta multaPago = multaInformada == null ? null
+                        : aplicarMulta(orcamento, multaInformada, recebidoPago.valor(), estornaRecebido);
+                if (multaPago != null) {
+                    multaAReceber = multaPago.valorMulta();
+                }
+                if (estornaRecebido) {
+                    LancamentoFinanceiroService.RecebidoDoOrcamento recebido = recebidoPago;
+                    // RN-NOVA-51 — estorno = recebido menos a multa; multa >= recebido: nenhuma saída
+                    estornoValor = multaPago == null ? recebido.valor() : multaPago.valorDevolvido();
+                    estornoData = LocalDate.now(clock);
+                    estornoMetodoId = recebido.metodoId();
+                }
+                if (Boolean.TRUE.equals(request.getDevolverEstoque())) {
+                    reverterEstoque(orcamento, justificativa);
+                }
                 break;
 
             case CANCELADO:
@@ -1694,6 +1767,13 @@ public class OrcamentoService {
         orcamento.setStatus(StatusOrcamento.CANCELADO);
         orcamento.setDataCancelamento(now);
         orcamento = orcamentoRepository.save(orcamento);
+        if (tocaFinanceiro) {
+            MetodoPagamentoConfiguravel metodoEstorno = orcamento.getMetodoSinalRecebido() != null
+                    ? orcamento.getMetodoSinalRecebido() : orcamento.getMetodoPagamento();
+            UUID metodoId = estornoMetodoId != null ? estornoMetodoId : (metodoEstorno == null ? null : metodoEstorno.getId());
+            lancamentoFinanceiroService.cancelarDoOrcamento(orcamento, estornoValor, estornoData,
+                    metodoId, multaAReceber, LocalDate.now(clock));
+        }
         aplicarDecisoesProducaoNoCancelamento(orcamento, decisoes);
         return montarDetalhe(orcamento);
     }
@@ -1961,14 +2041,6 @@ public class OrcamentoService {
                     "O prazo de produção deve ficar vazio quando a resposta for 'Não terá prazo de produção'");
         }
 
-        if (request.getMetodoPagamento() == MetodoPagamento.OUTRO) {
-            String obs = request.getMetodoPagamentoObs();
-            if (obs == null || obs.trim().length() < MIN_OBS_OUTRO) {
-                throw new BusinessException(
-                        "Para o método de pagamento OUTRO, a observação é obrigatória (mín. " + MIN_OBS_OUTRO + " caracteres)");
-            }
-        }
-
         if (!request.isInicioAssimQueAprovado() && request.getDataInicioEstimada() == null) {
             throw new BusinessException("A data de início estimada é obrigatória quando o início não é assim que aprovado");
         }
@@ -2043,40 +2115,95 @@ public class OrcamentoService {
     }
 
     private BigDecimal calcularValorSinal(BigDecimal total, OrcamentoRequest request) {
-        if (request.getPercentualSinal() != null) {
-            return total.multiply(request.getPercentualSinal())
-                    .divide(CEM, 2, RoundingMode.HALF_UP);
+        BigDecimal valor = request.getPercentualSinal() != null
+                ? total.multiply(request.getPercentualSinal()).divide(CEM, 2, RoundingMode.HALF_UP)
+                : request.getValorSinal();
+        // V0.19.0 (#696, RN-NOVA-39) — sinal de até 100% do total é aceito; acima é recusado
+        if (valor != null && total != null && valor.compareTo(total) > 0) {
+            throw new BusinessException("O sinal não pode ser maior que o total do orçamento.");
         }
-        return request.getValorSinal();
+        return valor;
     }
 
-    /** RN-NOVA-1 (V0.8.2) — resultado do cálculo de multa: valor final cobrado + valor devolvido (mini-estorno). */
+    /** RN-NOVA-1 (V0.8.2) e RN-NOVA-58 — resultado do cálculo de multa: parte a receber + valor devolvido (mini-estorno). */
     private record ResultadoMulta(BigDecimal valorMulta, BigDecimal valorDevolvido) {
     }
 
+    /** RN-NOVA-58 — multa já resolvida: valor total (R$, referência) e percentual equivalente (2 casas). */
+    private record MultaInformada(BigDecimal bruta, BigDecimal percentual) {
+    }
+
+    private static boolean aceitaMulta(StatusOrcamento status) {
+        return status == StatusOrcamento.SINAL_PAGO || status == StatusOrcamento.EM_PRODUCAO
+                || status == StatusOrcamento.PAGO || status == StatusOrcamento.ENTREGUE
+                || status == StatusOrcamento.FINALIZADO;
+    }
+
     /**
-     * RN-NOVA-1 (V0.8.1, estendida em V0.8.2) — valor final de multa desconta o sinal já pago,
-     * piso zero: nunca cobra valor negativo. Desde V0.8.2, quando o sinal pago excede o valor
-     * bruto da multa, a diferença é devolvida ao cliente ("mini-estorno") em vez de simplesmente
-     * zerar a cobrança sem devolução — {@code valorDevolvido} vem preenchido só nesse caso,
-     * {@code null} nos demais (sinal <= multa bruta, ou sem sinal pago — comportamento inalterado).
+     * RN-NOVA-58 (altera RN-NOVA-50) — "com multa" exige exatamente um entre valor (R$) e percentual; o outro é
+     * calculado (2 casas, meio para cima). O valor em R$ é a referência: percentual que resulta em menos de
+     * R$ 0,01 é BLOQUEIO; valor em R$ que dá menos de 0,01% é aceito e grava 0,00%. Retorna {@code null} para "sem multa".
      */
-    private ResultadoMulta calcularResultadoMulta(Orcamento orcamento) {
-        if (orcamento.getPercentualMulta() == null || orcamento.getTotal() == null) {
-            return new ResultadoMulta(null, null);
+    private MultaInformada resolverMulta(AvancaStatusRequest request, BigDecimal totalOrcamento) {
+        BigDecimal valor = request.getValorMulta();
+        BigDecimal percentual = request.getPercentualMulta();
+        // Compatibilidade: sem "comMulta", percentual 0 (legado do toggle "Não") equivale a "sem multa"; o DTO já recusa 0 na API.
+        boolean percentualZeroLegado = request.getComMulta() == null && valor == null
+                && percentual != null && percentual.signum() == 0;
+        boolean comMulta = request.getComMulta() != null ? request.getComMulta()
+                : !percentualZeroLegado && (valor != null || percentual != null);
+        if (!comMulta) {
+            return null;
         }
-        BigDecimal valorMultaBruto = orcamento.getTotal()
-                .multiply(orcamento.getPercentualMulta())
-                .divide(CEM, 2, RoundingMode.HALF_UP);
-        BigDecimal sinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
-                ? orcamento.getValorSinal()
-                : BigDecimal.ZERO;
-        BigDecimal diferenca = sinalPago.subtract(valorMultaBruto).setScale(2, RoundingMode.HALF_UP);
-        if (diferenca.compareTo(BigDecimal.ZERO) > 0) {
-            return new ResultadoMulta(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), diferenca);
+        if ((valor == null) == (percentual == null)) {
+            throw new BusinessException("Informe a multa em valor ou em percentual, não os dois.");
         }
-        BigDecimal valorMultaFinal = valorMultaBruto.subtract(sinalPago).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-        return new ResultadoMulta(valorMultaFinal, null);
+        BigDecimal total = totalOrcamento == null ? BigDecimal.ZERO : totalOrcamento;
+        BigDecimal umCentavo = new BigDecimal("0.01");
+        if (percentual != null) {
+            if (percentual.compareTo(umCentavo) < 0) {
+                throw new BusinessException("Informe uma multa maior que zero ou escolha cancelar sem multa.");
+            }
+            if (percentual.stripTrailingZeros().scale() > 2) {
+                throw new BusinessException("A multa deve ter no máximo duas casas decimais.");
+            }
+            if (percentual.compareTo(CEM) > 0) {
+                throw new BusinessException("A multa não pode ser maior que o total do orçamento.");
+            }
+            BigDecimal bruta = total.multiply(percentual).divide(CEM, 2, RoundingMode.HALF_UP);
+            if (bruta.compareTo(umCentavo) < 0) {
+                throw new BusinessException("A multa resulta em menos de R$ 0,01.");
+            }
+            return new MultaInformada(bruta, percentual.setScale(2, RoundingMode.HALF_UP));
+        }
+        if (valor.compareTo(umCentavo) < 0) {
+            throw new BusinessException("Informe uma multa maior que zero ou escolha cancelar sem multa.");
+        }
+        if (valor.stripTrailingZeros().scale() > 2) {
+            throw new BusinessException("A multa deve ter no máximo duas casas decimais.");
+        }
+        if (valor.compareTo(total) > 0) {
+            throw new BusinessException("A multa não pode ser maior que o total do orçamento.");
+        }
+        BigDecimal bruta = valor.setScale(2, RoundingMode.UNNECESSARY);
+        BigDecimal pct = bruta.multiply(CEM).divide(total, 2, RoundingMode.HALF_UP);
+        return new MultaInformada(bruta, pct);
+    }
+
+    /**
+     * RN-NOVA-51/58 — grava a multa no orçamento e devolve a parte a receber (multa menos o recebido, piso zero) e
+     * o valor a estornar (recebido menos a multa, piso zero; só quando {@code estorna}; {@code null} se não há).
+     * Mantém o que o orçamento já gravava: {@code valorMulta} é a parte a receber.
+     */
+    private ResultadoMulta aplicarMulta(Orcamento orcamento, MultaInformada multa, BigDecimal recebido, boolean estorna) {
+        BigDecimal aReceber = multa.bruta().subtract(recebido).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal diferenca = recebido.subtract(multa.bruta()).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal devolvido = estorna && diferenca.signum() > 0 ? diferenca : null;
+        orcamento.setPercentualMulta(multa.percentual());
+        orcamento.setValorMultaBruta(multa.bruta());
+        orcamento.setValorMulta(aReceber);
+        orcamento.setValorDevolvidoMulta(devolvido);
+        return new ResultadoMulta(aReceber, devolvido);
     }
 
     private OrcamentoDetalheResponse montarDetalhe(Orcamento orcamento) {
@@ -2101,6 +2228,7 @@ public class OrcamentoService {
         OrcamentoDetalheResponse response = orcamentoMapper.toDetalheResponse(orcamento, itens);
         response.setItens(itensResponse);
         response.setProducoesVinculadas(montarVinculosProducao(orcamento.getId()));
+        response.setParcelas(lancamentoFinanceiroService.parcelasDoOrcamento(orcamento.getId()));
         return response;
     }
 
@@ -2149,6 +2277,100 @@ public class OrcamentoService {
         return orcamentoRepository.findTopByUsuarioIdOrderByNumeroDesc(usuarioId)
                 .map(o -> o.getNumero() != null ? o.getNumero() + 1 : 1)
                 .orElse(1);
+    }
+
+    /** RN-NOVA-38 — sem o passo Pagamento não há aprovação; valida sem gravar nada. */
+    private PagamentoOrcamentoValidadoResponse validarPagamentoDaAprovacao(Orcamento orcamento, AvancaStatusRequest request, UUID usuarioId) {
+        if (request.getPagamento() == null) {
+            throw BusinessException.noCampo("pagamento", "Informe como será o pagamento para aprovar.");
+        }
+        return pagamentoValidador.validar(orcamento, request.getPagamento(), usuarioId);
+    }
+
+    /** RN-NOVA-38/10 — na transação da aprovação: grava o pagamento no orçamento e cria as parcelas, antes de mudar o status. */
+    private void gravarPagamentoDaAprovacao(Orcamento orcamento, PagamentoOrcamentoValidadoResponse v, UUID usuarioId) {
+        aplicarPagamento(orcamento, v);
+        lancamentoFinanceiroService.gerarParcelasDoOrcamento(orcamento,
+                new PagamentoDoOrcamento(v.total(), v.valorSinal(), v.sinalAte(), v.vencimentoSaldo()));
+    }
+
+    private void aplicarPagamento(Orcamento orcamento, PagamentoOrcamentoValidadoResponse v) {
+        orcamento.setMetodoPagamento(pagamentoValidador.validarMetodo(v.metodoPagamento().id(), getUsuarioIdAutenticado()));
+        orcamento.setSinalAtivo(v.temSinal());
+        orcamento.setPercentualSinal(v.percentualSinal());
+        orcamento.setValorSinal(v.valorSinal());
+        orcamento.setSinalAte(v.sinalAte());
+    }
+
+    /**
+     * V0.19.0 (#1174, RN-NOVA-41, CEN-NOVO-20/21) — "Alterar pagamento" depois de aprovado: só sem parcela Recebida; o sinal não
+     * pode ser incluído se a aprovação foi sem sinal; removê-lo em AGUARDANDO_SINAL leva a EM_PRODUCAO. As parcelas Em aberto são refeitas.
+     */
+    public OrcamentoDetalheResponse alterarPagamento(UUID id, PagamentoOrcamentoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        StatusOrcamento status = orcamento.getStatus();
+        if (status == StatusOrcamento.RASCUNHO || status == StatusOrcamento.ENVIADO || status == StatusOrcamento.CANCELADO) {
+            throw new BusinessException("O pagamento só pode ser alterado depois da aprovação, em um orçamento não cancelado.");
+        }
+        if (request == null) {
+            throw BusinessException.noCampo("pagamento", "Informe como será o pagamento.");
+        }
+        if (status == StatusOrcamento.SINAL_PAGO || status == StatusOrcamento.PAGO || status == StatusOrcamento.ENTREGUE
+                || lancamentoFinanceiroService.orcamentoTemParcelaRecebida(orcamento.getId())) {
+            throw new BusinessException("Já há pagamento recebido; use o estorno para desfazer.");
+        }
+        PagamentoOrcamentoValidadoResponse v = pagamentoValidador.validar(orcamento, request, usuarioId);
+        if (v.temSinal() && !Boolean.TRUE.equals(orcamento.getSinalAtivo())) {
+            throw new BusinessException("O sinal é combinado na aprovação; esta já foi feita sem sinal.");
+        }
+        aplicarPagamento(orcamento, v);
+        lancamentoFinanceiroService.gerarParcelasDoOrcamento(orcamento,
+                new PagamentoDoOrcamento(v.total(), v.valorSinal(), v.sinalAte(), v.vencimentoSaldo()));
+        if (status == StatusOrcamento.AGUARDANDO_SINAL && !v.temSinal()) {
+            orcamento.setStatus(StatusOrcamento.EM_PRODUCAO);
+        }
+        return montarDetalhe(orcamentoRepository.save(orcamento));
+    }
+
+    /**
+     * V0.19.0 (#1174, RN-NOVA-11) — "Recebi" na tela do Financeiro numa parcela de orçamento: executa a mesma transição do
+     * orçamento (ORC-014 no Sinal; ORC-007 no Saldo/Total), que baixa a parcela. Fora do passo certo é BLOQUEIO.
+     */
+    public void receberParcela(OrcamentoDaParcela parcela, java.time.LocalDate dataBaixa, UUID metodoId) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(parcela.orcamentoId(), usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Parcela não encontrada."));
+        AvancaStatusRequest pedido = new AvancaStatusRequest();
+        pedido.setDataRecebimento(dataBaixa);
+        if (parcela.papel() == PapelParcela.SINAL) {
+            if (orcamento.getStatus() != StatusOrcamento.AGUARDANDO_SINAL) {
+                throw new BusinessException("O sinal só pode ser recebido com o orçamento aguardando o sinal.");
+            }
+            pedido.setMetodoSinalRecebidoId(metodoId);
+        } else {
+            if (orcamento.getStatus() != StatusOrcamento.FINALIZADO) {
+                throw new BusinessException("O saldo só pode ser recebido com o orçamento finalizado.");
+            }
+            pedido.setMetodoRecebidoId(metodoId);
+        }
+        avancarStatus(orcamento.getId(), pedido);
+    }
+
+    /**
+     * V0.19.0 (#1185, RN-NOVA-38/39/42, UC-NOVO-4) — valida o passo Pagamento da aprovação de um orçamento ENVIADO da
+     * própria empresa SEM gravar nada nem mudar o status (a gravação, as parcelas e o status são da #1174).
+     */
+    @Transactional(readOnly = true)
+    public PagamentoOrcamentoValidadoResponse validarPagamento(UUID id, PagamentoOrcamentoRequest request) {
+        UUID usuarioId = getUsuarioIdAutenticado();
+        Orcamento orcamento = orcamentoRepository.findByIdAndUsuarioIdAndDeletedAtIsNull(id, usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Orçamento não encontrado"));
+        if (orcamento.getStatus() != StatusOrcamento.ENVIADO) {
+            throw new BusinessException("O pagamento só é informado ao aprovar um orçamento enviado.");
+        }
+        return pagamentoValidador.validar(orcamento, request, usuarioId);
     }
 
     private UUID getUsuarioIdAutenticado() {

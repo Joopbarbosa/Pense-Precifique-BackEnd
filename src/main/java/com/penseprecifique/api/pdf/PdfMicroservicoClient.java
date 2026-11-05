@@ -3,7 +3,9 @@ package com.penseprecifique.api.pdf;
 import com.penseprecifique.api.shared.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,9 @@ import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.List;
+import java.util.Base64;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Cliente HTTP pro microsserviço pense-precifique-pdf (contrato-pdf.md) — {@code POST}, não
@@ -37,6 +42,7 @@ public class PdfMicroservicoClient {
     private static final String MENSAGEM_ERRO_GENERICO = "Erro ao gerar PDF.";
 
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
 
     /**
      * {@code RestClient.builder()} (factory estático), não o bean {@code RestClient.Builder}
@@ -52,9 +58,12 @@ public class PdfMicroservicoClient {
      * teste com WireMock, onde a negociação HTTP/2 terminava em "RST_STREAM: Stream cancelled" a
      * cada requisição — mesmo risco existiria contra o microsserviço real.
      */
+    @Autowired
     public PdfMicroservicoClient(
             @Value("${pdf.microservice.base-url}") String baseUrl,
-            @Value("${pdf.microservice.timeout-seconds:30}") long timeoutSeconds) {
+            @Value("${pdf.microservice.timeout-seconds:30}") long timeoutSeconds,
+            ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
         HttpClient httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(timeoutSeconds))
@@ -68,8 +77,74 @@ public class PdfMicroservicoClient {
                 .build();
     }
 
+    public PdfMicroservicoClient(String baseUrl, long timeoutSeconds) {
+        this(baseUrl, timeoutSeconds, new ObjectMapper());
+    }
+
     public byte[] gerarPdf(String tipo, UUID id, Object payload) {
         return renderizar(tipo, id, payload, "pdf");
+    }
+
+    public PdfGeracaoResultado gerarPdfControlado(String tipo, UUID id, Object payload, boolean dividir) {
+        try {
+            ResponseEntity<byte[]> resposta = restClient.post()
+                    .uri("/render/{tipo}/{id}?format=pdf&dividir={dividir}", tipo, id, dividir)
+                    .header("X-User-Token", tokenAtual())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .onStatus(status -> true, (request, response) -> { })
+                    .toEntity(byte[].class);
+            byte[] corpo = resposta.getBody();
+            int paginas = Integer.parseInt(resposta.getHeaders().getFirst("X-Pdf-Page-Count") == null
+                    ? "0" : resposta.getHeaders().getFirst("X-Pdf-Page-Count"));
+            if (resposta.getStatusCode().value() == 409 || resposta.getStatusCode().value() == 413) {
+                var json = objectMapper.readTree(corpo);
+                throw new PdfControleException(json.path("tipo").asText(), json.path("message").asText(),
+                        json.path("totalPaginas").asInt(paginas), json.path("dividirDisponivel").asBoolean(false));
+            }
+            if (resposta.getStatusCode().is2xxSuccessful() && resposta.getHeaders().getContentType() != null
+                    && MediaType.APPLICATION_JSON.isCompatibleWith(resposta.getHeaders().getContentType())) {
+                var json = objectMapper.readTree(corpo);
+                java.util.List<PdfParte> partes = objectMapper.convertValue(json.get("partes"),
+                        new tools.jackson.core.type.TypeReference<java.util.List<PdfParte>>() { });
+                return new PdfGeracaoResultado(paginas, null, partes);
+            }
+            if (!resposta.getStatusCode().is2xxSuccessful()) throw renderizarErro(resposta.getStatusCode());
+            return new PdfGeracaoResultado(paginas, corpo, List.of());
+        } catch (PdfControleException ex) {
+            throw ex;
+        } catch (RestClientResponseException ex) {
+            throw traduzirErroHttp(ex);
+        } catch (ResourceAccessException ex) {
+            log.warn("Falha de conexão com o microsserviço de PDF: {}", ex.getMessage());
+            throw new BusinessException(MENSAGEM_INDISPONIVEL);
+        } catch (Exception ex) {
+            log.error("Resposta inválida do microsserviço de PDF", ex);
+            throw new BusinessException(MENSAGEM_ERRO_GENERICO);
+        }
+    }
+
+    private RuntimeException renderizarErro(HttpStatusCode status) {
+        if (status.value() == 408 || status.is5xxServerError()) return new BusinessException(MENSAGEM_INDISPONIVEL);
+        return new BusinessException(MENSAGEM_ERRO_GENERICO);
+    }
+
+    public record PdfGeracaoResultado(int totalPaginas, byte[] pdf, List<PdfParte> partes) { }
+    public record PdfParte(int numeroParte, int totalPaginas, String pdfBase64) {
+        public byte[] bytes() { return Base64.getDecoder().decode(pdfBase64); }
+    }
+
+    public static class PdfControleException extends RuntimeException {
+        private final String tipo;
+        private final int totalPaginas;
+        private final boolean dividirDisponivel;
+        public PdfControleException(String tipo, String message, int totalPaginas, boolean dividirDisponivel) {
+            super(message); this.tipo = tipo; this.totalPaginas = totalPaginas; this.dividirDisponivel = dividirDisponivel;
+        }
+        public String getTipo() { return tipo; }
+        public int getTotalPaginas() { return totalPaginas; }
+        public boolean isDividirDisponivel() { return dividirDisponivel; }
     }
 
     /**

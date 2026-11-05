@@ -6,6 +6,7 @@ import com.penseprecifique.api.shared.dto.response.auth.AuthResponseDTO;
 import com.penseprecifique.api.shared.dto.response.auth.UsuarioResponseDTO;
 import com.penseprecifique.api.infra.security.JwtTokenProvider;
 import com.penseprecifique.api.shared.exception.BusinessException;
+import com.penseprecifique.api.shared.texto.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -59,7 +60,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Transactional
     public AuthResponseDTO alterarEmail(AlterarEmailRequestDTO request) {
         Usuario usuario = getUsuarioLogado();
-        String novoEmail = request.novoEmail().trim();
+        String novoEmail = EmailNormalizer.normalizar(request.novoEmail());
 
         if (!passwordEncoder.matches(request.senhaAtual(), usuario.getSenhaHash())) {
             throw new BusinessException("Senha atual incorreta");

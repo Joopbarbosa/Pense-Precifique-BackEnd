@@ -1,13 +1,19 @@
 package com.penseprecifique.api.pdf;
 
 import com.penseprecifique.api.shared.domain.entity.*;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
+import com.penseprecifique.api.shared.domain.entity.MetodoPagamentoConfiguravel;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoDesconto;
 import com.penseprecifique.api.shared.dto.pdf.*;
 import org.springframework.stereotype.Component;
 
+import com.penseprecifique.api.financeiro.PapelParcela;
+import com.penseprecifique.api.financeiro.ParcelaOrcamentoResponse;
+import com.penseprecifique.api.financeiro.SituacaoParcela;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Optional;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.LocalDateTime;
@@ -30,7 +36,13 @@ public class PdfMapper {
 
     public OrcamentoPdfData toOrcamentoPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
             Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem) {
+        return toOrcamentoPdfData(orc, empresa, itens, customizacoesPorItem, null);
+    }
+
+    public OrcamentoPdfData toOrcamentoPdfData(Orcamento orc, Empresa empresa, List<OrcamentoItem> itens,
+            Map<UUID, List<OrcamentoItemCustomizacao>> customizacoesPorItem, PdfMicroservicoCondicoesPayload condicoes) {
         return OrcamentoPdfData.builder()
+            .condicoes(condicoes)
             .numeroFormatado(String.valueOf(orc.getNumero()))
             .status(formatarStatusOrcamento(orc.getStatus()))
             .nomeEmpresa(empresa != null ? empresa.getNome() : "Studio")
@@ -58,6 +70,67 @@ public class PdfMapper {
             .observacoes(orc.getObservacoes())
             .itens(mapearItens(itens, customizacoesPorItem))
             .build();
+    }
+
+    /** Texto fixo da página 2 antes da aprovação (RN-NOVA-45); passa pela validação do Gestor. */
+    public static final String AVISO_CONDICOES_ANTES_APROVACAO =
+        "Sinal e prazos são combinados quando você aprovar este orçamento.";
+    /** Limites do contrato com o microsserviço (condicoesSchema): no máximo 50 formas de até 100 caracteres. */
+    static final int MAX_FORMAS_ACEITAS = 50;
+    static final int MAX_TEXTO_FORMA = 100;
+
+    /**
+     * V0.19.0 #445 (RN-NOVA-45, DT-NOVA-11) — monta a página 2. RASCUNHO e ENVIADO (ou orçamento sem parcelas, por exemplo
+     * cancelado antes de aprovar) usam o modo antes da aprovação: nomes dos métodos ativos, na ordem recebida (a do cadastro),
+     * mais o aviso fixo; sem método ativo, só o aviso. Nos demais status mostra o combinado, lido das parcelas do lançamento
+     * (Sinal, Saldo ou Total; a Multa não entra); "Recebido" soma as parcelas baixadas.
+     *
+     * @param metodosAtivos métodos de pagamento ativos da usuária, já na ordem do cadastro
+     * @param parcelas parcelas do lançamento do orçamento, em ordem (vazio se não houver)
+     */
+    public PdfMicroservicoCondicoesPayload toCondicoesPayload(Orcamento orc, List<MetodoPagamentoConfiguravel> metodosAtivos,
+            List<ParcelaOrcamentoResponse> parcelas) {
+        List<ParcelaOrcamentoResponse> doAcordo = parcelas == null ? List.of()
+            : parcelas.stream().filter(p -> p.papel() != null && p.papel() != PapelParcela.MULTA).toList();
+        boolean antes = orc.getStatus() == StatusOrcamento.RASCUNHO || orc.getStatus() == StatusOrcamento.ENVIADO || doAcordo.isEmpty();
+        if (antes) {
+            List<String> formas = (metodosAtivos == null ? List.<MetodoPagamentoConfiguravel>of() : metodosAtivos).stream()
+                .map(com.penseprecifique.api.shared.mapper.CompraMapper::rotulo)
+                .map(PdfMapper::limitarForma)
+                .limit(MAX_FORMAS_ACEITAS)
+                .toList();
+            return PdfMicroservicoCondicoesPayload.builder()
+                .modo("ANTES_APROVACAO").formasAceitas(formas).aviso(AVISO_CONDICOES_ANTES_APROVACAO).build();
+        }
+        Optional<ParcelaOrcamentoResponse> sinal = doAcordo.stream().filter(p -> p.papel() == PapelParcela.SINAL).findFirst();
+        Optional<ParcelaOrcamentoResponse> saldo = doAcordo.stream()
+            .filter(p -> p.papel() == PapelParcela.SALDO || p.papel() == PapelParcela.TOTAL).findFirst();
+        BigDecimal recebido = doAcordo.stream()
+            .filter(p -> p.situacao() == SituacaoParcela.BAIXADA)
+            .map(ParcelaOrcamentoResponse::valor)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return PdfMicroservicoCondicoesPayload.builder()
+            .modo("APROVADO")
+            .forma(limitarForma(formatarMetodoPagamento(orc.getMetodoPagamento())))
+            .sinal(sinal.map(p -> formatarMoeda(p.valor()) + percentualDoSinal(orc, p.valor())).orElse("Sem sinal"))
+            .sinalAte(sinal.map(p -> p.vencimento() == null ? null : p.vencimento().format(DATE_FORMATTER)).orElse(null))
+            .saldo(saldo.map(p -> formatarMoeda(p.valor())).orElse(null))
+            .vencimentoSaldo(saldo.map(p -> p.vencimento() == null ? null : p.vencimento().format(DATE_FORMATTER)).orElse(null))
+            .recebido(formatarMoeda(recebido))
+            .build();
+    }
+
+    private static String limitarForma(String nome) {
+        return nome.length() > MAX_TEXTO_FORMA ? nome.substring(0, MAX_TEXTO_FORMA) : nome;
+    }
+
+    /** " (50%)" a partir do percentual gravado no orçamento; sem ele, calculado do valor e do total; vazio se não der. */
+    private String percentualDoSinal(Orcamento orc, BigDecimal valorSinal) {
+        BigDecimal pct = orc.getPercentualSinal();
+        if (pct == null && orc.getTotal() != null && orc.getTotal().signum() > 0 && valorSinal != null) {
+            pct = valorSinal.multiply(BigDecimal.valueOf(100)).divide(orc.getTotal(), 2, RoundingMode.HALF_UP);
+        }
+        return pct == null ? "" : " (" + pct.stripTrailingZeros().toPlainString() + "%)";
     }
 
     /**
@@ -97,6 +170,7 @@ public class PdfMapper {
             .total(dados.getTotal())
             .observacoes(dados.getObservacoes())
             .itens(itens)
+            .condicoes(dados.getCondicoes())
             .build();
 
         return PdfMicroservicoOrcamentoPayload.builder()
@@ -149,7 +223,7 @@ public class PdfMapper {
             .emailEmpresa(empresa != null ? empresa.getEmail() : null)
             .telefoneEmpresa(empresa != null ? empresa.getWhatsapp() : null)
             .logoUrlEmpresa(empresa != null ? empresa.getLogoUrl() : null)
-            .metodoPagamento(formatarMetodoPagamento(orc.getMetodoPagamento()))
+            .metodoPagamento(formatarMetodoPagamento(recibo.getMetodoPagamento() != null ? recibo.getMetodoPagamento() : orc.getMetodoPagamento()))
             .valorTotal(formatarMoeda(recibo.getValorTotal()))
             .valorSinalPago(formatarMoeda(recibo.getValorSinalPago()))
             .valorRestantePago(formatarMoeda(recibo.getValorRestantePago()))
@@ -395,19 +469,13 @@ public class PdfMapper {
         return "R$ " + MOEDA_FORMATTER.format(valor);
     }
 
-    private String formatarMetodoPagamento(MetodoPagamento metodo) {
+    /** V0.19.0 (#1185, DT-NOVA-8): o método vem de Configurações; sem método (orçamento ainda não aprovado) o PDF
+     *  atual mostra "—" (a página de condições de pagamento é da #445). */
+    private String formatarMetodoPagamento(MetodoPagamentoConfiguravel metodo) {
         if (metodo == null) {
             return "—";
         }
-        return switch (metodo) {
-            case PIX -> "Pix";
-            case DINHEIRO -> "Dinheiro";
-            case CREDITO -> "Crédito";
-            case DEBITO -> "Débito";
-            case TRANSFERENCIA -> "Transferência";
-            case BOLETO -> "Boleto Bancário";
-            case OUTRO -> "Outro";
-        };
+        return com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(metodo);
     }
 
     private String formatarDesconto(Orcamento orc) {
@@ -564,8 +632,9 @@ public class PdfMapper {
             .fornecedor(fornecedor)
             .multiplosFornecedores(multiplos)
             // #597/RN-NOVA-42 (adendo 2) — crédito parcelado: "Pago — Cartão Crédito · 3x"
-            .pagamento(Boolean.TRUE.equals(compra.getPago()) && compra.getMetodoPagamento() != null
-                ? "Pago — " + com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(compra.getMetodoPagamento())
+            .pagamento(compra.getMetodoPagamento() != null && compra.getStatus() != com.penseprecifique.api.shared.domain.enums.StatusCompra.CANCELADA
+                ? (Boolean.TRUE.equals(compra.getPago()) ? "Pago — " : "Não pago — ")
+                    + com.penseprecifique.api.shared.mapper.CompraMapper.rotulo(compra.getMetodoPagamento())
                     + (compra.getParcelas() != null ? " · " + compra.getParcelas() + "x" : "")
                 : "Não pago")
             .total(formatarMoeda(total))

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.cliente;
 
+import java.time.Clock;
 import com.penseprecifique.api.util.PageableOrdenacaoResolver;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.caixa.VendaCaixaItemRepository;
@@ -77,6 +78,7 @@ public class ClienteHistoricoService {
     private static final int MAX_ITENS_GRAFICO = 10;
 
     private final ClienteRepository clienteRepository;
+    private final Clock clock;
     private final UsuarioRepository usuarioRepository;
     private final OrcamentoRepository orcamentoRepository;
     private final OrcamentoItemRepository orcamentoItemRepository;
@@ -148,7 +150,7 @@ public class ClienteHistoricoService {
             "data", Comparator.comparing((Registro r) -> r.resposta().data()),
             "identificador", Comparator.comparing((Registro r) -> r.resposta().tipo()).thenComparingInt(Registro::numero),
             "valor", Comparator.comparing((Registro r) -> r.resposta().valor()),
-            "status", Comparator.comparing((Registro r) -> r.resposta().status()));
+            "status", Comparator.comparing((Registro r) -> rotuloStatus(r.resposta())));
 
     /** Desempate estável: mais recente primeiro, depois o maior número. */
     private static final Comparator<Registro> DESEMPATE = ORDENACAO_REGISTROS.get("data").reversed()
@@ -229,6 +231,38 @@ public class ClienteHistoricoService {
         return ordem == null ? DESEMPATE : ordem.thenComparing(DESEMPATE);
     }
 
+    /** CLI-008 / PP-318: ordena pelo texto apresentado na coluna Status, não pelo código interno. */
+    private static String rotuloStatus(RegistroCadastroResponse registro) {
+        String status = registro.status();
+        String rotulo = switch (registro.tipo()) {
+            case TIPO_ORCAMENTO -> switch (StatusOrcamento.valueOf(status)) {
+                case RASCUNHO -> "Rascunho";
+                case ENVIADO -> "Enviado";
+                case APROVADO -> "Aprovado";
+                case AGUARDANDO_SINAL -> "Aguardando Sinal";
+                case SINAL_PAGO -> "Sinal Pago";
+                case EM_PRODUCAO -> "Em Produção";
+                case FINALIZADO -> "Finalizado";
+                case PAGO -> "Pago";
+                case ENTREGUE -> "Entregue";
+                case CANCELADO -> "Cancelado";
+            };
+            case TIPO_VENDA_CAIXA -> status.equals(StatusVendaCaixa.CONCLUIDA.name())
+                    ? "Concluída" : "Cancelada";
+            default -> switch (StatusCompra.valueOf(status)) {
+                case RASCUNHO -> "Rascunho";
+                case PENDENTE_RECEBIMENTO -> "Pendente de recebimento";
+                case CONFIRMADA -> "Confirmada";
+                case CANCELADA -> "Cancelada";
+            };
+        };
+        if ("COMPRA".equals(registro.tipo()) && StatusCompra.CONFIRMADA.name().equals(status)
+                && Boolean.FALSE.equals(registro.pago())) {
+            return rotulo + " Não paga";
+        }
+        return rotulo;
+    }
+
     private List<Registro> registrosCliente(UUID clienteId, UUID usuarioId) {
         List<Orcamento> orcamentos = orcamentoRepository.findByClienteIdAndUsuarioIdAndDeletedAtIsNull(clienteId, usuarioId);
         List<VendaCaixa> vendas = vendaCaixaRepository.findByClienteIdAndUsuarioId(clienteId, usuarioId);
@@ -266,7 +300,7 @@ public class ClienteHistoricoService {
             return new Registro(new RegistroCadastroResponse(c.getId(), "COMPRA",
                     IdentificadorFormatter.formatar("COM", c.getNumero()), c.getDataCompra(), c.getStatus().name(),
                     CompraMapper.total(linhas), linhas.size(), resumo, c.getStatus() == StatusCompra.CONFIRMADA,
-                    Boolean.TRUE.equals(c.getPago())),
+                    CompraMapper.pagoExibido(c)),
                     c.getNumero(), linhas.stream().map(i -> i.getInsumo().getId()).toList(),
                     linhas.stream().map(i -> i.getInsumo().getNome()).toList(),
                     linhas.stream().anyMatch(i -> positivo(i.getDescontoLinha()) || positivo(i.getDescontoNota())));
@@ -301,7 +335,7 @@ public class ClienteHistoricoService {
      */
     public ClienteGraficosResponse graficos(UUID clienteId, PapelCadastro papel, LocalDate de, LocalDate ate) {
         UUID usuarioId = validarCadastro(clienteId);
-        LocalDate fim = ate != null ? ate : LocalDate.now();
+        LocalDate fim = ate != null ? ate : LocalDate.now(clock);
         LocalDate inicio = de != null ? de : YearMonth.from(fim).minusMonths(11).atDay(1);
         if (inicio.isAfter(fim)) {
             throw BusinessException.explicado("Período inválido", "A data inicial não pode ser depois da data final.",
@@ -509,7 +543,7 @@ public class ClienteHistoricoService {
                 .orElse(null);
 
         List<Map.Entry<Compra, List<CompraItem>>> naoPagas = porCompra.entrySet().stream()
-                .filter(e -> !Boolean.TRUE.equals(e.getKey().getPago())).toList();
+                .filter(e -> e.getKey().getStatus() != StatusCompra.CANCELADA && !Boolean.TRUE.equals(e.getKey().getPago())).toList();
 
         return new IndicadoresFornecedorResponse(
                 new IndicadoresFornecedorResponse.UltimaCompraFornecedor(ultima.getId(),
@@ -532,7 +566,7 @@ public class ClienteHistoricoService {
                         .thenComparing(e -> e.getKey().getNumero()).reversed())
                 .map(e -> new CompraFornecedorResponse(e.getKey().getId(),
                         IdentificadorFormatter.formatar("COM", e.getKey().getNumero()), e.getKey().getDataCompra(),
-                        e.getKey().getStatus(), CompraMapper.total(e.getValue()), Boolean.TRUE.equals(e.getKey().getPago())))
+                        e.getKey().getStatus(), CompraMapper.total(e.getValue()), CompraMapper.pagoExibido(e.getKey())))
                 .toList();
         return paginar(todas, pageable);
     }

@@ -356,7 +356,7 @@ public class VendaCaixaService {
                     .build());
             pagamentosResponse.add(new VendaCaixaPagamentoResponseDTO(
                     pagamentoSalvo.getId(), pagamento.metodo().getId(), CompraMapper.rotulo(pagamento.metodo()), pagamento.valor(),
-                    pagamento.parcelas(), pagamento.taxaAplicada()));
+                    pagamento.parcelas(), pagamento.taxaAplicada(), valorTaxa(pagamento.valor(), pagamento.taxaAplicada())));
         }
 
         return toResponse(venda, itensResponse, pagamentosResponse);
@@ -572,8 +572,13 @@ public class VendaCaixaService {
     private List<VendaCaixaPagamentoResponseDTO> pagamentosDe(VendaCaixa venda) {
         return vendaCaixaPagamentoRepository.findByVendaCaixaId(venda.getId()).stream()
                 .map(p -> new VendaCaixaPagamentoResponseDTO(p.getId(), p.getMetodoPagamento().getId(), CompraMapper.rotulo(p.getMetodoPagamento()),
-                        p.getValor(), p.getParcelas(), p.getTaxaPercentualAplicada()))
+                        p.getValor(), p.getParcelas(), p.getTaxaPercentualAplicada(), valorTaxa(p.getValor(), p.getTaxaPercentualAplicada())))
                 .toList();
+    }
+
+    private static BigDecimal valorTaxa(BigDecimal valor, BigDecimal percentual) {
+        return percentual == null || percentual.signum() <= 0 ? null
+                : valor.multiply(percentual).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
     }
 
     /** RN-NOVA-7 (V0.8.2/ORC-002, mesmo princípio) — bloqueia desconto negativo ou maior que o subtotal. */

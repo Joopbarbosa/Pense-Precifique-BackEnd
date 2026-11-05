@@ -24,6 +24,7 @@ public class VendaCaixaController {
     private final VendaCaixaService vendaCaixaService;
     private final ItemCatalogoService itemCatalogoService;
     private final HistoricoVendasService historicoVendasService;
+    private final com.penseprecifique.api.pdf.PdfService pdfService;
 
     /**
      * RN-NOVA-1 reaberta (V0.12.0, achado do teste manual) — busca de itens de Catálogo
@@ -50,6 +51,16 @@ public class VendaCaixaController {
     @GetMapping("/vendas/{id}")
     public ResponseEntity<VendaCaixaResponseDTO> buscarPorId(@PathVariable UUID id) {
         return ResponseEntity.ok(vendaCaixaService.buscarPorId(id));
+    }
+
+    /** V0.19.0 #1170 (RN-NOVA-33) — recibo da venda em PDF; só CONCLUIDA, nunca altera a venda. */
+    @GetMapping("/vendas/{id}/recibo")
+    public ResponseEntity<byte[]> reciboPdf(@PathVariable UUID id) {
+        byte[] pdf = pdfService.gerarReciboCaixa(id);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=recibo-venda.pdf")
+                .body(pdf);
     }
 
     @PostMapping("/vendas/{id}/cancelar")

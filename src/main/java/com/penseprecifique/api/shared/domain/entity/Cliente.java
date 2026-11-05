@@ -40,6 +40,31 @@ public class Cliente {
     @Column(length = 25)
     private String telefone;
 
+    @Column(name = "whatsapp_canonico", length = 15)
+    private String whatsappCanonico;
+
+    @Column(name = "aceita_whatsapp", nullable = false)
+    @Builder.Default
+    private Boolean aceitaWhatsapp = false;
+
+    @Column(name = "aceita_whatsapp_em")
+    private java.time.LocalDate aceitaWhatsappEm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "aceita_whatsapp_por")
+    private Usuario aceitaWhatsappPor;
+
+    @Column(name = "recusou_whatsapp", nullable = false)
+    @Builder.Default
+    private Boolean recusouWhatsapp = false;
+
+    @Column(name = "recusou_whatsapp_em")
+    private java.time.LocalDate recusouWhatsappEm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recusou_whatsapp_por")
+    private Usuario recusouWhatsappPor;
+
     @Column
     private String site;
 

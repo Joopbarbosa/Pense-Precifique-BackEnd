@@ -13,14 +13,8 @@ import java.util.UUID;
  * {@code VendaCaixa} (Caixa/PDV). 4 tipos fixos (semeados no registro, DT-NOVA-6) + tipo OUTRO de
  * nome livre. RN-NOVA-15/16/17.
  *
- * <p>Nome "Configuravel" no fim, e não apenas "MetodoPagamento", por colisão real de compilação:
- * já existe {@code shared.domain.enums.MetodoPagamento} (enum fixo usado só por
- * {@code Orcamento.metodoPagamento}), sem relação com esta entidade. Como esta classe vive no
- * mesmo package de {@code Orcamento} ({@code shared.domain.entity}), o mesmo nome simples vencia o
- * import wildcard do enum em {@code Orcamento.java}/{@code OrcamentoService.java}/
- * {@code PdfMapper.java}/{@code OrcamentoMapper.java} (regra do Java: tipo do mesmo package sempre
- * vence import-on-demand) — achado só durante a compilação real desta tarefa, não previsto pela
- * `estrutura` (DT-NOVA-4). Ver "Divergências de Premissa" em decisoes-config-perfil.md.
+ * <p>Nome "Configuravel" no fim por histórico: até a V0.19.0 existia também um enum fixo {@code MetodoPagamento}
+ * (removido na PP-528; {@code Orcamento} agora aponta para esta entidade).
  */
 @Entity
 @Table(name = "metodos_pagamento")

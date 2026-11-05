@@ -40,6 +40,11 @@ public class ReciboPagamento {
     @Column(name = "total_quitado", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalQuitado;
 
+    /** V0.19.0 (#1174, RN-NOVA-43) — forma realmente recebida no saldo/total; nula = vale a combinada do orçamento. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metodo_pagamento_id")
+    private MetodoPagamentoConfiguravel metodoPagamento;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

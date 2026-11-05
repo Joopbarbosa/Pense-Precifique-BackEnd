@@ -35,7 +35,7 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
     @EntityGraph(attributePaths = {"fornecedor", "metodoPagamento"})
     @Query(value = "SELECT c FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +
             "AND (:filtrarStatus = false OR c.status IN :statuses) " +
-            "AND (:filtrarPago = false OR c.pago = :pago) " +
+            "AND (:filtrarPago = false OR (c.status <> com.penseprecifique.api.shared.domain.enums.StatusCompra.CANCELADA AND c.pago = :pago)) " +
             "AND (:somenteAtrasadas = false OR (c.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.PENDENTE_RECEBIMENTO " +
             "     AND c.previsaoEntrega < :hoje)) " +
             "AND (:comDesconto = false OR c.descontoNota > 0 " +
@@ -50,7 +50,7 @@ public interface CompraRepository extends JpaRepository<Compra, UUID> {
             "                AND (LOWER(ci4.insumo.nome) LIKE :busca OR LOWER(f4.nome) LIKE :busca)))",
             countQuery = "SELECT COUNT(c) FROM Compra c LEFT JOIN c.fornecedor f WHERE c.usuario.id = :usuarioId AND c.deletedAt IS NULL " +
             "AND (:filtrarStatus = false OR c.status IN :statuses) " +
-            "AND (:filtrarPago = false OR c.pago = :pago) " +
+            "AND (:filtrarPago = false OR (c.status <> com.penseprecifique.api.shared.domain.enums.StatusCompra.CANCELADA AND c.pago = :pago)) " +
             "AND (:somenteAtrasadas = false OR (c.status = com.penseprecifique.api.shared.domain.enums.StatusCompra.PENDENTE_RECEBIMENTO " +
             "     AND c.previsaoEntrega < :hoje)) " +
             "AND (:comDesconto = false OR c.descontoNota > 0 " +

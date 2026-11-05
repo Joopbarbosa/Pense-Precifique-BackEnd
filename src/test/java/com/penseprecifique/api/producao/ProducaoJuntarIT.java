@@ -12,7 +12,6 @@ import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoItemRequest;
 import com.penseprecifique.api.shared.dto.request.orcamento.OrcamentoRequest;
@@ -121,7 +120,6 @@ class ProducaoJuntarIT {
         item.setQuantidade(quantidade);
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(prazoDias != null);
         req.setDataInicioEstimada(inicio);
         req.setPrazoProducaoDias(prazoDias);
@@ -388,19 +386,20 @@ class ProducaoJuntarIT {
     void producoesDoPeriodoDaAprovacaoAteAEntrega() {
         seed();
         Produto p = novoProduto(1, false);
-        LocalDate aprovacao = LocalDate.of(2026, 11, 2);
+        LocalDate base = LocalDate.now().plusDays(1);
+        LocalDate aprovacao = base;
         UUID alvo = orcamentoAprovado(p, 5, aprovacao, 4);
-        UUID aguardando = producaoNoDia(p, LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 3), EstadoProducao.AGUARDANDO_INICIO);
-        UUID andamento = producaoNoDia(p, LocalDate.of(2026, 11, 5), LocalDate.of(2026, 11, 5), EstadoProducao.EM_ANDAMENTO);
-        UUID travada = producaoNoDia(p, LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 4), EstadoProducao.TRAVADA);
-        UUID depois = producaoNoDia(p, LocalDate.of(2026, 11, 10), LocalDate.of(2026, 11, 10), EstadoProducao.AGUARDANDO_INICIO);
-        UUID cancelada = producaoNoDia(p, LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 3), EstadoProducao.CANCELADA);
-        UUID naBorda = producaoNoDia(p, LocalDate.of(2026, 11, 6), LocalDate.of(2026, 11, 8), EstadoProducao.AGUARDANDO_INICIO);
+        UUID aguardando = producaoNoDia(p, base.plusDays(1), base.plusDays(1), EstadoProducao.AGUARDANDO_INICIO);
+        UUID andamento = producaoNoDia(p, base.plusDays(3), base.plusDays(3), EstadoProducao.EM_ANDAMENTO);
+        UUID travada = producaoNoDia(p, base.plusDays(2), base.plusDays(2), EstadoProducao.TRAVADA);
+        UUID depois = producaoNoDia(p, base.plusDays(8), base.plusDays(8), EstadoProducao.AGUARDANDO_INICIO);
+        UUID cancelada = producaoNoDia(p, base.plusDays(1), base.plusDays(1), EstadoProducao.CANCELADA);
+        UUID naBorda = producaoNoDia(p, base.plusDays(4), base.plusDays(6), EstadoProducao.AGUARDANDO_INICIO);
 
         var r = producaoService.producoesDoPeriodo(alvo);
         assertTrue(r.isPeriodoDisponivel());
         assertEquals(aprovacao, r.getDataInicio());
-        assertEquals(LocalDate.of(2026, 11, 6), r.getDataFim());
+        assertEquals(base.plusDays(4), r.getDataFim());
         List<UUID> ids = r.getProducoes().stream().map(CandidataJuntarResponse::getId).toList();
         assertTrue(ids.containsAll(List.of(aguardando, andamento, travada, naBorda)));
         assertFalse(ids.contains(depois));
@@ -416,7 +415,7 @@ class ProducaoJuntarIT {
         seed();
         Produto p = novoProduto(1, false);
         UUID semAprovacao = orcamentoAprovado(p, 5, null, 4);
-        UUID semPrazo = orcamentoAprovado(p, 5, LocalDate.of(2026, 11, 2), null);
+        UUID semPrazo = orcamentoAprovado(p, 5, LocalDate.now().plusDays(1), null);
         assertFalse(producaoService.producoesDoPeriodo(semAprovacao).isPeriodoDisponivel());
         assertFalse(producaoService.producoesDoPeriodo(semPrazo).isPeriodoDisponivel());
         assertTrue(producaoService.producoesDoPeriodo(semPrazo).getProducoes().isEmpty());

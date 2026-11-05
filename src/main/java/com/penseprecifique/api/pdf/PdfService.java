@@ -5,6 +5,7 @@ import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoCompraPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoListaComprasPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoOrcamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoPdfMultaPayload;
+import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboCaixaPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboEstornoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboPagamentoPayload;
 import com.penseprecifique.api.shared.dto.pdf.PdfMicroservicoReciboSinalPayload;
@@ -17,10 +18,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PdfService {
 
+    private record PayloadWhatsapp(String tipoPdf, Object payload) { }
+
     private final PdfMicroservicoClient pdfMicroservicoClient;
     private final OrcamentoPdfPayloadService orcamentoPdfPayloadService;
     private final ReciboPdfPayloadService reciboPdfPayloadService;
     private final ReciboPagamentoPdfPayloadService reciboPagamentoPdfPayloadService;
+    private final ReciboCaixaPdfPayloadService reciboCaixaPdfPayloadService;
+    private final OrcamentoDescritivoPdfPayloadService orcamentoDescritivoPdfPayloadService; // #382
     private final CatalogoPdfPayloadService catalogoPdfPayloadService;
     private final ComprasPdfPayloadService comprasPdfPayloadService;
 
@@ -35,8 +40,33 @@ public class PdfService {
      * 30s — a conexão do pool não fica presa durante a espera do microsserviço.
      */
     public byte[] gerarPdfOrcamento(UUID orcamentoId) {
+        if (orcamentoDescritivoPdfPayloadService.ehDescritivo(orcamentoId)) { // #382: o endpoint escolhe o payload pelo tipo
+            return pdfMicroservicoClient.gerarPdf("orcamento-descritivo", orcamentoId,
+                    orcamentoDescritivoPdfPayloadService.montarPayload(orcamentoId));
+        }
         PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
         return pdfMicroservicoClient.gerarPdf("orcamento", orcamentoId, payload);
+    }
+
+    public PdfMicroservicoClient.PdfGeracaoResultado gerarPdfOrcamentoControlado(UUID orcamentoId, boolean dividir) {
+        PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
+        return pdfMicroservicoClient.gerarPdfControlado("orcamento", orcamentoId, payload, dividir);
+    }
+
+    public PdfMicroservicoClient.PdfGeracaoResultado gerarPdfWhatsapp(String tipo, UUID id, boolean dividir) {
+        PayloadWhatsapp documento = switch (tipo) {
+            case "ORCAMENTO" -> new PayloadWhatsapp("orcamento", orcamentoPdfPayloadService.montarPayloadOrcamento(id));
+            case "RECIBO_SINAL" -> new PayloadWhatsapp("recibo-sinal", reciboPdfPayloadService.montarPayloadReciboSinal(id));
+            case "RECIBO_PAGAMENTO" -> new PayloadWhatsapp("recibo-pagamento", reciboPagamentoPdfPayloadService.montarPayloadReciboPagamento(id));
+            case "MULTA" -> new PayloadWhatsapp("pdf-multa", reciboPdfPayloadService.montarPayloadPdfMulta(id));
+            case "ESTORNO_SINAL" -> new PayloadWhatsapp("recibo-estorno", reciboPdfPayloadService.montarPayloadReciboEstorno(id));
+            case "RECIBO_CAIXA" -> new PayloadWhatsapp("recibo-caixa", reciboCaixaPdfPayloadService.montarPayload(id));
+            case "COMPRA" -> new PayloadWhatsapp("compra", comprasPdfPayloadService.montarPayloadCompra(id));
+            case "LISTA_COMPRAS" -> new PayloadWhatsapp("lista-compras", comprasPdfPayloadService.montarPayloadListaCompras(id));
+            case "CATALOGO" -> new PayloadWhatsapp("catalogo", catalogoPdfPayloadService.montarPayloadCatalogo(id));
+            default -> throw new IllegalArgumentException("Tipo de documento WhatsApp inválido.");
+        };
+        return pdfMicroservicoClient.gerarPdfControlado(documento.tipoPdf(), id, documento.payload(), dividir);
     }
 
     /**
@@ -46,6 +76,10 @@ public class PdfService {
      * motivo documentado em {@link #gerarPdfOrcamento}.
      */
     public String gerarPreviewHtmlOrcamento(UUID orcamentoId) {
+        if (orcamentoDescritivoPdfPayloadService.ehDescritivo(orcamentoId)) { // #382
+            return pdfMicroservicoClient.gerarHtml("orcamento-descritivo", orcamentoId,
+                    orcamentoDescritivoPdfPayloadService.montarPayload(orcamentoId));
+        }
         PdfMicroservicoOrcamentoPayload payload = orcamentoPdfPayloadService.montarPayloadOrcamento(orcamentoId);
         return pdfMicroservicoClient.gerarHtml("orcamento", orcamentoId, payload);
     }
@@ -77,6 +111,12 @@ public class PdfService {
         PdfMicroservicoReciboPagamentoPayload payload =
                 reciboPagamentoPdfPayloadService.montarPayloadReciboPagamento(orcamentoId);
         return pdfMicroservicoClient.gerarPdf("recibo-pagamento", orcamentoId, payload);
+    }
+
+    /** V0.19.0 #1170 (RN-NOVA-33) — recibo da venda do Caixa; só vendas CONCLUIDA, nunca altera a venda. */
+    public byte[] gerarReciboCaixa(UUID vendaId) {
+        PdfMicroservicoReciboCaixaPayload payload = reciboCaixaPdfPayloadService.montarPayload(vendaId);
+        return pdfMicroservicoClient.gerarPdf("recibo-caixa", vendaId, payload);
     }
 
     /** Preview (Fluxo E do PRD) do recibo-pagamento — mesmo padrão de {@link #gerarPreviewHtmlOrcamento}. */

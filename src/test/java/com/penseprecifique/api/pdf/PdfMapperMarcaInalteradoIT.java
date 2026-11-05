@@ -13,7 +13,6 @@ import com.penseprecifique.api.shared.domain.entity.OrcamentoItem;
 import com.penseprecifique.api.shared.domain.entity.OrcamentoItemCustomizacao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.pdf.ItemPdfData;
 import com.penseprecifique.api.shared.dto.pdf.OrcamentoPdfData;
@@ -70,7 +69,6 @@ class PdfMapperMarcaInalteradoIT {
         itemReq.setQuantidade(1);
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(true);
         req.setPrazoProducaoDias(5);
         req.setItens(List.of(itemReq));

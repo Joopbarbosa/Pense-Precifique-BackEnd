@@ -17,7 +17,6 @@ import com.penseprecifique.api.shared.domain.entity.Producao;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
 import com.penseprecifique.api.shared.domain.enums.EstadoProducao;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.OrigemHistoricoStatus;
 import com.penseprecifique.api.shared.domain.enums.TipoEventoHistoricoProducao;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
@@ -112,7 +111,6 @@ class HistoricoStatusProducaoAmpliadoIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(false);
         req.setItens(List.of(item));
         req.setSinalAtivo(false);

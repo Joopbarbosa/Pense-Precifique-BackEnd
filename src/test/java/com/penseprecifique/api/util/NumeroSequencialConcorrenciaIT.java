@@ -18,7 +18,6 @@ import com.penseprecifique.api.shared.domain.entity.FichaTecnicaItem;
 import com.penseprecifique.api.shared.domain.entity.Insumo;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.catalogo.CatalogoRequest;
 import com.penseprecifique.api.shared.dto.request.cliente.ClienteRequest;
@@ -207,7 +206,6 @@ class NumeroSequencialConcorrenciaIT {
         List<Integer> numeros = executarConcorrente(usuario.getEmail(), () -> {
             OrcamentoRequest req = new OrcamentoRequest();
             req.setClienteId(cliente.getId());
-            req.setMetodoPagamento(MetodoPagamento.PIX);
             req.setTemPrazoProducao(true);
             req.setPrazoProducaoDias(5);
             OrcamentoItemRequest item = new OrcamentoItemRequest();

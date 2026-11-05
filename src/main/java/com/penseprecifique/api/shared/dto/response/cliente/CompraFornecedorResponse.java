@@ -17,5 +17,5 @@ public record CompraFornecedorResponse(
         LocalDate dataCompra,
         StatusCompra status,
         BigDecimal valor,
-        boolean pago
+        Boolean pago
 ) {}

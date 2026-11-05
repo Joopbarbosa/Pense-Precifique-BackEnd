@@ -40,6 +40,7 @@ public class CatalogoService {
     private final ItemCatalogoComponenteRepository componenteRepository;
     private final CatalogoMapper catalogoMapper;
     private final UsuarioRepository usuarioRepository;
+    private final com.penseprecifique.api.infra.storage.R2StorageClient r2StorageClient;
 
     // ---------------------------------------------------------------
     // Consultas
@@ -165,12 +166,23 @@ public class CatalogoService {
             ItemCatalogo novoItem = ItemCatalogo.builder()
                     .catalogo(copia)
                     .nome(itemOriginal.getNome())
+                    // CAT-008 (#701): copia descrição e foto (objeto próprio no R2); a marca NÃO é copiada
+                    .descricao(itemOriginal.getDescricao())
                     .tempoProducao(itemOriginal.getTempoProducao())
                     .margemLucro(itemOriginal.getMargemLucro())
                     .precoVenda(itemOriginal.getPrecoVenda())   // preço exato, não recalcula
                     .override(itemOriginal.getOverride())        // preserva override (RN-047)
                     .build();
             novoItem = itemCatalogoRepository.save(novoItem);
+            if (itemOriginal.getFotoUrl() != null) {
+                String extensao = itemOriginal.getFotoUrl().substring(itemOriginal.getFotoUrl().lastIndexOf('.') + 1);
+                String novaUrl = r2StorageClient.copiarPorUrl(itemOriginal.getFotoUrl(),
+                        "catalogo/item-catalogo/" + novoItem.getId() + "/" + UUID.randomUUID() + "." + extensao);
+                if (novaUrl != null) {
+                    novoItem.setFotoUrl(novaUrl);
+                    novoItem = itemCatalogoRepository.save(novoItem);
+                }
+            }
 
             for (ItemCatalogoComponente componente : componenteRepository.findByItemCatalogoId(itemOriginal.getId())) {
                 componenteRepository.save(ItemCatalogoComponente.builder()

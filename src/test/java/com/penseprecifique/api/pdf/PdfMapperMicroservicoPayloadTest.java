@@ -83,6 +83,7 @@ class PdfMapperMicroservicoPayloadTest {
                     "restanteAposSinal": "R$ 150,00",
                     "percentualSinal": null,
                     "sinalAte": null,
+                    "condicoes": null,
                     "subtotal": "R$ 320,00",
                     "desconto": "R$ 20,00",
                     "percentualDesconto": null,

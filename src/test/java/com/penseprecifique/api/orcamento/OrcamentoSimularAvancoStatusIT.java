@@ -1,12 +1,12 @@
 package com.penseprecifique.api.orcamento;
 
+import com.penseprecifique.api.testsupport.AprovacaoTeste;
 import com.penseprecifique.api.cliente.ClienteRepository;
 import com.penseprecifique.api.produto.ProdutoRepository;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.shared.domain.entity.Cliente;
 import com.penseprecifique.api.shared.domain.entity.Produto;
 import com.penseprecifique.api.shared.domain.entity.Usuario;
-import com.penseprecifique.api.shared.domain.enums.MetodoPagamento;
 import com.penseprecifique.api.shared.domain.enums.StatusOrcamento;
 import com.penseprecifique.api.shared.domain.enums.TipoProduto;
 import com.penseprecifique.api.shared.dto.request.orcamento.AvancaStatusRequest;
@@ -75,7 +75,6 @@ class OrcamentoSimularAvancoStatusIT {
 
         OrcamentoRequest req = new OrcamentoRequest();
         req.setClienteId(cliente.getId());
-        req.setMetodoPagamento(MetodoPagamento.PIX);
         req.setTemPrazoProducao(temPrazoProducao);
         req.setPrazoProducaoDias(prazoProducaoDias);
         req.setSinalAtivo(sinalAtivo);
@@ -88,7 +87,7 @@ class OrcamentoSimularAvancoStatusIT {
 
     private UUID criarEEnviar(OrcamentoRequest req) {
         UUID id = orcamentoService.criar(req).getId();
-        orcamentoService.avancarStatus(id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
+        AprovacaoTeste.avancar(orcamentoService, id, new AvancaStatusRequest()); // RASCUNHO -> ENVIADO
         return id;
     }
 
@@ -174,7 +173,7 @@ class OrcamentoSimularAvancoStatusIT {
 
         AvancaStatusRequest requestIgnorar = new AvancaStatusRequest();
         requestIgnorar.setIgnorarAtalhoAprovacaoDireta(true);
-        Object resultado = orcamentoService.avancarStatus(id, requestIgnorar);
+        Object resultado = AprovacaoTeste.avancar(orcamentoService, id, requestIgnorar);
 
         OrcamentoDetalheResponse detalhe = (OrcamentoDetalheResponse) resultado;
         assertEquals(StatusOrcamento.APROVADO, detalhe.getStatus(), "usuário recusou o atalho — deve seguir fluxo normal");
