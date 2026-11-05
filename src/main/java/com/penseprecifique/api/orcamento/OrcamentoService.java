@@ -1660,6 +1660,9 @@ public class OrcamentoService {
         LocalDate estornoData = null;
         UUID estornoMetodoId = null;
         BigDecimal multaAReceber = null;
+        // V0.19.0 (#692, RN-NOVA-58) — multa em R$ ou em %; vale em SINAL_PAGO, EM_PRODUCAO, PAGO, ENTREGUE e FINALIZADO.
+        // Resolvida antes de qualquer efeito: pedido inválido não altera nada.
+        MultaInformada multaInformada = aceitaMulta(atual) ? resolverMulta(request, orcamento.getTotal()) : null;
         // Já cancelado cai no erro de negócio do switch; as decisões só são validadas quando há o que decidir.
         Map<UUID, Boolean> decisoes = atual == StatusOrcamento.CANCELADO
                 ? new LinkedHashMap<>() : validarDecisoesProducao(orcamento, request);
@@ -1674,34 +1677,46 @@ public class OrcamentoService {
                 break;
 
             case SINAL_PAGO:
-                orcamento.setCancelamentoTipo(TipoCancelamento.ESTORNO);
+                orcamento.setCancelamentoTipo(multaInformada == null ? TipoCancelamento.ESTORNO : TipoCancelamento.MULTA);
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
+                BigDecimal sinalRecebido = orcamento.getValorSinal() == null ? BigDecimal.ZERO : orcamento.getValorSinal();
+                ResultadoMulta multaSinal = multaInformada == null ? null
+                        : aplicarMulta(orcamento, multaInformada, sinalRecebido, request.isEstornarSinal());
+                if (multaSinal != null) {
+                    multaAReceber = multaSinal.valorMulta();
+                }
                 if (request.isEstornarSinal()) {
                     if (request.getDataEstornoSinal() == null) {
                         throw new BusinessException("A data do estorno é obrigatória.");
                     }
-                    reciboEstornoRepository.save(ReciboEstorno.builder()
-                            .orcamento(orcamento)
-                            .valorEstornado(orcamento.getValorSinal())
-                            .dataEstorno(request.getDataEstornoSinal())
-                            .build());
-                    orcamento.setEstornoSinal(true);
-                    orcamento.setDataEstornoSinal(request.getDataEstornoSinal());
-                    estornoValor = orcamento.getValorSinal();
-                    estornoData = request.getDataEstornoSinal().toLocalDate();
+                    // RN-NOVA-51/58 — estorna o recebido menos a multa; multa >= recebido: nada é estornado.
+                    BigDecimal aEstornar = multaSinal == null ? orcamento.getValorSinal() : multaSinal.valorDevolvido();
+                    if (aEstornar != null && aEstornar.signum() > 0) {
+                        reciboEstornoRepository.save(ReciboEstorno.builder()
+                                .orcamento(orcamento)
+                                .valorEstornado(aEstornar)
+                                .dataEstorno(request.getDataEstornoSinal())
+                                .build());
+                        orcamento.setEstornoSinal(true);
+                        orcamento.setDataEstornoSinal(request.getDataEstornoSinal());
+                        estornoValor = aEstornar;
+                        estornoData = request.getDataEstornoSinal().toLocalDate();
+                    }
                 }
                 break;
 
             case EM_PRODUCAO:
             case FINALIZADO:
                 orcamento.setCancelamentoTipo(TipoCancelamento.MULTA);
-                orcamento.setPercentualMulta(request.getPercentualMulta());
                 orcamento.setCancelamentoMotivo(request.getMotivoCancelamento());
-                ResultadoMulta resultadoMulta = calcularResultadoMulta(orcamento);
-                orcamento.setValorMulta(resultadoMulta.valorMulta());
-                orcamento.setValorDevolvidoMulta(resultadoMulta.valorDevolvido());
-                multaAReceber = resultadoMulta.valorMulta();
-                estornoValor = resultadoMulta.valorDevolvido();
+                if (multaInformada != null) {
+                    BigDecimal sinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
+                            ? orcamento.getValorSinal() : BigDecimal.ZERO;
+                    // mini-estorno automático (RN-NOVA-1): o excedente do sinal sobre a multa volta à cliente
+                    ResultadoMulta resultadoMulta = aplicarMulta(orcamento, multaInformada, sinalPago, true);
+                    multaAReceber = resultadoMulta.valorMulta();
+                    estornoValor = resultadoMulta.valorDevolvido();
+                }
                 estornoData = LocalDate.now(clock);
                 if (atual == StatusOrcamento.FINALIZADO) {
                     reverterEstoque(orcamento, request.getMotivoCancelamento());
@@ -1721,9 +1736,17 @@ public class OrcamentoService {
                 }
                 orcamento.setCancelamentoTipo(TipoCancelamento.JUSTIFICATIVA);
                 orcamento.setCancelamentoMotivo(justificativa);
-                if (Boolean.TRUE.equals(request.getEstornarValorRecebido())) {
-                    LancamentoFinanceiroService.RecebidoDoOrcamento recebido = lancamentoFinanceiroService.recebidoDoOrcamento(orcamento);
-                    estornoValor = recebido.valor();
+                LancamentoFinanceiroService.RecebidoDoOrcamento recebidoPago = lancamentoFinanceiroService.recebidoDoOrcamento(orcamento);
+                boolean estornaRecebido = Boolean.TRUE.equals(request.getEstornarValorRecebido());
+                ResultadoMulta multaPago = multaInformada == null ? null
+                        : aplicarMulta(orcamento, multaInformada, recebidoPago.valor(), estornaRecebido);
+                if (multaPago != null) {
+                    multaAReceber = multaPago.valorMulta();
+                }
+                if (estornaRecebido) {
+                    LancamentoFinanceiroService.RecebidoDoOrcamento recebido = recebidoPago;
+                    // RN-NOVA-51 — estorno = recebido menos a multa; multa >= recebido: nenhuma saída
+                    estornoValor = multaPago == null ? recebido.valor() : multaPago.valorDevolvido();
                     estornoData = LocalDate.now(clock);
                     estornoMetodoId = recebido.metodoId();
                 }
@@ -2100,33 +2123,81 @@ public class OrcamentoService {
         return valor;
     }
 
-    /** RN-NOVA-1 (V0.8.2) — resultado do cálculo de multa: valor final cobrado + valor devolvido (mini-estorno). */
+    /** RN-NOVA-1 (V0.8.2) e RN-NOVA-58 — resultado do cálculo de multa: parte a receber + valor devolvido (mini-estorno). */
     private record ResultadoMulta(BigDecimal valorMulta, BigDecimal valorDevolvido) {
     }
 
+    /** RN-NOVA-58 — multa já resolvida: valor total (R$, referência) e percentual equivalente (2 casas). */
+    private record MultaInformada(BigDecimal bruta, BigDecimal percentual) {
+    }
+
+    private static boolean aceitaMulta(StatusOrcamento status) {
+        return status == StatusOrcamento.SINAL_PAGO || status == StatusOrcamento.EM_PRODUCAO
+                || status == StatusOrcamento.PAGO || status == StatusOrcamento.ENTREGUE
+                || status == StatusOrcamento.FINALIZADO;
+    }
+
     /**
-     * RN-NOVA-1 (V0.8.1, estendida em V0.8.2) — valor final de multa desconta o sinal já pago,
-     * piso zero: nunca cobra valor negativo. Desde V0.8.2, quando o sinal pago excede o valor
-     * bruto da multa, a diferença é devolvida ao cliente ("mini-estorno") em vez de simplesmente
-     * zerar a cobrança sem devolução — {@code valorDevolvido} vem preenchido só nesse caso,
-     * {@code null} nos demais (sinal <= multa bruta, ou sem sinal pago — comportamento inalterado).
+     * RN-NOVA-58 (altera RN-NOVA-50) — "com multa" exige exatamente um entre valor (R$) e percentual; o outro é
+     * calculado (2 casas, meio para cima). O valor em R$ é a referência: percentual que resulta em menos de
+     * R$ 0,01 é BLOQUEIO; valor em R$ que dá menos de 0,01% é aceito e grava 0,00%. Retorna {@code null} para "sem multa".
      */
-    private ResultadoMulta calcularResultadoMulta(Orcamento orcamento) {
-        if (orcamento.getPercentualMulta() == null || orcamento.getTotal() == null) {
-            return new ResultadoMulta(null, null);
+    private MultaInformada resolverMulta(AvancaStatusRequest request, BigDecimal totalOrcamento) {
+        BigDecimal valor = request.getValorMulta();
+        BigDecimal percentual = request.getPercentualMulta();
+        boolean comMulta = request.getComMulta() != null ? request.getComMulta() : (valor != null || percentual != null);
+        if (!comMulta) {
+            return null;
         }
-        BigDecimal valorMultaBruto = orcamento.getTotal()
-                .multiply(orcamento.getPercentualMulta())
-                .divide(CEM, 2, RoundingMode.HALF_UP);
-        BigDecimal sinalPago = Boolean.TRUE.equals(orcamento.getSinalAtivo()) && orcamento.getValorSinal() != null
-                ? orcamento.getValorSinal()
-                : BigDecimal.ZERO;
-        BigDecimal diferenca = sinalPago.subtract(valorMultaBruto).setScale(2, RoundingMode.HALF_UP);
-        if (diferenca.compareTo(BigDecimal.ZERO) > 0) {
-            return new ResultadoMulta(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), diferenca);
+        if ((valor == null) == (percentual == null)) {
+            throw new BusinessException("Informe a multa em valor ou em percentual, não os dois.");
         }
-        BigDecimal valorMultaFinal = valorMultaBruto.subtract(sinalPago).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-        return new ResultadoMulta(valorMultaFinal, null);
+        BigDecimal total = totalOrcamento == null ? BigDecimal.ZERO : totalOrcamento;
+        BigDecimal umCentavo = new BigDecimal("0.01");
+        if (percentual != null) {
+            if (percentual.compareTo(umCentavo) < 0) {
+                throw new BusinessException("Informe uma multa maior que zero ou escolha cancelar sem multa.");
+            }
+            if (percentual.stripTrailingZeros().scale() > 2) {
+                throw new BusinessException("A multa deve ter no máximo duas casas decimais.");
+            }
+            if (percentual.compareTo(CEM) > 0) {
+                throw new BusinessException("A multa não pode ser maior que o total do orçamento.");
+            }
+            BigDecimal bruta = total.multiply(percentual).divide(CEM, 2, RoundingMode.HALF_UP);
+            if (bruta.compareTo(umCentavo) < 0) {
+                throw new BusinessException("A multa resulta em menos de R$ 0,01.");
+            }
+            return new MultaInformada(bruta, percentual.setScale(2, RoundingMode.HALF_UP));
+        }
+        if (valor.compareTo(umCentavo) < 0) {
+            throw new BusinessException("Informe uma multa maior que zero ou escolha cancelar sem multa.");
+        }
+        if (valor.stripTrailingZeros().scale() > 2) {
+            throw new BusinessException("A multa deve ter no máximo duas casas decimais.");
+        }
+        if (valor.compareTo(total) > 0) {
+            throw new BusinessException("A multa não pode ser maior que o total do orçamento.");
+        }
+        BigDecimal bruta = valor.setScale(2, RoundingMode.UNNECESSARY);
+        BigDecimal pct = bruta.multiply(CEM).divide(total, 2, RoundingMode.HALF_UP);
+        return new MultaInformada(bruta, pct);
+    }
+
+    /**
+     * RN-NOVA-51/58 — grava a multa no orçamento e devolve a parte a receber (multa menos o recebido, piso zero) e
+     * o valor a estornar (recebido menos a multa, piso zero; só quando {@code estorna}; {@code null} se não há).
+     * Mantém o que o orçamento já gravava: {@code valorMulta} é a parte a receber.
+     */
+    private ResultadoMulta aplicarMulta(Orcamento orcamento, MultaInformada multa, BigDecimal recebido, boolean estorna) {
+        BigDecimal aReceber = multa.bruta().subtract(recebido).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal diferenca = recebido.subtract(multa.bruta()).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal devolvido = estorna && diferenca.signum() > 0 ? diferenca : null;
+        orcamento.setPercentualMulta(multa.percentual());
+        orcamento.setValorMultaBruta(multa.bruta());
+        orcamento.setValorMulta(aReceber);
+        orcamento.setValorDevolvidoMulta(devolvido);
+        return new ResultadoMulta(aReceber, devolvido);
     }
 
     private OrcamentoDetalheResponse montarDetalhe(Orcamento orcamento) {

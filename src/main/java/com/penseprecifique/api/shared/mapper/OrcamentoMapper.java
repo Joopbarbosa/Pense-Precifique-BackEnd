@@ -76,6 +76,7 @@ public class OrcamentoMapper {
         response.setCancelamentoTipo(orcamento.getCancelamentoTipo());
         response.setPercentualMulta(orcamento.getPercentualMulta());
         response.setValorMulta(orcamento.getValorMulta());
+        response.setValorMultaBruta(orcamento.getValorMultaBruta());
         response.setValorDevolvidoMulta(orcamento.getValorDevolvidoMulta());
         response.setEstornoSinal(orcamento.getEstornoSinal());
         response.setDataEstornoSinal(orcamento.getDataEstornoSinal());
