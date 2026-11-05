@@ -2145,7 +2145,11 @@ public class OrcamentoService {
     private MultaInformada resolverMulta(AvancaStatusRequest request, BigDecimal totalOrcamento) {
         BigDecimal valor = request.getValorMulta();
         BigDecimal percentual = request.getPercentualMulta();
-        boolean comMulta = request.getComMulta() != null ? request.getComMulta() : (valor != null || percentual != null);
+        // Compatibilidade: sem "comMulta", percentual 0 (legado do toggle "Não") equivale a "sem multa"; o DTO já recusa 0 na API.
+        boolean percentualZeroLegado = request.getComMulta() == null && valor == null
+                && percentual != null && percentual.signum() == 0;
+        boolean comMulta = request.getComMulta() != null ? request.getComMulta()
+                : !percentualZeroLegado && (valor != null || percentual != null);
         if (!comMulta) {
             return null;
         }
