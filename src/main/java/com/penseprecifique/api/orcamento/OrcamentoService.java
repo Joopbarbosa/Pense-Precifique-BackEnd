@@ -1716,6 +1716,8 @@ public class OrcamentoService {
                     ResultadoMulta resultadoMulta = aplicarMulta(orcamento, multaInformada, sinalPago, true);
                     multaAReceber = resultadoMulta.valorMulta();
                     estornoValor = resultadoMulta.valorDevolvido();
+                } else {
+                    orcamento.setValorMulta(BigDecimal.ZERO); // sem multa: RN-NOVA-28 mantém o tipo MULTA com valor 0
                 }
                 estornoData = LocalDate.now(clock);
                 if (atual == StatusOrcamento.FINALIZADO) {
