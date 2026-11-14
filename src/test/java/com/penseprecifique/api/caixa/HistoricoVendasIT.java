@@ -109,6 +109,16 @@ class HistoricoVendasIT {
         assertEquals(0, service.listar(null, null, null, "Pix", null, null, 0, 20).getTotalElements());
     }
 
+    /** PP-668: sem filtro de data, o histórico usa a faixa única 2000–2100 (não mais até 2999). */
+    @Test
+    void semFiltroDeDataUsaAFaixaUnica2000a2100() {
+        venda(50, null, LocalDate.of(2100, 12, 31), "5", StatusVendaCaixa.CONCLUIDA);
+        venda(51, null, LocalDate.of(2500, 1, 1), "5", StatusVendaCaixa.CONCLUIDA);
+        List<String> todos = ids(service.listar(null, null, null, null, null, null, 0, 100));
+        org.junit.jupiter.api.Assertions.assertTrue(todos.contains("CX-50"), todos.toString());
+        org.junit.jupiter.api.Assertions.assertFalse(todos.contains("CX-51"), todos.toString());
+    }
+
     @Test
     void consumidorFinalAparecePorExtenso() {
         HistoricoVendaResponse cx1 = service.listar(null, null, null, null, "1", null, 0, 20).getContent().get(0);

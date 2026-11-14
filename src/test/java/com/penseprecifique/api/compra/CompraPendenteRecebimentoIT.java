@@ -31,6 +31,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -120,8 +121,9 @@ class CompraPendenteRecebimentoIT {
     @Test
     void previsaoAcimaDe2100EhRecusadaESemEfeito() {
         long antes = compraRepository.count();
-        for (LocalDate extrema : List.of(LocalDate.of(2101, 1, 1), LocalDate.of(9999, 12, 31))) {
-            assertThrows(BusinessException.class, () -> compraService.confirmarNova(pendente("10", extrema)));
+        for (LocalDate extrema : List.of(LocalDate.of(1999, 12, 31), LocalDate.of(2101, 1, 1), LocalDate.of(9999, 12, 31))) {
+            BusinessException e = assertThrows(BusinessException.class, () -> compraService.confirmarNova(pendente("10", extrema)));
+            assertEquals(FaixaDataPermitida.MENSAGEM, e.getMessage(), extrema.toString());
         }
         assertEquals(antes, compraRepository.count());
         assertEquals(LocalDate.of(2100, 12, 31), confirmarPendente(LocalDate.of(2100, 12, 31)).previsaoEntrega());

@@ -1,5 +1,6 @@
 package com.penseprecifique.api.caixa;
 
+import com.penseprecifique.api.shared.validation.FaixaDataPermitida;
 import com.penseprecifique.api.auth.UsuarioRepository;
 import com.penseprecifique.api.dashboard.VendasService;
 import com.penseprecifique.api.shared.domain.entity.VendaCaixaPagamento;
@@ -37,8 +38,8 @@ public class HistoricoVendasService {
     static final String CONSUMIDOR_FINAL = "Consumidor final";
     static final String NAO_INFORMADA = "Não informada";
     static final int TAMANHO_MAXIMO = 100;
-    private static final LocalDate INICIO_HISTORICO = LocalDate.of(2000, 1, 1);
-    private static final LocalDate FIM_HISTORICO = LocalDate.of(2999, 12, 31);
+    private static final LocalDate INICIO_HISTORICO = FaixaDataPermitida.DATA_MINIMA;
+    private static final LocalDate FIM_HISTORICO = FaixaDataPermitida.DATA_MAXIMA;
 
     private final VendasService vendasService;
     private final VendaCaixaPagamentoRepository pagamentosRepository;
