@@ -368,7 +368,7 @@ class CompromissosUsuariaIT {
         var d = service.criar(serie("Entregar", terca, RecorrenciaCompromisso.SEMANAL, List.of(DayOfWeek.TUESDAY), 3));
         assertThrows(ResourceNotFoundException.class, () -> service.concluir(d.id(), terca.plusDays(1)));
         assertThrows(ResourceNotFoundException.class, () -> service.concluir(d.id(), terca.plusDays(21)));
-        assertThrows(ResourceNotFoundException.class, () -> service.detalhe(d.id(), LocalDate.of(1900, 1, 1)));
+        assertThrows(com.penseprecifique.api.shared.exception.BusinessException.class, () -> service.detalhe(d.id(), LocalDate.of(1900, 1, 1)));
     }
 
     /** Vincular a um orçamento da conta. */
