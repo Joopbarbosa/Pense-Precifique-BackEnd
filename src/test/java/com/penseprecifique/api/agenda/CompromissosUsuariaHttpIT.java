@@ -129,4 +129,17 @@ class CompromissosUsuariaHttpIT {
         assertEquals(200, mvc.perform(post(base + "2030-05-10/cancelar").header("Authorization", "Bearer " + dono)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"observacao\":\"" + "o".repeat(30) + "\"}")).andReturn().getResponse().getStatus());
     }
+
+    /** PP-668: data de ocorrência fora de 2000–2100 é 400 com a mensagem única (não mais 404). */
+    @Test
+    void ocorrenciaForaDaFaixaDa400ComMensagemUnica() throws Exception {
+        String dono = token();
+        String id = json.readTree(criar(dono, "{\"titulo\":\"Meu\",\"data\":\"2030-05-10\"}").getResponse().getContentAsString()).get("id").asText();
+        String base = "/agenda/compromissos-usuaria/" + id + "/ocorrencias/";
+        for (String data : new String[] {"1999-12-31", "2101-01-01", "9999-12-31"}) {
+            var r = mvc.perform(get(base + data).header("Authorization", "Bearer " + dono)).andReturn().getResponse();
+            assertEquals(400, r.getStatus(), data);
+            assertTrue(r.getContentAsString().contains(com.penseprecifique.api.shared.validation.FaixaDataPermitida.MENSAGEM), data);
+        }
+    }
 }

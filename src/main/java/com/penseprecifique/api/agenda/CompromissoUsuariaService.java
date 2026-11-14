@@ -244,9 +244,9 @@ public class CompromissoUsuariaService {
 
     /** A ocorrência existe se é uma data da série ou se já tem exceção; senão, não encontrada. */
     private OcorrenciaResolvida resolver(CompromissoUsuaria c, LocalDate dataOriginal) {
-        // data fora de 2000–2100 não é ocorrência de nada, e nem chega ao banco (data extrema derrubaria a consulta)
+        // data fora de 2000–2100 é entrada inválida (400 com a mensagem única) e nem chega ao banco
         if (!FaixaDataPermitida.contem(dataOriginal)) {
-            throw new ResourceNotFoundException("Compromisso não encontrado");
+            throw new BusinessException(FaixaDataPermitida.MENSAGEM);
         }
         CompromissoUsuariaExcecao e = excecaoRepository.findByCompromissoIdAndDataOriginal(c.getId(), dataOriginal).orElse(null);
         if (e == null && !calculadora.ehOcorrencia(c, dataOriginal)) {
