@@ -29,6 +29,9 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @org.springframework.beans.factory.annotation.Value("${cors.allowed-origins:http://localhost:3000}")
+    private String origensCors;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -79,7 +82,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        config.setAllowedOrigins(origensPermitidas(origensCors));
         // PATCH: V0.15.0, #550 (PATCH /compras/{id}/pagamento, primeiro PATCH do sistema).
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
@@ -88,5 +91,12 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    /** #733 — lista separada por vírgula (com ou sem espaços); vazia cai no padrão da staging, nunca em "todas". */
+    static List<String> origensPermitidas(String origens) {
+        List<String> lista = origens == null ? List.of() : java.util.Arrays.stream(origens.split(","))
+                .map(String::trim).filter(o -> !o.isEmpty() && !o.equals("*")).toList();
+        return lista.isEmpty() ? List.of("http://localhost:3000") : lista;
     }
 }

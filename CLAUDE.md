@@ -76,6 +76,13 @@ injetado em vários Services, então faltar uma só (achado V0.14.0: `R2_ENDPOIN
 relação com upload. A causa real só aparece no `Caused by: ... Could not resolve placeholder` —
 nunca ler só o fim da saída (`tail`) para diagnosticar.
 
+**#733 — configuração por ambiente (produção local):** `R2_HABILITADO` (padrão `true`; `false` sobe sem
+nenhuma `R2_*` e o envio de foto devolve 400 "Envio de foto desabilitado neste ambiente."; habilitado
+com variável vazia falha na inicialização com mensagem clara) e `CORS_ALLOWED_ORIGINS` (lista separada
+por vírgula; padrão `http://localhost:3000`; vazio ou `*` caem no padrão, nunca abrem para todas). O
+Postgres de teste precisa de `max_connections` alto (≥ 400) para a suíte completa, senão aparece
+"too many clients already" em centenas de ITs.
+
 Suíte usa `**/*IT.java` (Surefire configurado assim desde #132) — nunca `-Dtest=Nome` isolado como
 validação final, sempre `./mvnw test` completo. "Compila limpo" nunca é validação suficiente —
 validar via curl com valores reais (não redondos), inclusive casos de rejeição.

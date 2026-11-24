@@ -70,12 +70,19 @@ sugestao-ia:
 
 # Cloudflare R2 (compatível S3) — upload de foto do Item de Catálogo, DT-NOVA-4. Credenciais no
 # .env da raiz do projeto, nunca hardcoded.
+# #733 — R2_HABILITADO=false (ex.: produção local sem bucket): o backend sobe sem credenciais e o envio de foto
+# devolve mensagem clara. Habilitado (padrão), as cinco variáveis continuam obrigatórias.
 r2:
-  access-key-id: ${R2_ACCESS_KEY_ID}
-  secret-access-key: ${R2_SECRET_ACCESS_KEY}
-  endpoint: ${R2_ENDPOINT}
-  bucket-name: ${R2_BUCKET_NAME}
-  public-url: ${R2_PUBLIC_URL}
+  habilitado: ${R2_HABILITADO:true}
+  access-key-id: ${R2_ACCESS_KEY_ID:}
+  secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+  endpoint: ${R2_ENDPOINT:}
+  bucket-name: ${R2_BUCKET_NAME:}
+  public-url: ${R2_PUBLIC_URL:}
+
+# #733 — origens permitidas pelo CORS (lista separada por vírgula). Padrão = o frontend da staging.
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
 ---
 # ============================================================

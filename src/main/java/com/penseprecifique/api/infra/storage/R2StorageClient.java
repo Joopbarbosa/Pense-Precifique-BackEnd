@@ -32,13 +32,24 @@ public class R2StorageClient {
     private final String publicUrlBase;
 
     public R2StorageClient(
-            @Value("${r2.access-key-id}") String accessKeyId,
-            @Value("${r2.secret-access-key}") String secretAccessKey,
-            @Value("${r2.endpoint}") String endpoint,
-            @Value("${r2.bucket-name}") String bucketName,
-            @Value("${r2.public-url}") String publicUrl) {
+            @Value("${r2.habilitado:true}") boolean habilitado,
+            @Value("${r2.access-key-id:}") String accessKeyId,
+            @Value("${r2.secret-access-key:}") String secretAccessKey,
+            @Value("${r2.endpoint:}") String endpoint,
+            @Value("${r2.bucket-name:}") String bucketName,
+            @Value("${r2.public-url:}") String publicUrl) {
         this.bucketName = bucketName;
         this.publicUrlBase = publicUrl.endsWith("/") ? publicUrl.substring(0, publicUrl.length() - 1) : publicUrl;
+        if (!habilitado) {
+            // #733 — ambiente sem bucket: sobe sem credenciais; upload recusa com mensagem clara e remoção é ignorada.
+            log.warn("R2 desabilitado (R2_HABILITADO=false): envio de foto indisponível neste ambiente.");
+            this.s3Client = null;
+            return;
+        }
+        if (accessKeyId.isBlank() || secretAccessKey.isBlank() || endpoint.isBlank() || bucketName.isBlank() || publicUrl.isBlank()) {
+            throw new IllegalStateException("R2 habilitado exige R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, "
+                    + "R2_BUCKET_NAME e R2_PUBLIC_URL (ou defina R2_HABILITADO=false).");
+        }
         this.s3Client = S3Client.builder()
                 .endpointOverride(URI.create(endpoint))
                 .region(Region.of("auto"))
@@ -51,6 +62,10 @@ public class R2StorageClient {
 
     /** Sobe o objeto e devolve a URL pública ({@code r2.public-url + "/" + key}). */
     public String upload(String key, byte[] conteudo, String contentType) {
+        if (s3Client == null) {
+            throw new com.penseprecifique.api.shared.exception.BusinessException(
+                    "Envio de foto desabilitado neste ambiente.");
+        }
         s3Client.putObject(
                 PutObjectRequest.builder()
                         .bucket(bucketName)
@@ -63,7 +78,7 @@ public class R2StorageClient {
 
     /** Melhor esforço — remoção de objeto antigo nunca deve derrubar a requisição de troca/edição. */
     public void deletarPorUrl(String url) {
-        if (url == null || !url.startsWith(publicUrlBase)) return;
+        if (s3Client == null || url == null || publicUrlBase.isEmpty() || !url.startsWith(publicUrlBase)) return;
         String key = url.substring(publicUrlBase.length() + 1);
         try {
             s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(key).build());
